@@ -9,61 +9,354 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
+import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
+import { Route as AuthenticatedQuizQuizIdRouteImport } from './routes/_authenticated/quiz.$quizId'
+import { Route as AuthenticatedAdminStudentsRouteImport } from './routes/_authenticated/admin/students'
+import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
+import { Route as AuthenticatedAdminQuizzesRouteImport } from './routes/_authenticated/admin/quizzes'
+import { Route as AuthenticatedAdminQuizzesNewRouteImport } from './routes/_authenticated/admin/quizzes.new'
+import { Route as AuthenticatedQuizQuizIdResultAttemptIdRouteImport } from './routes/_authenticated/quiz.$quizId.result.$attemptId'
+import { Route as AuthenticatedAdminQuizzesIdResultsRouteImport } from './routes/_authenticated/admin/quizzes.$id.results'
+import { Route as AuthenticatedAdminQuizzesIdEditRouteImport } from './routes/_authenticated/admin/quizzes.$id.edit'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminRouteRoute = AuthenticatedAdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedAdminRouteRoute,
+} as any)
+const AuthenticatedQuizQuizIdRoute = AuthenticatedQuizQuizIdRouteImport.update({
+  id: '/quiz/$quizId',
+  path: '/quiz/$quizId',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdminStudentsRoute =
+  AuthenticatedAdminStudentsRouteImport.update({
+    id: '/students',
+    path: '/students',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
+const AuthenticatedAdminSettingsRoute =
+  AuthenticatedAdminSettingsRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
+const AuthenticatedAdminQuizzesRoute =
+  AuthenticatedAdminQuizzesRouteImport.update({
+    id: '/quizzes',
+    path: '/quizzes',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
+const AuthenticatedAdminQuizzesNewRoute =
+  AuthenticatedAdminQuizzesNewRouteImport.update({
+    id: '/new',
+    path: '/new',
+    getParentRoute: () => AuthenticatedAdminQuizzesRoute,
+  } as any)
+const AuthenticatedQuizQuizIdResultAttemptIdRoute =
+  AuthenticatedQuizQuizIdResultAttemptIdRouteImport.update({
+    id: '/result/$attemptId',
+    path: '/result/$attemptId',
+    getParentRoute: () => AuthenticatedQuizQuizIdRoute,
+  } as any)
+const AuthenticatedAdminQuizzesIdResultsRoute =
+  AuthenticatedAdminQuizzesIdResultsRouteImport.update({
+    id: '/$id/results',
+    path: '/$id/results',
+    getParentRoute: () => AuthenticatedAdminQuizzesRoute,
+  } as any)
+const AuthenticatedAdminQuizzesIdEditRoute =
+  AuthenticatedAdminQuizzesIdEditRouteImport.update({
+    id: '/$id/edit',
+    path: '/$id/edit',
+    getParentRoute: () => AuthenticatedAdminQuizzesRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/auth': typeof AuthRoute
+  '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/students': typeof AuthenticatedAdminStudentsRoute
+  '/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
+  '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
+  '/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
+  '/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
+  '/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/': typeof AuthenticatedIndexRoute
+  '/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
+  '/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/admin/students': typeof AuthenticatedAdminStudentsRoute
+  '/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
+  '/admin': typeof AuthenticatedAdminIndexRoute
+  '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
+  '/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
+  '/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
+  '/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_authenticated/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
+  '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
+  '/_authenticated/admin/students': typeof AuthenticatedAdminStudentsRoute
+  '/_authenticated/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
+  '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/_authenticated/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
+  '/_authenticated/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
+  '/_authenticated/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
+  '/_authenticated/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/admin'
+    | '/admin/quizzes'
+    | '/admin/settings'
+    | '/admin/students'
+    | '/quiz/$quizId'
+    | '/admin/'
+    | '/admin/quizzes/new'
+    | '/admin/quizzes/$id/edit'
+    | '/admin/quizzes/$id/results'
+    | '/quiz/$quizId/result/$attemptId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/auth'
+    | '/'
+    | '/admin/quizzes'
+    | '/admin/settings'
+    | '/admin/students'
+    | '/quiz/$quizId'
+    | '/admin'
+    | '/admin/quizzes/new'
+    | '/admin/quizzes/$id/edit'
+    | '/admin/quizzes/$id/results'
+    | '/quiz/$quizId/result/$attemptId'
+  id:
+    | '__root__'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/admin'
+    | '/_authenticated/'
+    | '/_authenticated/admin/quizzes'
+    | '/_authenticated/admin/settings'
+    | '/_authenticated/admin/students'
+    | '/_authenticated/quiz/$quizId'
+    | '/_authenticated/admin/'
+    | '/_authenticated/admin/quizzes/new'
+    | '/_authenticated/admin/quizzes/$id/edit'
+    | '/_authenticated/admin/quizzes/$id/results'
+    | '/_authenticated/quiz/$quizId/result/$attemptId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/': {
+      id: '/_authenticated/'
       path: '/'
       fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthenticatedIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin': {
+      id: '/_authenticated/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AuthenticatedAdminRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/': {
+      id: '/_authenticated/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/quiz/$quizId': {
+      id: '/_authenticated/quiz/$quizId'
+      path: '/quiz/$quizId'
+      fullPath: '/quiz/$quizId'
+      preLoaderRoute: typeof AuthenticatedQuizQuizIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/admin/students': {
+      id: '/_authenticated/admin/students'
+      path: '/students'
+      fullPath: '/admin/students'
+      preLoaderRoute: typeof AuthenticatedAdminStudentsRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/admin/settings': {
+      id: '/_authenticated/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AuthenticatedAdminSettingsRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/admin/quizzes': {
+      id: '/_authenticated/admin/quizzes'
+      path: '/quizzes'
+      fullPath: '/admin/quizzes'
+      preLoaderRoute: typeof AuthenticatedAdminQuizzesRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/admin/quizzes/new': {
+      id: '/_authenticated/admin/quizzes/new'
+      path: '/new'
+      fullPath: '/admin/quizzes/new'
+      preLoaderRoute: typeof AuthenticatedAdminQuizzesNewRouteImport
+      parentRoute: typeof AuthenticatedAdminQuizzesRoute
+    }
+    '/_authenticated/quiz/$quizId/result/$attemptId': {
+      id: '/_authenticated/quiz/$quizId/result/$attemptId'
+      path: '/result/$attemptId'
+      fullPath: '/quiz/$quizId/result/$attemptId'
+      preLoaderRoute: typeof AuthenticatedQuizQuizIdResultAttemptIdRouteImport
+      parentRoute: typeof AuthenticatedQuizQuizIdRoute
+    }
+    '/_authenticated/admin/quizzes/$id/results': {
+      id: '/_authenticated/admin/quizzes/$id/results'
+      path: '/$id/results'
+      fullPath: '/admin/quizzes/$id/results'
+      preLoaderRoute: typeof AuthenticatedAdminQuizzesIdResultsRouteImport
+      parentRoute: typeof AuthenticatedAdminQuizzesRoute
+    }
+    '/_authenticated/admin/quizzes/$id/edit': {
+      id: '/_authenticated/admin/quizzes/$id/edit'
+      path: '/$id/edit'
+      fullPath: '/admin/quizzes/$id/edit'
+      preLoaderRoute: typeof AuthenticatedAdminQuizzesIdEditRouteImport
+      parentRoute: typeof AuthenticatedAdminQuizzesRoute
     }
   }
 }
 
+interface AuthenticatedAdminQuizzesRouteChildren {
+  AuthenticatedAdminQuizzesNewRoute: typeof AuthenticatedAdminQuizzesNewRoute
+  AuthenticatedAdminQuizzesIdEditRoute: typeof AuthenticatedAdminQuizzesIdEditRoute
+  AuthenticatedAdminQuizzesIdResultsRoute: typeof AuthenticatedAdminQuizzesIdResultsRoute
+}
+
+const AuthenticatedAdminQuizzesRouteChildren: AuthenticatedAdminQuizzesRouteChildren =
+  {
+    AuthenticatedAdminQuizzesNewRoute: AuthenticatedAdminQuizzesNewRoute,
+    AuthenticatedAdminQuizzesIdEditRoute: AuthenticatedAdminQuizzesIdEditRoute,
+    AuthenticatedAdminQuizzesIdResultsRoute:
+      AuthenticatedAdminQuizzesIdResultsRoute,
+  }
+
+const AuthenticatedAdminQuizzesRouteWithChildren =
+  AuthenticatedAdminQuizzesRoute._addFileChildren(
+    AuthenticatedAdminQuizzesRouteChildren,
+  )
+
+interface AuthenticatedAdminRouteRouteChildren {
+  AuthenticatedAdminQuizzesRoute: typeof AuthenticatedAdminQuizzesRouteWithChildren
+  AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
+  AuthenticatedAdminStudentsRoute: typeof AuthenticatedAdminStudentsRoute
+  AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
+}
+
+const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
+  {
+    AuthenticatedAdminQuizzesRoute: AuthenticatedAdminQuizzesRouteWithChildren,
+    AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
+    AuthenticatedAdminStudentsRoute: AuthenticatedAdminStudentsRoute,
+    AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
+  }
+
+const AuthenticatedAdminRouteRouteWithChildren =
+  AuthenticatedAdminRouteRoute._addFileChildren(
+    AuthenticatedAdminRouteRouteChildren,
+  )
+
+interface AuthenticatedQuizQuizIdRouteChildren {
+  AuthenticatedQuizQuizIdResultAttemptIdRoute: typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
+}
+
+const AuthenticatedQuizQuizIdRouteChildren: AuthenticatedQuizQuizIdRouteChildren =
+  {
+    AuthenticatedQuizQuizIdResultAttemptIdRoute:
+      AuthenticatedQuizQuizIdResultAttemptIdRoute,
+  }
+
+const AuthenticatedQuizQuizIdRouteWithChildren =
+  AuthenticatedQuizQuizIdRoute._addFileChildren(
+    AuthenticatedQuizQuizIdRouteChildren,
+  )
+
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAdminRouteRoute: typeof AuthenticatedAdminRouteRouteWithChildren
+  AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedQuizQuizIdRoute: typeof AuthenticatedQuizQuizIdRouteWithChildren
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAdminRouteRoute: AuthenticatedAdminRouteRouteWithChildren,
+  AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedQuizQuizIdRoute: AuthenticatedQuizQuizIdRouteWithChildren,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
