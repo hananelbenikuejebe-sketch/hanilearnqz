@@ -5,7 +5,14 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 const DEFAULTS = {
   app_name: "HaniLearn-QZ",
   categories: ["JAMB", "WAEC", "NECO", "GCE", "Post-UTME", "Custom"],
-  subject_tags: ["Math", "English", "Physics", "Chemistry", "Biology", "Government", "Literature", "Economics"],
+  subject_tags: ["Mathematics", "Physics", "Chemistry", "Biology", "English Language", "Literature", "Government", "Economics", "History", "Geography", "CRS", "IRS", "Islamic Studies"],
+  parsing_settings: {
+    strictness: "normal",
+    auto_detect_type: true,
+    confidence_threshold: 80,
+    default_question_type: "mcq",
+    ask_confirmation: true,
+  },
 };
 
 async function assertAdmin(supabase: any, userId: string) {
@@ -23,6 +30,7 @@ export const getSettings = createServerFn({ method: "GET" })
       app_name: map.app_name ?? DEFAULTS.app_name,
       categories: map.categories ?? DEFAULTS.categories,
       subject_tags: map.subject_tags ?? DEFAULTS.subject_tags,
+      parsing_settings: map.parsing_settings ?? DEFAULTS.parsing_settings,
     };
   });
 
@@ -33,6 +41,13 @@ export const updateSettings = createServerFn({ method: "POST" })
       app_name: z.string().min(1).max(60).optional(),
       categories: z.array(z.string().min(1).max(50)).max(50).optional(),
       subject_tags: z.array(z.string().min(1).max(50)).max(100).optional(),
+      parsing_settings: z.object({
+        strictness: z.enum(["loose", "normal", "strict"]),
+        auto_detect_type: z.boolean(),
+        confidence_threshold: z.number().int().min(30).max(95),
+        default_question_type: z.enum(["mcq", "tf", "short", "essay"]),
+        ask_confirmation: z.boolean(),
+      }).optional(),
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
