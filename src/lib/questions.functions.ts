@@ -21,6 +21,11 @@ const QuestionInput = z.object({
   difficulty: z.enum(["easy", "medium", "hard"]),
   tags: z.array(z.string().max(50)).max(20).default([]),
   options: z.array(OptionSchema).max(10).default([]),
+  ai_confidence: z.number().min(0).max(100).optional().nullable(),
+  needs_review: z.boolean().optional(),
+  review_reason: z.string().max(500).optional().nullable(),
+  raw_import_text: z.string().max(12000).optional().nullable(),
+  sample_answer: z.string().max(4000).optional().nullable(),
 });
 
 export const createQuestion = createServerFn({ method: "POST" })
@@ -45,6 +50,11 @@ export const createQuestion = createServerFn({ method: "POST" })
         explanation: data.explanation,
         difficulty: data.difficulty,
         tags: data.tags,
+        ai_confidence: data.ai_confidence ?? null,
+        needs_review: data.needs_review ?? false,
+        review_reason: data.review_reason ?? null,
+        raw_import_text: data.raw_import_text ?? null,
+        sample_answer: data.sample_answer ?? null,
         position,
       })
       .select()
@@ -69,6 +79,11 @@ export const updateQuestion = createServerFn({ method: "POST" })
         explanation: z.string().max(4000).nullable().optional(),
         difficulty: z.enum(["easy", "medium", "hard"]).optional(),
         tags: z.array(z.string().max(50)).max(20).optional(),
+        ai_confidence: z.number().min(0).max(100).nullable().optional(),
+        needs_review: z.boolean().optional(),
+        review_reason: z.string().max(500).nullable().optional(),
+        raw_import_text: z.string().max(12000).nullable().optional(),
+        sample_answer: z.string().max(4000).nullable().optional(),
       }),
       options: z.array(OptionSchema).max(10).optional(),
     }).parse(d),
@@ -154,6 +169,9 @@ export const bulkInsertQuestions = createServerFn({ method: "POST" })
         .insert({
           quiz_id: data.quiz_id, position: pos++, type: q.type, text: q.text,
           explanation: q.explanation, difficulty: q.difficulty, tags: q.tags,
+          ai_confidence: q.ai_confidence ?? null, needs_review: q.needs_review ?? false,
+          review_reason: q.review_reason ?? null, raw_import_text: q.raw_import_text ?? null,
+          sample_answer: q.sample_answer ?? null,
         })
         .select().single();
       if (error) throw error;

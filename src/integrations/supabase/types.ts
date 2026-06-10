@@ -134,34 +134,49 @@ export type Database = {
       }
       questions: {
         Row: {
+          ai_confidence: number | null
           created_at: string
           difficulty: Database["public"]["Enums"]["difficulty_level"]
           explanation: string | null
           id: string
+          needs_review: boolean
           position: number
           quiz_id: string
+          raw_import_text: string | null
+          review_reason: string | null
+          sample_answer: string | null
           tags: string[]
           text: string
           type: Database["public"]["Enums"]["question_type"]
         }
         Insert: {
+          ai_confidence?: number | null
           created_at?: string
           difficulty?: Database["public"]["Enums"]["difficulty_level"]
           explanation?: string | null
           id?: string
+          needs_review?: boolean
           position?: number
           quiz_id: string
+          raw_import_text?: string | null
+          review_reason?: string | null
+          sample_answer?: string | null
           tags?: string[]
           text: string
           type?: Database["public"]["Enums"]["question_type"]
         }
         Update: {
+          ai_confidence?: number | null
           created_at?: string
           difficulty?: Database["public"]["Enums"]["difficulty_level"]
           explanation?: string | null
           id?: string
+          needs_review?: boolean
           position?: number
           quiz_id?: string
+          raw_import_text?: string | null
+          review_reason?: string | null
+          sample_answer?: string | null
           tags?: string[]
           text?: string
           type?: Database["public"]["Enums"]["question_type"]
@@ -178,6 +193,7 @@ export type Database = {
       }
       quizzes: {
         Row: {
+          access_key: string | null
           allow_retakes: boolean
           category: string
           created_at: string
@@ -188,18 +204,25 @@ export type Database = {
           end_at: string | null
           enforce_time: boolean
           id: string
+          input_method: string
           instructions: string | null
           is_published: boolean
           max_attempts: number | null
+          parsing_settings: Json
           randomize_questions: boolean
+          scheduled_at: string | null
           show_answers_after: boolean
           show_explanations: boolean
           shuffle_options: boolean
+          source_type: string | null
           start_at: string | null
+          subject: string | null
           title: string
           updated_at: string
+          visibility: string
         }
         Insert: {
+          access_key?: string | null
           allow_retakes?: boolean
           category?: string
           created_at?: string
@@ -210,18 +233,25 @@ export type Database = {
           end_at?: string | null
           enforce_time?: boolean
           id?: string
+          input_method?: string
           instructions?: string | null
           is_published?: boolean
           max_attempts?: number | null
+          parsing_settings?: Json
           randomize_questions?: boolean
+          scheduled_at?: string | null
           show_answers_after?: boolean
           show_explanations?: boolean
           shuffle_options?: boolean
+          source_type?: string | null
           start_at?: string | null
+          subject?: string | null
           title: string
           updated_at?: string
+          visibility?: string
         }
         Update: {
+          access_key?: string | null
           allow_retakes?: boolean
           category?: string
           created_at?: string
@@ -232,16 +262,22 @@ export type Database = {
           end_at?: string | null
           enforce_time?: boolean
           id?: string
+          input_method?: string
           instructions?: string | null
           is_published?: boolean
           max_attempts?: number | null
+          parsing_settings?: Json
           randomize_questions?: boolean
+          scheduled_at?: string | null
           show_answers_after?: boolean
           show_explanations?: boolean
           shuffle_options?: boolean
+          source_type?: string | null
           start_at?: string | null
+          subject?: string | null
           title?: string
           updated_at?: string
+          visibility?: string
         }
         Relationships: []
       }
