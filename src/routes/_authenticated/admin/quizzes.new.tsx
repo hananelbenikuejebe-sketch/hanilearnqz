@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { createQuiz } from "@/lib/quizzes.functions";
 import { getSettings } from "@/lib/settings.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,7 +124,7 @@ function NewQuiz() {
   );
 }
 
-function Method({ value, icon, title }: { value: string; icon: React.ReactNode; title: string }) {
+function Method({ value, icon, title }: { value: string; icon: ReactNode; title: string }) {
   return <Label className="flex items-center gap-2 rounded-md border p-3 cursor-pointer has-[:checked]:border-primary has-[:checked]:bg-accent/20"><RadioGroupItem value={value} />{icon}<span className="font-medium">{title}</span></Label>;
 }
 
