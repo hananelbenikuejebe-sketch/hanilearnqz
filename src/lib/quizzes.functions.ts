@@ -100,12 +100,24 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 const QuizInput = z.object({
-  title: z.string().min(1).max(200),
-  description: z.string().max(2000).optional().nullable(),
+  title: z.string().min(1).max(100),
+  description: z.string().max(500).optional().nullable(),
   category: z.string().min(1).max(50),
-  duration_min: z.number().int().min(1).max(600),
+  subject: z.string().max(80).optional().nullable(),
+  duration_min: z.number().int().min(5).max(600),
   difficulty: z.enum(["easy", "medium", "hard"]),
   instructions: z.string().max(4000).optional().nullable(),
+  visibility: z.enum(["public", "private"]).default("public"),
+  access_key: z.string().max(40).optional().nullable(),
+  input_method: z.enum(["upload", "paste", "manual"]).default("manual"),
+  source_type: z.string().max(40).optional().nullable(),
+  parsing_settings: z.object({
+    strictness: z.enum(["loose", "normal", "strict"]).default("normal"),
+    auto_detect_type: z.boolean().default(true),
+    confidence_threshold: z.number().int().min(30).max(95).default(80),
+    default_question_type: z.enum(["mcq", "tf", "short", "essay"]).default("mcq"),
+    ask_confirmation: z.boolean().default(true),
+  }).default({}),
   is_published: z.boolean(),
   randomize_questions: z.boolean(),
   shuffle_options: z.boolean(),
@@ -114,6 +126,9 @@ const QuizInput = z.object({
   enforce_time: z.boolean(),
   allow_retakes: z.boolean(),
   max_attempts: z.number().int().min(1).max(100).optional().nullable(),
+  start_at: z.string().datetime().optional().nullable(),
+  end_at: z.string().datetime().optional().nullable(),
+  scheduled_at: z.string().datetime().optional().nullable(),
 });
 
 export const createQuiz = createServerFn({ method: "POST" })
