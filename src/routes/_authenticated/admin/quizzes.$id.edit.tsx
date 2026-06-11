@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { getQuizAdmin, updateQuiz } from "@/lib/quizzes.functions";
 import { createQuestion, updateQuestion, deleteQuestion, bulkInsertQuestions } from "@/lib/questions.functions";
 import { parseQuestionsFromText } from "@/lib/ai-parse.functions";
@@ -10,12 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { toast } from "sonner";
-import { Trash2, Plus, Sparkles, ArrowLeft } from "lucide-react";
+import { Trash2, Plus, Sparkles, ArrowLeft, Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/admin/quizzes/$id/edit")({
   component: EditQuiz,
