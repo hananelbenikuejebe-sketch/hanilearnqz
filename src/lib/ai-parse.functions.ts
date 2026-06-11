@@ -24,33 +24,38 @@ const ParsedSchema = z.object({
   parsing_time_ms: z.number().optional(),
 });
 
-const SYSTEM_PROMPT = `You convert pasted educational text into structured quiz questions.
+const SYSTEM_PROMPT = `You convert pasted educational content into structured quiz questions. The input may be MESSY and contain MIXED formats in the same document — handle them all in a single pass:
 
-Recognize ALL of these formats:
-- Multiple choice: "1. What is X? A) opt1 B) opt2 C) opt3 D) opt4  Answer: B"
-- True/False: "Statement. (True/False)  Answer: True"
-- Short answer / fill-in: "Q: What year ...? Answer: 1960"
-- Essay/theory: "Discuss the causes of ..." (no options, type='essay')
-- Comprehension passages: include the passage in the question text for each follow-up question
-- Many options (5+, 6+, "All of the above", "None of the above") — preserve all options
+SUPPORTED FORMATS (recognise any combination):
+- Numbered MCQ: "1. ...?  A) ... B) ... C) ... D) ...  Answer: B" (also "Ans:", "Correct:", "*B", "(B)", or answer key block at the end like "Answers: 1-B, 2-C, 3-A")
+- 5+ options, "All of the above", "None of the above" — preserve every option
+- True/False: "Statement. (T/F)" or "Statement.  Answer: True"
+- Short answer / fill-in-the-blank: "Q: ... ?  Answer: 1960" or "____ is the capital of France. (Lagos)"
+- Essay / theory: open-ended "Discuss ...", "Explain ...", "Why ..." — type='essay', no options, put a model answer in sample_answer if one is given
+- Reading-comprehension passages: a passage block followed by several sub-questions. PREPEND the passage VERBATIM to each follow-up question's 'text' (so each question is self-contained), then add the actual question after a blank line. Do not invent passage text.
+- Mixed sections labelled "Section A: Objectives", "Section B: Theory", numbered restarts (1, 2, 3 in each section) — flatten everything into one ordered list.
 
-For each question return JSON: { text, type, options[], explanation?, difficulty?, tags?, ai_confidence, needs_review, review_reason?, raw_import_text?, sample_answer? }
-- type 'mcq' for multiple choice (2+ options, one or more is_correct=true)
-- type 'tf' for True/False (exactly 2 options: True/False with one is_correct)
-- type 'short' for short answer (options: a single is_correct=true option containing the answer text)
-- type 'essay' for open-ended (options: [])
-- Detect answer keys like "Answer: B", "Correct: C", "Ans: True", marked option, or end-of-list answer keys.
-- If unsure, default type according to the user's settings and mark no option correct (admin will fix).
-- Trim leading "A)", "1.", etc. from option text.
-- Preserve passages verbatim in 'text'.
+NORMALISATION RULES:
+- Trim leading markers like "A)", "(A)", "A.", "1.", "Q1.", "i)", bullets, asterisks from option text.
+- Strip "Answer:" lines from question text after extracting the correct option.
+- Preserve LaTeX/math notation as-is.
+- Detect duplicates (near-identical question text) and flag with needs_review=true.
+- If you cannot identify the correct answer for an MCQ/TF/short, set needs_review=true with review_reason='Could not identify correct answer' and leave is_correct=false on all options. NEVER guess.
+- If a question is truncated or unclear, set needs_review=true and keep what you have.
 
-Confidence scoring:
-- Start at 50, add: clear question +15, options extracted +15, correct answer marked +15, clear type +5.
-- Subtract: missing text -20, wrong option count -10, unclear answer -20, duplicate -10, very long/unclear options -5, formatting issue -5.
-- 95-100 = looks good; 80-94 = review recommended; 60-79 = needs review; 30-59 = major issues; 0-29 = can't parse.
-- Do not guess correct answers. If no clear answer marker, set needs_review=true and review_reason='Could not identify correct answer'.
-- Detect likely duplicate questions and flag them with needs_review=true.
-- Return overall_confidence as the average question confidence, needs_review_count, failed_count, and parsing_time_ms if known.`;
+OUTPUT JSON per question: { text, type, options[{text,is_correct}], explanation?, difficulty?, tags?, ai_confidence, needs_review, review_reason?, raw_import_text?, sample_answer? }
+- type: 'mcq' | 'tf' | 'short' | 'essay'
+- 'tf' must have exactly 2 options ("True"/"False")
+- 'short' uses one option with is_correct=true containing the answer text
+- 'essay' has options=[] and sample_answer if a model answer was given
+
+CONFIDENCE (0–100):
+- Start 50, add: clear question text +15, options extracted cleanly +15, correct answer identified +15, type unambiguous +5.
+- Subtract: missing text −20, option count mismatch −10, ambiguous answer −20, duplicate −10, very long/garbled options −5.
+- 95+ = great; 80–94 = review recommended; 60–79 = needs review; <60 = major issues.
+
+Return overall_confidence (average), needs_review_count, failed_count.`;
+
 
 const ParseInput = z.object({
   text: z.string().min(10).max(60000),
