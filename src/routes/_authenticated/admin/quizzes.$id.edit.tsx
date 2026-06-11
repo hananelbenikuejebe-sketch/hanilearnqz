@@ -211,52 +211,192 @@ function Badge({ children }: { children: any }) {
 function AIPanel({ quizId, aiFn, bulkFn, onDone }: any) {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<any[] | null>(null);
-  const parse = useMutation({
-    mutationFn: () => aiFn({ data: { text } }),
-    onSuccess: (r: any) => { setParsed(r.questions); toast.success(`Parsed ${r.questions.length} questions`); },
-    onError: (e: any) => toast.error(e.message),
-  });
+  const [progress, setProgress] = useState({ done: 0, total: 0, label: "" });
+  const [running, setRunning] = useState(false);
+  const [editing, setEditing] = useState<Record<number, boolean>>({});
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  async function handleFile(file: File) {
+    const lower = file.name.toLowerCase();
+    if (file.size > 2 * 1024 * 1024) { toast.error("File too large (max 2MB). Paste in chunks."); return; }
+    if (lower.endsWith(".txt") || lower.endsWith(".md") || lower.endsWith(".csv") || file.type.startsWith("text/")) {
+      const t = await file.text();
+      setText(t);
+      toast.success(`Loaded ${file.name}`);
+    } else {
+      toast.error("Only .txt / .md / .csv supported. For PDF or DOCX, copy the text and paste it.");
+    }
+  }
+
+  function chunkText(raw: string): string[] {
+    const max = 6000;
+    if (raw.length <= max) return [raw];
+    const blocks = raw.split(/\n\s*\n/);
+    const chunks: string[] = [];
+    let cur = "";
+    for (const b of blocks) {
+      if ((cur + "\n\n" + b).length > max && cur) {
+        chunks.push(cur);
+        cur = b;
+      } else {
+        cur = cur ? `${cur}\n\n${b}` : b;
+      }
+    }
+    if (cur) chunks.push(cur);
+    return chunks;
+  }
+
+  async function runParse() {
+    if (!text.trim()) return;
+    setRunning(true);
+    setParsed(null);
+    const chunks = chunkText(text);
+    setProgress({ done: 0, total: chunks.length, label: `Preparing ${chunks.length} chunk${chunks.length > 1 ? "s" : ""}…` });
+    const all: any[] = [];
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        setProgress({ done: i, total: chunks.length, label: `Parsing chunk ${i + 1} of ${chunks.length}…` });
+        const r: any = await aiFn({ data: { text: chunks[i] } });
+        all.push(...(r.questions ?? []));
+      }
+      setProgress({ done: chunks.length, total: chunks.length, label: "Done" });
+      setParsed(all);
+      const needs = all.filter((q) => q.needs_review).length;
+      toast.success(`Parsed ${all.length} question${all.length === 1 ? "" : "s"}${needs ? ` · ${needs} need review` : ""}`);
+    } catch (e: any) {
+      toast.error(e.message ?? "Parse failed");
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function updateQ(i: number, patch: any) {
+    setParsed((prev) => prev?.map((q, idx) => idx === i ? { ...q, ...patch } : q) ?? null);
+  }
+  function removeQ(i: number) {
+    setParsed((prev) => prev?.filter((_, idx) => idx !== i) ?? null);
+  }
+
   const save = useMutation({
     mutationFn: () => bulkFn({ data: { quiz_id: quizId, questions: parsed!.map((q) => ({
       type: q.type, text: q.text, explanation: q.explanation ?? null,
-      difficulty: q.difficulty ?? "medium", tags: [],
-      options: q.options ?? [],
+      difficulty: q.difficulty ?? "medium", tags: q.tags ?? [],
+      ai_confidence: q.ai_confidence ?? null, needs_review: q.needs_review ?? false,
+      review_reason: q.review_reason ?? null, raw_import_text: q.raw_import_text ?? null,
+      sample_answer: q.sample_answer ?? null,
+      options: (q.options ?? []).filter((o: any) => o.text?.trim()),
     })) }}),
     onSuccess: () => { toast.success("Added to quiz"); setParsed(null); setText(""); onDone(); },
     onError: (e: any) => toast.error(e.message),
   });
 
+  const pct = progress.total ? Math.round((progress.done / progress.total) * 100) : 0;
+  const needsReviewCount = parsed?.filter((q) => q.needs_review).length ?? 0;
+
   return (
     <Card><CardContent className="pt-6 space-y-4">
-      <div>
-        <Label>Paste questions</Label>
-        <p className="text-xs text-muted-foreground mb-2">
-          Recommended format: numbered question, options A) B) C) D), then "Answer: B". Supports True/False, short answer, essays, comprehension passages, and 5+ options.
+      <div className="space-y-2">
+        <Label>Source content</Label>
+        <p className="text-xs text-muted-foreground">
+          Paste any mix of MCQ, True/False, short-answer, essay, or comprehension passages. Long input is split into chunks automatically and parsed in sequence with live progress.
         </p>
-        <Textarea rows={12} value={text} onChange={(e) => setText(e.target.value)}
-          placeholder={`1. What is the capital of France?\nA) Berlin\nB) Madrid\nC) Paris\nD) Rome\nAnswer: C\n\n2. The earth is flat. (True/False)\nAnswer: False`} />
+        <div className="flex flex-wrap gap-2">
+          <input ref={fileRef} type="file" accept=".txt,.md,.csv,text/*" className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }} />
+          <Button type="button" variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={running}>
+            <Upload className="h-4 w-4 mr-1" />Upload .txt / .md / .csv
+          </Button>
+          <span className="text-xs text-muted-foreground self-center">PDF / DOCX: copy text & paste below.</span>
+        </div>
+        <Textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} disabled={running}
+          placeholder={`Passage: The water cycle ...\n\n1. What stage follows evaporation?\nA) Precipitation\nB) Condensation\nC) Runoff\nD) Infiltration\nAnswer: B\n\n2. The sun powers the water cycle. (True/False)\nAnswer: True\n\n3. Discuss the role of transpiration in the water cycle.`} />
+        <div className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters · ~{Math.max(1, Math.ceil(text.length / 6000))} chunk(s)</div>
       </div>
-      <Button onClick={() => parse.mutate()} disabled={!text || parse.isPending}>
-        <Sparkles className="h-4 w-4 mr-1" />{parse.isPending ? "Parsing…" : "Parse with AI"}
-      </Button>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" onClick={runParse} disabled={!text.trim() || running}>
+          <Sparkles className="h-4 w-4 mr-1" />{running ? "Parsing…" : "Parse with AI"}
+        </Button>
+        {parsed && <Button type="button" variant="ghost" onClick={() => { setParsed(null); setProgress({ done: 0, total: 0, label: "" }); }}>Discard parsed</Button>}
+      </div>
+
+      {(running || progress.total > 0) && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>{progress.label}</span>
+            <span className="tabular-nums">{progress.done}/{progress.total} · {pct}%</span>
+          </div>
+          <Progress value={pct} />
+        </div>
+      )}
+
       {parsed && (
         <div className="space-y-3">
-          <div className="text-sm text-muted-foreground">{parsed.length} parsed question(s). Review and add to quiz.</div>
-          {parsed.map((q, i) => (
-            <Card key={i}><CardContent className="pt-4 text-sm">
-              <div className="font-medium">{i + 1}. {q.text}</div>
-              <div className="text-xs text-muted-foreground">{q.type}</div>
-              {q.options?.map((o: any, j: number) => (
-                <div key={j} className={o.is_correct ? "text-success font-medium" : ""}>{String.fromCharCode(65+j)}. {o.text}{o.is_correct && " ✓"}</div>
-              ))}
-            </CardContent></Card>
-          ))}
-          <div className="flex gap-2">
-            <Button onClick={() => save.mutate()} disabled={save.isPending}>Add all to quiz</Button>
-            <Button variant="ghost" onClick={() => setParsed(null)}>Discard</Button>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="text-sm">
+              <span className="font-medium">{parsed.length}</span> parsed
+              {needsReviewCount > 0 && <span className="ml-2 inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"><AlertTriangle className="h-3.5 w-3.5" />{needsReviewCount} need review</span>}
+              {needsReviewCount === 0 && parsed.length > 0 && <span className="ml-2 inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" />all clear</span>}
+            </div>
+            <Button type="button" onClick={() => save.mutate()} disabled={save.isPending || parsed.length === 0}>
+              {save.isPending ? "Adding…" : `Add ${parsed.length} to quiz`}
+            </Button>
+          </div>
+          <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+            {parsed.map((q, i) => (
+              <ParsedCard key={i} q={q} i={i}
+                editing={!!editing[i]}
+                onToggle={() => setEditing((e) => ({ ...e, [i]: !e[i] }))}
+                onChange={(patch: any) => updateQ(i, patch)}
+                onRemove={() => removeQ(i)} />
+            ))}
           </div>
         </div>
       )}
     </CardContent></Card>
   );
 }
+
+function ParsedCard({ q, i, editing, onToggle, onChange, onRemove }: any) {
+  const conf = Math.round(q.ai_confidence ?? 0);
+  const confColor = conf >= 85 ? "text-emerald-600 dark:text-emerald-400" : conf >= 60 ? "text-amber-600 dark:text-amber-400" : "text-red-600 dark:text-red-400";
+  return (
+    <Card className={q.needs_review ? "border-amber-400/50" : ""}>
+      <CardContent className="pt-4 text-sm space-y-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-bold text-foreground">{i + 1}.</span>
+            <span className="uppercase">{q.type}</span>
+            <span className={`tabular-nums ${confColor}`}>{conf}%</span>
+            {q.needs_review && <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400"><AlertTriangle className="h-3 w-3" />review</span>}
+          </div>
+          <div className="flex gap-1">
+            <Button type="button" size="sm" variant="ghost" onClick={onToggle}>{editing ? "Done" : "Edit"}</Button>
+            <Button type="button" size="icon" variant="ghost" onClick={onRemove} aria-label="Remove"><Trash2 className="h-3.5 w-3.5" /></Button>
+          </div>
+        </div>
+        {editing
+          ? <Textarea rows={3} value={q.text} onChange={(e) => onChange({ text: e.target.value })} />
+          : <div className="whitespace-pre-wrap font-medium">{q.text}</div>}
+        {q.options?.length > 0 && (
+          <div className="space-y-1">
+            {q.options.map((o: any, j: number) => (
+              <div key={j} className="flex items-start gap-2">
+                <input type={q.type === "mcq" || q.type === "tf" ? "radio" : "checkbox"} name={`p-${i}`}
+                  checked={!!o.is_correct}
+                  onChange={() => onChange({ options: q.options.map((oo: any, jj: number) => ({ ...oo, is_correct: jj === j })) })}
+                  className="mt-1" />
+                {editing
+                  ? <Input value={o.text} onChange={(e) => onChange({ options: q.options.map((oo: any, jj: number) => jj === j ? { ...oo, text: e.target.value } : oo) })} />
+                  : <span className={o.is_correct ? "font-medium text-emerald-700 dark:text-emerald-400" : ""}>{String.fromCharCode(65 + j)}. {o.text}{o.is_correct && " ✓"}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+        {q.review_reason && <div className="text-xs text-amber-600 dark:text-amber-400">{q.review_reason}</div>}
+        {q.sample_answer && !editing && <div className="text-xs text-muted-foreground italic">Model answer: {q.sample_answer}</div>}
+      </CardContent>
+    </Card>
+  );
+}
+
