@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Clock, FileQuestion, LayoutDashboard, LogOut, Play } from "lucide-react";
+import { Clock, FileQuestion, LayoutDashboard, LogOut, Play, BarChart3 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({ meta: [{ title: "Quizzes — HaniLearn-QZ" }] }),
@@ -36,6 +36,9 @@ function Home() {
             <span className="font-bold">HaniLearn-QZ</span>
           </div>
           <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/results"><BarChart3 className="h-4 w-4 mr-1" />My results</Link>
+            </Button>
             {role?.isAdmin && (
               <Button variant="outline" size="sm" asChild>
                 <Link to="/admin"><LayoutDashboard className="h-4 w-4 mr-1" />Admin</Link>
@@ -44,6 +47,7 @@ function Home() {
             <ThemeToggle />
             <Button variant="ghost" size="icon" onClick={signOut} aria-label="Sign out"><LogOut className="h-4 w-4" /></Button>
           </div>
+
         </div>
       </header>
       <main className="container mx-auto px-4 py-8 max-w-5xl">
