@@ -191,10 +191,133 @@ export type Database = {
           },
         ]
       }
+      quiz_comments: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          is_hidden: boolean
+          quiz_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          is_hidden?: boolean
+          quiz_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_hidden?: boolean
+          quiz_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_comments_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiz_comments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_likes: {
+        Row: {
+          created_at: string
+          id: string
+          quiz_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          quiz_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          quiz_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_likes_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiz_likes_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_shares: {
+        Row: {
+          channel: string
+          created_at: string
+          id: string
+          quiz_id: string
+          user_id: string | null
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          id?: string
+          quiz_id: string
+          user_id?: string | null
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          id?: string
+          quiz_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_shares_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiz_shares_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quizzes: {
         Row: {
           access_key: string | null
+          allow_comments: boolean
+          allow_likes: boolean
           allow_retakes: boolean
+          allow_sharing: boolean
           category: string
           created_at: string
           created_by: string | null
@@ -213,6 +336,7 @@ export type Database = {
           scheduled_at: string | null
           show_answers_after: boolean
           show_explanations: boolean
+          show_leaderboard: boolean
           shuffle_options: boolean
           source_type: string | null
           start_at: string | null
@@ -223,7 +347,10 @@ export type Database = {
         }
         Insert: {
           access_key?: string | null
+          allow_comments?: boolean
+          allow_likes?: boolean
           allow_retakes?: boolean
+          allow_sharing?: boolean
           category?: string
           created_at?: string
           created_by?: string | null
@@ -242,6 +369,7 @@ export type Database = {
           scheduled_at?: string | null
           show_answers_after?: boolean
           show_explanations?: boolean
+          show_leaderboard?: boolean
           shuffle_options?: boolean
           source_type?: string | null
           start_at?: string | null
@@ -252,7 +380,10 @@ export type Database = {
         }
         Update: {
           access_key?: string | null
+          allow_comments?: boolean
+          allow_likes?: boolean
           allow_retakes?: boolean
+          allow_sharing?: boolean
           category?: string
           created_at?: string
           created_by?: string | null
@@ -271,6 +402,7 @@ export type Database = {
           scheduled_at?: string | null
           show_answers_after?: boolean
           show_explanations?: boolean
+          show_leaderboard?: boolean
           shuffle_options?: boolean
           source_type?: string | null
           start_at?: string | null

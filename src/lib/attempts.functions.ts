@@ -3,7 +3,12 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("Forbidden: admin only");
 }
@@ -74,7 +79,12 @@ export const getAttemptDetail = createServerFn({ method: "GET" })
       .from("attempts").select("*").eq("id", data.id).single();
     if (error) throw error;
     const isOwner = attempt.student_id === context.userId;
-    const { data: isAdmin } = await context.supabase.rpc("has_role", { _user_id: context.userId, _role: "admin" });
+    const { data: isAdmin } = await context.supabase
+      .from("user_roles")
+      .select("id")
+      .eq("user_id", context.userId)
+      .eq("role", "admin")
+      .maybeSingle();
     if (!isOwner && !isAdmin) throw new Error("Forbidden");
 
     const { data: quiz } = await context.supabase.from("quizzes").select("*").eq("id", attempt.quiz_id).single();

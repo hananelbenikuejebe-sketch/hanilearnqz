@@ -3,7 +3,12 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase.rpc("has_role", { _user_id: userId, _role: "admin" });
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("Forbidden: admin only");
 }
@@ -129,6 +134,10 @@ const QuizInput = z.object({
   start_at: z.string().datetime().optional().nullable(),
   end_at: z.string().datetime().optional().nullable(),
   scheduled_at: z.string().datetime().optional().nullable(),
+  allow_comments: z.boolean().default(true),
+  allow_likes: z.boolean().default(true),
+  allow_sharing: z.boolean().default(true),
+  show_leaderboard: z.boolean().default(true),
 });
 
 export const createQuiz = createServerFn({ method: "POST" })
