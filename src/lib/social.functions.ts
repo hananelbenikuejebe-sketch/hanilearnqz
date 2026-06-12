@@ -19,7 +19,6 @@ export const getQuizSocialSummary = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => QuizIdInput.parse(d))
   .handler(async ({ context, data }) => {
-    const db = context.supabase as any;
     const admin = await isAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const adminDb = supabaseAdmin as any;
@@ -44,7 +43,7 @@ export const getQuizSocialSummary = createServerFn({ method: "GET" })
     const { data: profiles } = profileIds.length
       ? await adminDb.from("profiles").select("id, full_name").in("id", profileIds)
       : { data: [] as any[] };
-    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+    const profileMap = new Map<string, { id: string; full_name: string | null }>((profiles ?? []).map((p: any) => [p.id, p]));
 
     const bestByStudent = new Map<string, any>();
     for (const a of attempts ?? []) {
@@ -108,7 +107,8 @@ export const addQuizComment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid(), body: z.string().trim().min(1).max(1000) }).parse(d))
   .handler(async ({ context, data }) => {
-    const { data: row, error } = await context.supabase
+    const db = context.supabase as any;
+    const { data: row, error } = await db
       .from("quiz_comments")
       .insert({ quiz_id: data.quiz_id, user_id: context.userId, body: data.body })
       .select()
@@ -121,7 +121,8 @@ export const deleteQuizComment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase.from("quiz_comments").delete().eq("id", data.id);
+    const db = context.supabase as any;
+    const { error } = await db.from("quiz_comments").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
@@ -131,7 +132,8 @@ export const hideQuizComment = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid(), hidden: z.boolean() }).parse(d))
   .handler(async ({ context, data }) => {
     if (!(await isAdmin(context.supabase, context.userId))) throw new Error("Forbidden: admin only");
-    const { error } = await context.supabase.from("quiz_comments").update({ is_hidden: data.hidden }).eq("id", data.id);
+    const db = context.supabase as any;
+    const { error } = await db.from("quiz_comments").update({ is_hidden: data.hidden }).eq("id", data.id);
     if (error) throw error;
     return { ok: true };
   });
@@ -140,7 +142,8 @@ export const recordQuizShare = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid(), channel: z.string().max(40).default("copy_link") }).parse(d))
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase.from("quiz_shares").insert({ quiz_id: data.quiz_id, user_id: context.userId, channel: data.channel });
+    const db = context.supabase as any;
+    const { error } = await db.from("quiz_shares").insert({ quiz_id: data.quiz_id, user_id: context.userId, channel: data.channel });
     if (error) throw error;
     return { ok: true };
   });
