@@ -19,9 +19,11 @@ export const getQuizSocialSummary = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => QuizIdInput.parse(d))
   .handler(async ({ context, data }) => {
+    const db = context.supabase as any;
     const admin = await isAdmin(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: quiz, error: quizError } = await supabaseAdmin
+    const adminDb = supabaseAdmin as any;
+    const { data: quiz, error: quizError } = await adminDb
       .from("quizzes")
       .select("id, title, is_published, allow_comments, allow_likes, allow_sharing, show_leaderboard")
       .eq("id", data.quiz_id)
@@ -30,17 +32,17 @@ export const getQuizSocialSummary = createServerFn({ method: "GET" })
     if (!quiz || (!quiz.is_published && !admin)) throw new Error("Quiz not available");
 
     const [{ count: likes }, { count: shares }, { data: mine }, { data: comments }, { data: attempts }] = await Promise.all([
-      supabaseAdmin.from("quiz_likes").select("id", { count: "exact", head: true }).eq("quiz_id", data.quiz_id),
-      supabaseAdmin.from("quiz_shares").select("id", { count: "exact", head: true }).eq("quiz_id", data.quiz_id),
-      supabaseAdmin.from("quiz_likes").select("id").eq("quiz_id", data.quiz_id).eq("user_id", context.userId).maybeSingle(),
-      supabaseAdmin.from("quiz_comments").select("id, user_id, body, is_hidden, created_at, updated_at").eq("quiz_id", data.quiz_id).order("created_at", { ascending: false }).limit(50),
-      supabaseAdmin.from("attempts").select("id, student_id, score_pct, correct_count, total, time_taken_sec, submitted_at").eq("quiz_id", data.quiz_id).order("score_pct", { ascending: false }).order("time_taken_sec", { ascending: true }).limit(500),
+      adminDb.from("quiz_likes").select("id", { count: "exact", head: true }).eq("quiz_id", data.quiz_id),
+      adminDb.from("quiz_shares").select("id", { count: "exact", head: true }).eq("quiz_id", data.quiz_id),
+      adminDb.from("quiz_likes").select("id").eq("quiz_id", data.quiz_id).eq("user_id", context.userId).maybeSingle(),
+      adminDb.from("quiz_comments").select("id, user_id, body, is_hidden, created_at, updated_at").eq("quiz_id", data.quiz_id).order("created_at", { ascending: false }).limit(50),
+      adminDb.from("attempts").select("id, student_id, score_pct, correct_count, total, time_taken_sec, submitted_at").eq("quiz_id", data.quiz_id).order("score_pct", { ascending: false }).order("time_taken_sec", { ascending: true }).limit(500),
     ]);
 
     const visibleComments = (comments ?? []).filter((c: any) => admin || !c.is_hidden || c.user_id === context.userId);
     const profileIds = Array.from(new Set([...visibleComments.map((c: any) => c.user_id), ...(attempts ?? []).map((a: any) => a.student_id)]));
     const { data: profiles } = profileIds.length
-      ? await supabaseAdmin.from("profiles").select("id, full_name").in("id", profileIds)
+      ? await adminDb.from("profiles").select("id, full_name").in("id", profileIds)
       : { data: [] as any[] };
     const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
 
@@ -85,18 +87,19 @@ export const toggleQuizLike = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => QuizIdInput.parse(d))
   .handler(async ({ context, data }) => {
-    const { data: existing } = await context.supabase
+    const db = context.supabase as any;
+    const { data: existing } = await db
       .from("quiz_likes")
       .select("id")
       .eq("quiz_id", data.quiz_id)
       .eq("user_id", context.userId)
       .maybeSingle();
     if (existing) {
-      const { error } = await context.supabase.from("quiz_likes").delete().eq("id", existing.id);
+      const { error } = await db.from("quiz_likes").delete().eq("id", existing.id);
       if (error) throw error;
       return { liked: false };
     }
-    const { error } = await context.supabase.from("quiz_likes").insert({ quiz_id: data.quiz_id, user_id: context.userId });
+    const { error } = await db.from("quiz_likes").insert({ quiz_id: data.quiz_id, user_id: context.userId });
     if (error) throw error;
     return { liked: true };
   });
