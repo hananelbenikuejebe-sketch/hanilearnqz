@@ -60,6 +60,8 @@ const ParseInput = z.object({
   format_hint: z.string().max(40).optional(),
 });
 
+type ParseSettings = NonNullable<z.infer<typeof ParseInput>["settings"]>;
+
 export const parseQuestionsFromText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ParseInput.parse(d))
@@ -116,7 +118,7 @@ function defaultSettings() {
   };
 }
 
-function buildPrompt(text: string, settings: ReturnType<typeof defaultSettings>, hint?: string) {
+function buildPrompt(text: string, settings: ParseSettings, hint?: string) {
   return `Admin settings:\n- strictness: ${settings.strictness}\n- auto_detect_type: ${settings.auto_detect_type}\n- confidence_threshold: ${settings.confidence_threshold}\n- default_question_type: ${settings.default_question_type}\n- format_hint: ${hint ?? "mixed educational text"}\n\nRaw content:\n${text}`;
 }
 
