@@ -92,7 +92,12 @@ function ResultPage() {
             })}
           </div>
         )}
+
+        <div className="mt-6">
+          <SocialPanel quizId={quizId} quizTitle={quiz?.title} />
+        </div>
       </main>
     </div>
   );
 }
+
