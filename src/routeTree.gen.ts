@@ -19,6 +19,7 @@ import { Route as AuthenticatedQuizQuizIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminStudentsRouteImport } from './routes/_authenticated/admin/students'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminQuizzesRouteImport } from './routes/_authenticated/admin/quizzes'
+import { Route as AuthenticatedQuizQuizIdIndexRouteImport } from './routes/_authenticated/quiz.$quizId.index'
 import { Route as AuthenticatedAdminQuizzesIndexRouteImport } from './routes/_authenticated/admin/quizzes.index'
 import { Route as AuthenticatedQuizQuizIdTakeRouteImport } from './routes/_authenticated/quiz.$quizId.take'
 import { Route as AuthenticatedAdminQuizzesNewRouteImport } from './routes/_authenticated/admin/quizzes.new'
@@ -78,6 +79,12 @@ const AuthenticatedAdminQuizzesRoute =
     path: '/quizzes',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
+const AuthenticatedQuizQuizIdIndexRoute =
+  AuthenticatedQuizQuizIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedQuizQuizIdRoute,
+  } as any)
 const AuthenticatedAdminQuizzesIndexRoute =
   AuthenticatedAdminQuizzesIndexRouteImport.update({
     id: '/',
@@ -128,6 +135,7 @@ export interface FileRoutesByFullPath {
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
   '/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
+  '/quiz/$quizId/': typeof AuthenticatedQuizQuizIdIndexRoute
   '/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
   '/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
   '/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
@@ -138,11 +146,11 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/students': typeof AuthenticatedAdminStudentsRoute
-  '/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesIndexRoute
+  '/quiz/$quizId': typeof AuthenticatedQuizQuizIdIndexRoute
   '/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
   '/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
   '/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
@@ -162,6 +170,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/_authenticated/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
   '/_authenticated/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
+  '/_authenticated/quiz/$quizId/': typeof AuthenticatedQuizQuizIdIndexRoute
   '/_authenticated/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
   '/_authenticated/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
   '/_authenticated/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
@@ -181,6 +190,7 @@ export interface FileRouteTypes {
     | '/admin/quizzes/new'
     | '/quiz/$quizId/take'
     | '/admin/quizzes/'
+    | '/quiz/$quizId/'
     | '/admin/quizzes/$id/edit'
     | '/admin/quizzes/$id/results'
     | '/quiz/$quizId/result/$attemptId'
@@ -191,11 +201,11 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/settings'
     | '/admin/students'
-    | '/quiz/$quizId'
     | '/admin'
     | '/admin/quizzes/new'
     | '/quiz/$quizId/take'
     | '/admin/quizzes'
+    | '/quiz/$quizId'
     | '/admin/quizzes/$id/edit'
     | '/admin/quizzes/$id/results'
     | '/quiz/$quizId/result/$attemptId'
@@ -214,6 +224,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/quizzes/new'
     | '/_authenticated/quiz/$quizId/take'
     | '/_authenticated/admin/quizzes/'
+    | '/_authenticated/quiz/$quizId/'
     | '/_authenticated/admin/quizzes/$id/edit'
     | '/_authenticated/admin/quizzes/$id/results'
     | '/_authenticated/quiz/$quizId/result/$attemptId'
@@ -295,6 +306,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/quizzes'
       preLoaderRoute: typeof AuthenticatedAdminQuizzesRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/quiz/$quizId/': {
+      id: '/_authenticated/quiz/$quizId/'
+      path: '/'
+      fullPath: '/quiz/$quizId/'
+      preLoaderRoute: typeof AuthenticatedQuizQuizIdIndexRouteImport
+      parentRoute: typeof AuthenticatedQuizQuizIdRoute
     }
     '/_authenticated/admin/quizzes/': {
       id: '/_authenticated/admin/quizzes/'
@@ -384,12 +402,14 @@ const AuthenticatedAdminRouteRouteWithChildren =
 
 interface AuthenticatedQuizQuizIdRouteChildren {
   AuthenticatedQuizQuizIdTakeRoute: typeof AuthenticatedQuizQuizIdTakeRoute
+  AuthenticatedQuizQuizIdIndexRoute: typeof AuthenticatedQuizQuizIdIndexRoute
   AuthenticatedQuizQuizIdResultAttemptIdRoute: typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
 }
 
 const AuthenticatedQuizQuizIdRouteChildren: AuthenticatedQuizQuizIdRouteChildren =
   {
     AuthenticatedQuizQuizIdTakeRoute: AuthenticatedQuizQuizIdTakeRoute,
+    AuthenticatedQuizQuizIdIndexRoute: AuthenticatedQuizQuizIdIndexRoute,
     AuthenticatedQuizQuizIdResultAttemptIdRoute:
       AuthenticatedQuizQuizIdResultAttemptIdRoute,
   }
@@ -423,3 +443,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
