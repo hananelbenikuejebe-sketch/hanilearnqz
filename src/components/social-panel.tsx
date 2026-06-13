@@ -48,9 +48,10 @@ export function SocialPanel({ quizId, quizTitle }: { quizId: string; quizTitle?:
     const url = `${window.location.origin}/quiz/${quizId}`;
     const shareData = { title: quizTitle ?? "Quiz", text: "Try this quiz on HaniLearn-QZ", url };
     try {
-      if (navigator.share) await navigator.share(shareData);
+      const canNativeShare = typeof navigator !== "undefined" && typeof (navigator as any).share === "function";
+      if (canNativeShare) await (navigator as any).share(shareData);
       else { await navigator.clipboard.writeText(url); toast.success("Link copied"); }
-      await shareFn({ data: { quiz_id: quizId, channel: navigator.share ? "native" : "copy_link" } });
+      await shareFn({ data: { quiz_id: quizId, channel: canNativeShare ? "native" : "copy_link" } });
       qc.invalidateQueries({ queryKey: ["social", quizId] });
     } catch { /* user cancelled */ }
   }
