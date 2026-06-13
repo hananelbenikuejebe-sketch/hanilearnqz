@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -32,6 +33,10 @@ async function socialCounts(adminDb: any, ids: string[]) {
   (comments ?? []).forEach((r: any) => { if (!r.is_hidden) base[r.quiz_id].comments++; });
   (shares ?? []).forEach((r: any) => { base[r.quiz_id].shares++; });
   return base;
+}
+
+function requestOrigin() {
+  try { return new URL(getRequest().url).origin; } catch { return "https://hanilearnqz.lovable.app"; }
 }
 
 export const listQuizzesAdmin = createServerFn({ method: "GET" })
@@ -75,10 +80,12 @@ export const listPublishedQuizzes = createServerFn({ method: "GET" })
       (qs ?? []).forEach((r: any) => { counts[r.quiz_id]++; });
     }
     const socials = await socialCounts(adminDb, ids);
+    const origin = requestOrigin();
     return Promise.all((quizzes ?? []).map(async (q: any) => ({
       ...q,
       question_count: counts[q.id] ?? 0,
       banner_url: await signBanner(adminDb, q.banner_path),
+      share_url: `${origin}/share/quiz/${q.id}`,
       social_counts: socials[q.id] ?? { likes: 0, comments: 0, shares: 0 },
     })));
   });
@@ -99,7 +106,7 @@ export const getQuizAbout = createServerFn({ method: "GET" })
     if (!quiz) throw new Error("Quiz not found or not published");
     const { count } = await context.supabase.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
     const counts = await socialCounts(adminDb, [data.id]);
-    return { ...quiz, banner_url: await signBanner(adminDb, (quiz as any).banner_path), question_count: count ?? 0, social_counts: counts[data.id] };
+    return { ...quiz, banner_url: await signBanner(adminDb, (quiz as any).banner_path), share_url: `${requestOrigin()}/share/quiz/${data.id}`, question_count: count ?? 0, social_counts: counts[data.id] };
   });
 
 export const getQuizSharePreview = createServerFn({ method: "GET" })
@@ -116,7 +123,8 @@ export const getQuizSharePreview = createServerFn({ method: "GET" })
     if (error) throw error;
     if (!quiz) throw new Error("Quiz not available");
     const { count } = await adminDb.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
-    return { ...quiz, question_count: count ?? 0 };
+    const origin = requestOrigin();
+    return { ...quiz, question_count: count ?? 0, share_url: `${origin}/share/quiz/${data.id}`, share_image_url: `${origin}/api/public/quiz-card/${data.id}.svg` };
   });
 
 export const getQuizAdmin = createServerFn({ method: "GET" })
@@ -204,6 +212,8 @@ const QuizInput = z.object({
   allow_likes: z.boolean().default(true),
   allow_sharing: z.boolean().default(true),
   show_leaderboard: z.boolean().default(true),
+  banner_path: z.string().max(500).optional().nullable(),
+  share_image_url: z.string().max(1000).optional().nullable(),
 });
 
 export const createQuiz = createServerFn({ method: "POST" })
