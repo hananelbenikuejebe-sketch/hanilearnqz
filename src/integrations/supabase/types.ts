@@ -318,6 +318,8 @@ export type Database = {
           allow_likes: boolean
           allow_retakes: boolean
           allow_sharing: boolean
+          banner_path: string | null
+          banner_url: string | null
           category: string
           created_at: string
           created_by: string | null
@@ -334,6 +336,7 @@ export type Database = {
           parsing_settings: Json
           randomize_questions: boolean
           scheduled_at: string | null
+          share_image_url: string | null
           show_answers_after: boolean
           show_explanations: boolean
           show_leaderboard: boolean
@@ -351,6 +354,8 @@ export type Database = {
           allow_likes?: boolean
           allow_retakes?: boolean
           allow_sharing?: boolean
+          banner_path?: string | null
+          banner_url?: string | null
           category?: string
           created_at?: string
           created_by?: string | null
@@ -367,6 +372,7 @@ export type Database = {
           parsing_settings?: Json
           randomize_questions?: boolean
           scheduled_at?: string | null
+          share_image_url?: string | null
           show_answers_after?: boolean
           show_explanations?: boolean
           show_leaderboard?: boolean
@@ -384,6 +390,8 @@ export type Database = {
           allow_likes?: boolean
           allow_retakes?: boolean
           allow_sharing?: boolean
+          banner_path?: string | null
+          banner_url?: string | null
           category?: string
           created_at?: string
           created_by?: string | null
@@ -400,6 +408,7 @@ export type Database = {
           parsing_settings?: Json
           randomize_questions?: boolean
           scheduled_at?: string | null
+          share_image_url?: string | null
           show_answers_after?: boolean
           show_explanations?: boolean
           show_leaderboard?: boolean

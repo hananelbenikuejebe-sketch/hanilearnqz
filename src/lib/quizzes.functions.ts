@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -11,6 +12,31 @@ async function assertAdmin(supabase: any, userId: string) {
     .maybeSingle();
   if (error) throw error;
   if (!data) throw new Error("Forbidden: admin only");
+}
+
+async function signBanner(adminDb: any, path?: string | null) {
+  if (!path) return null;
+  const { data } = await adminDb.storage.from("quiz-banners").createSignedUrl(path, 60 * 60);
+  return data?.signedUrl ?? null;
+}
+
+async function socialCounts(adminDb: any, ids: string[]) {
+  const base: Record<string, { likes: number; comments: number; shares: number }> = {};
+  ids.forEach((id) => { base[id] = { likes: 0, comments: 0, shares: 0 }; });
+  if (!ids.length) return base;
+  const [{ data: likes }, { data: comments }, { data: shares }] = await Promise.all([
+    adminDb.from("quiz_likes").select("quiz_id").in("quiz_id", ids),
+    adminDb.from("quiz_comments").select("quiz_id, is_hidden").in("quiz_id", ids),
+    adminDb.from("quiz_shares").select("quiz_id").in("quiz_id", ids),
+  ]);
+  (likes ?? []).forEach((r: any) => { base[r.quiz_id].likes++; });
+  (comments ?? []).forEach((r: any) => { if (!r.is_hidden) base[r.quiz_id].comments++; });
+  (shares ?? []).forEach((r: any) => { base[r.quiz_id].shares++; });
+  return base;
+}
+
+function requestOrigin() {
+  try { return new URL(getRequest().url).origin; } catch { return "https://hanilearnqz.lovable.app"; }
 }
 
 export const listQuizzesAdmin = createServerFn({ method: "GET" })
@@ -38,6 +64,8 @@ export const listQuizzesAdmin = createServerFn({ method: "GET" })
 export const listPublishedQuizzes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = supabaseAdmin as any;
     const { data: quizzes, error } = await context.supabase
       .from("quizzes")
       .select("*")
@@ -51,7 +79,52 @@ export const listPublishedQuizzes = createServerFn({ method: "GET" })
       for (const id of ids) counts[id] = 0;
       (qs ?? []).forEach((r: any) => { counts[r.quiz_id]++; });
     }
-    return (quizzes ?? []).map((q) => ({ ...q, question_count: counts[q.id] ?? 0 }));
+    const socials = await socialCounts(adminDb, ids);
+    const origin = requestOrigin();
+    return Promise.all((quizzes ?? []).map(async (q: any) => ({
+      ...q,
+      question_count: counts[q.id] ?? 0,
+      banner_url: await signBanner(adminDb, q.banner_path),
+      share_url: `${origin}/share/quiz/${q.id}`,
+      social_counts: socials[q.id] ?? { likes: 0, comments: 0, shares: 0 },
+    })));
+  });
+
+export const getQuizAbout = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = supabaseAdmin as any;
+    const { data: quiz, error } = await context.supabase
+      .from("quizzes")
+      .select("*")
+      .eq("id", data.id)
+      .eq("is_published", true)
+      .maybeSingle();
+    if (error) throw error;
+    if (!quiz) throw new Error("Quiz not found or not published");
+    const { count } = await context.supabase.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
+    const counts = await socialCounts(adminDb, [data.id]);
+    return { ...quiz, banner_url: await signBanner(adminDb, (quiz as any).banner_path), share_url: `${requestOrigin()}/share/quiz/${data.id}`, question_count: count ?? 0, social_counts: counts[data.id] };
+  });
+
+export const getQuizSharePreview = createServerFn({ method: "GET" })
+  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = supabaseAdmin as any;
+    const { data: quiz, error } = await adminDb
+      .from("quizzes")
+      .select("id, title, description, category, subject, difficulty, duration_min, is_published")
+      .eq("id", data.id)
+      .eq("is_published", true)
+      .maybeSingle();
+    if (error) throw error;
+    if (!quiz) throw new Error("Quiz not available");
+    const { count } = await adminDb.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
+    const origin = requestOrigin();
+    return { ...quiz, question_count: count ?? 0, share_url: `${origin}/share/quiz/${data.id}`, share_image_url: `${origin}/api/public/quiz-card/${data.id}.svg` };
   });
 
 export const getQuizAdmin = createServerFn({ method: "GET" })
@@ -81,6 +154,7 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
       .maybeSingle();
     if (error) throw error;
     if (!quiz) throw new Error("Quiz not found or not published");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: questions } = await context.supabase
       .from("questions")
       .select("id, position, type, text, options(id, position, text)")
@@ -92,7 +166,7 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
       return { ...q, options: quiz.shuffle_options ? shuffle(opts) : opts };
     });
     const finalQuestions = quiz.randomize_questions ? shuffle(prepared) : prepared;
-    return { quiz, questions: finalQuestions };
+    return { quiz: { ...quiz, banner_url: await signBanner(supabaseAdmin, (quiz as any).banner_path) }, questions: finalQuestions };
   });
 
 function shuffle<T>(arr: T[]): T[] {
@@ -138,6 +212,8 @@ const QuizInput = z.object({
   allow_likes: z.boolean().default(true),
   allow_sharing: z.boolean().default(true),
   show_leaderboard: z.boolean().default(true),
+  banner_path: z.string().max(500).optional().nullable(),
+  share_image_url: z.string().max(1000).optional().nullable(),
 });
 
 export const createQuiz = createServerFn({ method: "POST" })
