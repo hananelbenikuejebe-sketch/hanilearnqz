@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, Home, RotateCw } from "lucide-react";
+import { SocialPanel } from "@/components/social-panel";
 
 export const Route = createFileRoute("/_authenticated/quiz/$quizId/result/$attemptId")({
   component: ResultPage,
@@ -91,7 +92,12 @@ function ResultPage() {
             })}
           </div>
         )}
+
+        <div className="mt-6">
+          <SocialPanel quizId={quizId} quizTitle={quiz?.title} />
+        </div>
       </main>
     </div>
   );
 }
+

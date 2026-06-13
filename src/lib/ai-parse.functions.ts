@@ -44,9 +44,11 @@ Rules:
 - For short, put the accepted answer as the only correct option.
 - For essay, options=[] and sample_answer only if present.
 - Flag duplicates, unclear fragments, missing correct answers, and malformed options.
+- ALWAYS generate an "explanation" field (1–3 sentences) teaching WHY the correct answer is right — even if the source did not provide one. Keep it factual, concise, and exam-appropriate. For essay/short answers, summarise the expected reasoning.
 
 Return this exact JSON object, with no markdown:
 {"questions":[{"text":"...","type":"mcq|tf|short|essay","options":[{"text":"...","is_correct":true}],"explanation":"...","difficulty":"easy|medium|hard","tags":["..."],"ai_confidence":0,"needs_review":false,"review_reason":"","raw_import_text":"...","sample_answer":"..."}],"needs_review_count":0,"failed_count":0,"overall_confidence":0}`;
+
 
 const ParseInput = z.object({
   text: z.string().min(10).max(60000),
