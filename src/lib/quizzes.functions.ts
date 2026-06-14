@@ -214,7 +214,34 @@ const QuizInput = z.object({
   show_leaderboard: z.boolean().default(true),
   banner_path: z.string().max(500).optional().nullable(),
   share_image_url: z.string().max(1000).optional().nullable(),
+  total_score: z.number().min(0).max(10000).optional().nullable(),
 });
+
+export const uploadQuizBanner = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      quiz_id: z.string().uuid(),
+      filename: z.string().max(120),
+      content_type: z.string().max(80),
+      base64: z.string().min(10),
+    }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const buf = Buffer.from(data.base64, "base64");
+    const ext = data.filename.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${data.quiz_id}/banner-${Date.now()}.${ext}`;
+    const { error: upErr } = await (supabaseAdmin as any).storage
+      .from("quiz-banners")
+      .upload(path, buf, { contentType: data.content_type, upsert: true });
+    if (upErr) throw upErr;
+    await context.supabase.from("quizzes").update({ banner_path: path }).eq("id", data.quiz_id);
+    const { data: signed } = await (supabaseAdmin as any).storage.from("quiz-banners").createSignedUrl(path, 60 * 60);
+    return { banner_path: path, banner_url: signed?.signedUrl ?? null };
+  });
+
 
 export const createQuiz = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
