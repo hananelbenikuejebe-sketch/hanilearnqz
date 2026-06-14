@@ -116,7 +116,7 @@ export const getQuizSharePreview = createServerFn({ method: "GET" })
     const adminDb = supabaseAdmin as any;
     const { data: quiz, error } = await adminDb
       .from("quizzes")
-      .select("id, title, description, category, subject, difficulty, duration_min, is_published")
+      .select("id, title, description, category, subject, difficulty, duration_min, is_published, banner_path, share_image_url")
       .eq("id", data.id)
       .eq("is_published", true)
       .maybeSingle();
@@ -124,7 +124,8 @@ export const getQuizSharePreview = createServerFn({ method: "GET" })
     if (!quiz) throw new Error("Quiz not available");
     const { count } = await adminDb.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
     const origin = requestOrigin();
-    return { ...quiz, question_count: count ?? 0, share_url: `${origin}/share/quiz/${data.id}`, share_image_url: `${origin}/api/public/quiz-card/${data.id}.svg` };
+    const banner_url = await signBanner(adminDb, quiz.banner_path);
+    return { ...quiz, banner_url, question_count: count ?? 0, share_url: `${origin}/share/quiz/${data.id}`, share_image_url: quiz.share_image_url ?? banner_url ?? `${origin}/api/public/quiz-card/${data.id}.svg` };
   });
 
 export const getQuizAdmin = createServerFn({ method: "GET" })
