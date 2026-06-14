@@ -295,62 +295,6 @@ function QuestionCard({ q, index, selected, onToggleSelect, onSave, onDelete }: 
   );
 }
 
-function QuestionCard({ q, index, onSave, onDelete }: { q: any; index: number; onSave: (patch: any, options: any[]) => void; onDelete: () => void }) {
-  const [text, setText] = useState(q.text);
-  const [type, setType] = useState(q.type);
-  const [explanation, setExplanation] = useState(q.explanation ?? "");
-  const [difficulty, setDifficulty] = useState(q.difficulty);
-  const [options, setOptions] = useState(
-    (q.options ?? []).sort((a: any, b: any) => a.position - b.position).map((o: any) => ({ text: o.text, is_correct: o.is_correct }))
-  );
-
-  function setCorrect(i: number) {
-    setOptions(options.map((o: any, idx: number) => ({ ...o, is_correct: idx === i })));
-  }
-
-  return (
-    <Card>
-      <CardContent className="pt-6 space-y-3">
-        <div className="flex items-start gap-2">
-          <Badge>{index + 1}</Badge>
-          <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} className="flex-1" />
-          <Button size="icon" variant="ghost" onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <Select value={type} onValueChange={(v) => setType(v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="mcq">Multiple Choice</SelectItem>
-              <SelectItem value="tf">True / False</SelectItem>
-              <SelectItem value="short">Short answer</SelectItem>
-              <SelectItem value="essay">Essay / Theory</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={difficulty} onValueChange={(v) => setDifficulty(v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="easy">Easy</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="hard">Hard</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        {(type === "mcq" || type === "tf") && (
-          <div className="space-y-2">
-            {options.map((o: any, i: number) => (
-              <div key={i} className="flex items-center gap-2">
-                <input type="radio" name={`correct-${q.id}`} checked={o.is_correct} onChange={() => setCorrect(i)} />
-                <Input value={o.text} onChange={(e) => setOptions(options.map((oo: any, ii: number) => ii === i ? { ...oo, text: e.target.value } : oo))} />
-                <Button size="icon" variant="ghost" onClick={() => setOptions(options.filter((_: any, ii: number) => ii !== i))}><Trash2 className="h-3 w-3" /></Button>
-              </div>
-            ))}
-            <Button size="sm" variant="outline" onClick={() => setOptions([...options, { text: "", is_correct: false }])}><Plus className="h-3 w-3 mr-1" />Add option</Button>
-          </div>
-        )}
-        <div><Label className="text-xs">Explanation</Label><Textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} rows={2} /></div>
-        <Button size="sm" onClick={() => onSave({ text, type, explanation: explanation || null, difficulty }, options)}>Save question</Button>
-      </CardContent>
-    </Card>
-  );
-}
 
 function Badge({ children }: { children: any }) {
   return <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-primary text-primary-foreground text-xs font-bold shrink-0">{children}</span>;
