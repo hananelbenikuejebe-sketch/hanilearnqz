@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Heart, MessageCircle, Share2, Trophy, EyeOff, Eye, Trash2, Crown, Medal } from "lucide-react";
 import { toast } from "sonner";
 
-export function SocialPanel({ quizId, quizTitle }: { quizId: string; quizTitle?: string }) {
+export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; quizTitle?: string; shareUrl?: string }) {
   const qc = useQueryClient();
   const fetchFn = useServerFn(getQuizSocialSummary);
   const likeFn = useServerFn(toggleQuizLike);
