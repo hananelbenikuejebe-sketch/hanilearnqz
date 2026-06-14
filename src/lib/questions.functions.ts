@@ -101,7 +101,7 @@ export const updateQuestion = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { error } = await context.supabase.from("questions").update(data.patch).eq("id", data.id);
+    const { error } = await context.supabase.from("questions").update(data.patch as any).eq("id", data.id);
     if (error) throw error;
     if (data.options) {
       await context.supabase.from("options").delete().eq("question_id", data.id);
