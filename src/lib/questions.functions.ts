@@ -31,6 +31,8 @@ const QuestionInput = z.object({
   review_reason: z.string().max(500).optional().nullable(),
   raw_import_text: z.string().max(12000).optional().nullable(),
   sample_answer: z.string().max(4000).optional().nullable(),
+  points: z.number().min(0).max(1000).optional().nullable(),
+  subsection: z.string().max(80).optional().nullable(),
 });
 
 export const createQuestion = createServerFn({ method: "POST" })
