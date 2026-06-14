@@ -116,7 +116,7 @@ export const getQuizSharePreview = createServerFn({ method: "GET" })
     const adminDb = supabaseAdmin as any;
     const { data: quiz, error } = await adminDb
       .from("quizzes")
-      .select("id, title, description, category, subject, difficulty, duration_min, is_published")
+      .select("id, title, description, category, subject, difficulty, duration_min, is_published, banner_path, share_image_url")
       .eq("id", data.id)
       .eq("is_published", true)
       .maybeSingle();
@@ -124,7 +124,8 @@ export const getQuizSharePreview = createServerFn({ method: "GET" })
     if (!quiz) throw new Error("Quiz not available");
     const { count } = await adminDb.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
     const origin = requestOrigin();
-    return { ...quiz, question_count: count ?? 0, share_url: `${origin}/share/quiz/${data.id}`, share_image_url: `${origin}/api/public/quiz-card/${data.id}.svg` };
+    const banner_url = await signBanner(adminDb, quiz.banner_path);
+    return { ...quiz, banner_url, question_count: count ?? 0, share_url: `${origin}/share/quiz/${data.id}`, share_image_url: quiz.share_image_url ?? banner_url ?? `${origin}/api/public/quiz-card/${data.id}.svg` };
   });
 
 export const getQuizAdmin = createServerFn({ method: "GET" })
@@ -214,7 +215,34 @@ const QuizInput = z.object({
   show_leaderboard: z.boolean().default(true),
   banner_path: z.string().max(500).optional().nullable(),
   share_image_url: z.string().max(1000).optional().nullable(),
+  total_score: z.number().min(0).max(10000).optional().nullable(),
 });
+
+export const uploadQuizBanner = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      quiz_id: z.string().uuid(),
+      filename: z.string().max(120),
+      content_type: z.string().max(80),
+      base64: z.string().min(10),
+    }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const buf = Buffer.from(data.base64, "base64");
+    const ext = data.filename.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${data.quiz_id}/banner-${Date.now()}.${ext}`;
+    const { error: upErr } = await (supabaseAdmin as any).storage
+      .from("quiz-banners")
+      .upload(path, buf, { contentType: data.content_type, upsert: true });
+    if (upErr) throw upErr;
+    await context.supabase.from("quizzes").update({ banner_path: path }).eq("id", data.quiz_id);
+    const { data: signed } = await (supabaseAdmin as any).storage.from("quiz-banners").createSignedUrl(path, 60 * 60);
+    return { banner_path: path, banner_url: signed?.signedUrl ?? null };
+  });
+
 
 export const createQuiz = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

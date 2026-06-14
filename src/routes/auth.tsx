@@ -85,9 +85,21 @@ function AuthPage() {
                 </form>
               </TabsContent>
             </Tabs>
+            <div className="mt-4 pt-4 border-t">
+              <Button variant="outline" className="w-full" disabled={loading} onClick={async () => {
+                setLoading(true);
+                const { error } = await supabase.auth.signInAnonymously();
+                setLoading(false);
+                if (error) return toast.error(error.message);
+                toast.success("Continuing as guest");
+                navigate({ to: "/" });
+              }}>Continue as guest</Button>
+              <p className="text-xs text-muted-foreground text-center mt-2">Guests can take public quizzes. Sign in to save progress and access private quizzes.</p>
+            </div>
           </CardContent>
         </Card>
       </div>
     </div>
   );
 }
+

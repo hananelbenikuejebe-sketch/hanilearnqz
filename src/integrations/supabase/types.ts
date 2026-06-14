@@ -34,7 +34,9 @@ export type Database = {
       }
       attempts: {
         Row: {
+          ai_feedback: Json | null
           answers: Json
+          awarded: number
           correct_count: number
           id: string
           quiz_id: string
@@ -46,7 +48,9 @@ export type Database = {
           total: number
         }
         Insert: {
+          ai_feedback?: Json | null
           answers?: Json
+          awarded?: number
           correct_count?: number
           id?: string
           quiz_id: string
@@ -58,7 +62,9 @@ export type Database = {
           total?: number
         }
         Update: {
+          ai_feedback?: Json | null
           answers?: Json
+          awarded?: number
           correct_count?: number
           id?: string
           quiz_id?: string
@@ -140,11 +146,13 @@ export type Database = {
           explanation: string | null
           id: string
           needs_review: boolean
+          points: number | null
           position: number
           quiz_id: string
           raw_import_text: string | null
           review_reason: string | null
           sample_answer: string | null
+          subsection: string | null
           tags: string[]
           text: string
           type: Database["public"]["Enums"]["question_type"]
@@ -156,11 +164,13 @@ export type Database = {
           explanation?: string | null
           id?: string
           needs_review?: boolean
+          points?: number | null
           position?: number
           quiz_id: string
           raw_import_text?: string | null
           review_reason?: string | null
           sample_answer?: string | null
+          subsection?: string | null
           tags?: string[]
           text: string
           type?: Database["public"]["Enums"]["question_type"]
@@ -172,11 +182,13 @@ export type Database = {
           explanation?: string | null
           id?: string
           needs_review?: boolean
+          points?: number | null
           position?: number
           quiz_id?: string
           raw_import_text?: string | null
           review_reason?: string | null
           sample_answer?: string | null
+          subsection?: string | null
           tags?: string[]
           text?: string
           type?: Database["public"]["Enums"]["question_type"]
@@ -345,6 +357,7 @@ export type Database = {
           start_at: string | null
           subject: string | null
           title: string
+          total_score: number | null
           updated_at: string
           visibility: string
         }
@@ -381,6 +394,7 @@ export type Database = {
           start_at?: string | null
           subject?: string | null
           title: string
+          total_score?: number | null
           updated_at?: string
           visibility?: string
         }
@@ -417,6 +431,7 @@ export type Database = {
           start_at?: string | null
           subject?: string | null
           title?: string
+          total_score?: number | null
           updated_at?: string
           visibility?: string
         }

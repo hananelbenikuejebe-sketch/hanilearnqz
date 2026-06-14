@@ -31,6 +31,8 @@ const QuestionInput = z.object({
   review_reason: z.string().max(500).optional().nullable(),
   raw_import_text: z.string().max(12000).optional().nullable(),
   sample_answer: z.string().max(4000).optional().nullable(),
+  points: z.number().min(0).max(1000).optional().nullable(),
+  subsection: z.string().max(80).optional().nullable(),
 });
 
 export const createQuestion = createServerFn({ method: "POST" })
@@ -60,8 +62,10 @@ export const createQuestion = createServerFn({ method: "POST" })
         review_reason: data.review_reason ?? null,
         raw_import_text: data.raw_import_text ?? null,
         sample_answer: data.sample_answer ?? null,
+        points: data.points ?? null,
+        subsection: data.subsection ?? null,
         position,
-      })
+      } as any)
       .select()
       .single();
     if (error) throw error;
@@ -89,13 +93,15 @@ export const updateQuestion = createServerFn({ method: "POST" })
         review_reason: z.string().max(500).nullable().optional(),
         raw_import_text: z.string().max(12000).nullable().optional(),
         sample_answer: z.string().max(4000).nullable().optional(),
+        points: z.number().min(0).max(1000).nullable().optional(),
+        subsection: z.string().max(80).nullable().optional(),
       }),
       options: z.array(OptionSchema).max(10).optional(),
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { error } = await context.supabase.from("questions").update(data.patch).eq("id", data.id);
+    const { error } = await context.supabase.from("questions").update(data.patch as any).eq("id", data.id);
     if (error) throw error;
     if (data.options) {
       await context.supabase.from("options").delete().eq("question_id", data.id);
@@ -116,6 +122,32 @@ export const deleteQuestion = createServerFn({ method: "POST" })
     const { error } = await context.supabase.from("questions").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
+  });
+
+export const bulkDeleteQuestions = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ ids: z.array(z.string().uuid()).min(1).max(500) }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { error } = await context.supabase.from("questions").delete().in("id", data.ids);
+    if (error) throw error;
+    return { ok: true, count: data.ids.length };
+  });
+
+export const distributeQuizPoints = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid(), total: z.number().min(0).max(10000) }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { data: qs } = await context.supabase.from("questions").select("id").eq("quiz_id", data.quiz_id);
+    const n = qs?.length ?? 0;
+    if (n === 0) return { ok: true, per_question: 0 };
+    const per = Math.round((data.total / n) * 100) / 100;
+    for (const q of qs!) {
+      await context.supabase.from("questions").update({ points: per } as any).eq("id", q.id);
+    }
+    await context.supabase.from("quizzes").update({ total_score: data.total } as any).eq("id", data.quiz_id);
+    return { ok: true, per_question: per };
   });
 
 export const reorderQuestions = createServerFn({ method: "POST" })

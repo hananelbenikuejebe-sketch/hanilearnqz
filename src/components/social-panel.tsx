@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Heart, MessageCircle, Share2, Trophy, EyeOff, Eye, Trash2, Crown, Medal } from "lucide-react";
 import { toast } from "sonner";
 
-export function SocialPanel({ quizId, quizTitle }: { quizId: string; quizTitle?: string }) {
+export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; quizTitle?: string; shareUrl?: string }) {
   const qc = useQueryClient();
   const fetchFn = useServerFn(getQuizSocialSummary);
   const likeFn = useServerFn(toggleQuizLike);
@@ -45,7 +45,7 @@ export function SocialPanel({ quizId, quizTitle }: { quizId: string; quizTitle?:
   });
 
   async function share() {
-    const url = `${window.location.origin}/quiz/${quizId}`;
+    const url = shareUrl ?? `${window.location.origin}/quiz/${quizId}`;
     const shareData = { title: quizTitle ?? "Quiz", text: "Try this quiz on HaniLearn-QZ", url };
     try {
       const canNativeShare = typeof navigator !== "undefined" && typeof (navigator as any).share === "function";
