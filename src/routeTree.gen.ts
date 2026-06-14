@@ -15,6 +15,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedResultsRouteImport } from './routes/_authenticated/results'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
+import { Route as ShareQuizQuizIdRouteImport } from './routes/share.quiz.$quizId'
 import { Route as AuthenticatedQuizQuizIdRouteImport } from './routes/_authenticated/quiz.$quizId'
 import { Route as AuthenticatedAdminStudentsRouteImport } from './routes/_authenticated/admin/students'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
@@ -55,6 +56,11 @@ const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedAdminRouteRoute,
+} as any)
+const ShareQuizQuizIdRoute = ShareQuizQuizIdRouteImport.update({
+  id: '/share/quiz/$quizId',
+  path: '/share/quiz/$quizId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedQuizQuizIdRoute = AuthenticatedQuizQuizIdRouteImport.update({
   id: '/quiz/$quizId',
@@ -131,6 +137,7 @@ export interface FileRoutesByFullPath {
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/students': typeof AuthenticatedAdminStudentsRoute
   '/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
+  '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/students': typeof AuthenticatedAdminStudentsRoute
+  '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/students': typeof AuthenticatedAdminStudentsRoute
   '/_authenticated/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
+  '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/_authenticated/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
@@ -186,6 +195,7 @@ export interface FileRouteTypes {
     | '/admin/settings'
     | '/admin/students'
     | '/quiz/$quizId'
+    | '/share/quiz/$quizId'
     | '/admin/'
     | '/admin/quizzes/new'
     | '/quiz/$quizId/take'
@@ -201,6 +211,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/settings'
     | '/admin/students'
+    | '/share/quiz/$quizId'
     | '/admin'
     | '/admin/quizzes/new'
     | '/quiz/$quizId/take'
@@ -220,6 +231,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/students'
     | '/_authenticated/quiz/$quizId'
+    | '/share/quiz/$quizId'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/quizzes/new'
     | '/_authenticated/quiz/$quizId/take'
@@ -233,6 +245,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ShareQuizQuizIdRoute: typeof ShareQuizQuizIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -278,6 +291,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/'
       preLoaderRoute: typeof AuthenticatedAdminIndexRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/share/quiz/$quizId': {
+      id: '/share/quiz/$quizId'
+      path: '/share/quiz/$quizId'
+      fullPath: '/share/quiz/$quizId'
+      preLoaderRoute: typeof ShareQuizQuizIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/quiz/$quizId': {
       id: '/_authenticated/quiz/$quizId'
@@ -439,7 +459,18 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ShareQuizQuizIdRoute: ShareQuizQuizIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
