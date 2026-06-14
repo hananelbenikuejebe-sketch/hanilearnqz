@@ -62,8 +62,10 @@ export const createQuestion = createServerFn({ method: "POST" })
         review_reason: data.review_reason ?? null,
         raw_import_text: data.raw_import_text ?? null,
         sample_answer: data.sample_answer ?? null,
+        points: data.points ?? null,
+        subsection: data.subsection ?? null,
         position,
-      })
+      } as any)
       .select()
       .single();
     if (error) throw error;
