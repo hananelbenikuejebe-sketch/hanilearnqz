@@ -31,12 +31,17 @@ function EditQuiz() {
   const updQFn = useServerFn(updateQuestion);
   const delQFn = useServerFn(deleteQuestion);
   const bulkFn = useServerFn(bulkInsertQuestions);
+  const bulkDelFn = useServerFn(bulkDeleteQuestions);
+  const distributeFn = useServerFn(distributeQuizPoints);
+  const uploadBannerFn = useServerFn(uploadQuizBanner);
   const aiFn = useServerFn(parseQuestionsFromText);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-quiz", id],
     queryFn: () => fetchQuiz({ data: { id } }),
   });
+
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const update = useMutation({
     mutationFn: (patch: any) => updFn({ data: { id, patch } }),
@@ -59,9 +64,18 @@ function EditQuiz() {
     mutationFn: (qid: string) => delQFn({ data: { id: qid } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-quiz", id] }),
   });
+  const bulkDel = useMutation({
+    mutationFn: () => bulkDelFn({ data: { ids: Array.from(selected) } }),
+    onSuccess: (r: any) => { toast.success(`Deleted ${r.count}`); setSelected(new Set()); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); },
+  });
+  const distribute = useMutation({
+    mutationFn: (total: number) => distributeFn({ data: { quiz_id: id, total } }),
+    onSuccess: (r: any) => { toast.success(`Distributed: ${r.per_question} pts each`); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); },
+  });
 
   if (isLoading || !data) return <div>Loading…</div>;
   const { quiz, questions } = data;
+  const allSelected = questions.length > 0 && selected.size === questions.length;
 
   return (
     <div className="max-w-4xl space-y-6">
@@ -78,12 +92,31 @@ function EditQuiz() {
         </TabsList>
 
         <TabsContent value="settings">
-          <SettingsForm quiz={quiz} onSave={(p) => update.mutate(p)} />
+          <SettingsForm quiz={quiz} onSave={(p) => update.mutate(p)} onUploadBanner={async (file) => {
+            const b64 = await fileToBase64(file);
+            await uploadBannerFn({ data: { quiz_id: id, filename: file.name, content_type: file.type || "image/jpeg", base64: b64 } });
+            toast.success("Banner uploaded");
+            qc.invalidateQueries({ queryKey: ["admin-quiz", id] });
+          }} onDistributePoints={(total) => distribute.mutate(total)} />
         </TabsContent>
 
         <TabsContent value="questions" className="space-y-4">
+          {questions.length > 0 && (
+            <div className="flex items-center gap-2 p-2 border rounded bg-card sticky top-0 z-10">
+              <input type="checkbox" checked={allSelected} onChange={(e) => setSelected(e.target.checked ? new Set(questions.map((q: any) => q.id)) : new Set())} />
+              <span className="text-sm">{selected.size > 0 ? `${selected.size} selected` : "Select all"}</span>
+              <div className="flex-1" />
+              {selected.size > 0 && (
+                <Button size="sm" variant="destructive" onClick={() => { if (confirm(`Delete ${selected.size} question(s)?`)) bulkDel.mutate(); }}>
+                  <Trash2 className="h-4 w-4 mr-1" />Delete selected
+                </Button>
+              )}
+            </div>
+          )}
           {questions.map((q: any, i: number) => (
             <QuestionCard key={q.id} q={q} index={i}
+              selected={selected.has(q.id)}
+              onToggleSelect={() => setSelected((s) => { const n = new Set(s); n.has(q.id) ? n.delete(q.id) : n.add(q.id); return n; })}
               onSave={(patch, options) => updQFn({ data: { id: q.id, patch, options } }).then(() => { toast.success("Saved"); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); })}
               onDelete={() => { if (confirm("Delete this question?")) delQ.mutate(q.id); }} />
           ))}
@@ -96,6 +129,18 @@ function EditQuiz() {
       </Tabs>
     </div>
   );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = reader.result as string;
+      resolve(res.split(",")[1] ?? "");
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 function SettingsForm({ quiz, onSave }: { quiz: any; onSave: (p: any) => void }) {
