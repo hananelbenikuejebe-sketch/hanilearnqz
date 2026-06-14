@@ -93,6 +93,8 @@ export const updateQuestion = createServerFn({ method: "POST" })
         review_reason: z.string().max(500).nullable().optional(),
         raw_import_text: z.string().max(12000).nullable().optional(),
         sample_answer: z.string().max(4000).nullable().optional(),
+        points: z.number().min(0).max(1000).nullable().optional(),
+        subsection: z.string().max(80).nullable().optional(),
       }),
       options: z.array(OptionSchema).max(10).optional(),
     }).parse(d),
