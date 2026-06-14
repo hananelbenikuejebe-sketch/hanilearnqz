@@ -45,7 +45,7 @@ export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; q
   });
 
   async function share() {
-    const url = `${window.location.origin}/quiz/${quizId}`;
+    const url = shareUrl ?? `${window.location.origin}/quiz/${quizId}`;
     const shareData = { title: quizTitle ?? "Quiz", text: "Try this quiz on HaniLearn-QZ", url };
     try {
       const canNativeShare = typeof navigator !== "undefined" && typeof (navigator as any).share === "function";
