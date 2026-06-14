@@ -143,13 +143,30 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function SettingsForm({ quiz, onSave }: { quiz: any; onSave: (p: any) => void }) {
+function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints }: { quiz: any; onSave: (p: any) => void; onUploadBanner: (file: File) => Promise<void>; onDistributePoints: (total: number) => void }) {
   const [f, setF] = useState({ ...quiz });
+  const [uploading, setUploading] = useState(false);
+  const bannerRef = useRef<HTMLInputElement>(null);
   const CATS = ["JAMB", "WAEC", "NECO", "GCE", "Post-UTME", "Custom"];
   return (
     <Card><CardContent className="pt-6 space-y-4">
       <div><Label>Title</Label><Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></div>
       <div><Label>Description</Label><Textarea value={f.description ?? ""} onChange={(e) => setF({ ...f, description: e.target.value })} /></div>
+      <div className="space-y-2">
+        <Label>Share banner</Label>
+        <p className="text-xs text-muted-foreground">Image shown on the quiz page and in shared link previews (WhatsApp, Telegram, etc.).</p>
+        {quiz.banner_url && <img src={quiz.banner_url} alt="banner" className="h-32 w-full object-cover rounded border" />}
+        <input ref={bannerRef} type="file" accept="image/*" className="hidden" onChange={async (e) => {
+          const file = e.target.files?.[0]; e.target.value = "";
+          if (!file) return;
+          if (file.size > 4 * 1024 * 1024) { toast.error("Max 4MB"); return; }
+          setUploading(true);
+          try { await onUploadBanner(file); } catch (err: any) { toast.error(err.message); } finally { setUploading(false); }
+        }} />
+        <Button type="button" size="sm" variant="outline" onClick={() => bannerRef.current?.click()} disabled={uploading}>
+          <Upload className="h-4 w-4 mr-1" />{uploading ? "Uploading…" : quiz.banner_path ? "Replace banner" : "Upload banner"}
+        </Button>
+      </div>
       <div className="grid sm:grid-cols-3 gap-4">
         <div><Label>Category</Label>
           <Select value={f.category} onValueChange={(v) => setF({ ...f, category: v })}>
@@ -167,6 +184,25 @@ function SettingsForm({ quiz, onSave }: { quiz: any; onSave: (p: any) => void })
           </Select>
         </div>
       </div>
+      <div className="grid sm:grid-cols-2 gap-4 items-end">
+        <div>
+          <Label>Total score</Label>
+          <Input type="number" min={0} value={f.total_score ?? ""} placeholder="e.g. 100" onChange={(e) => setF({ ...f, total_score: e.target.value ? Number(e.target.value) : null })} />
+          <p className="text-xs text-muted-foreground mt-1">Leave empty for default (1 point per question).</p>
+        </div>
+        <Button type="button" variant="outline" disabled={!f.total_score} onClick={() => onDistributePoints(Number(f.total_score))}>
+          <Sparkles className="h-4 w-4 mr-1" />Distribute evenly to all questions
+        </Button>
+      </div>
+      <div><Label>Visibility</Label>
+        <Select value={f.visibility ?? "public"} onValueChange={(v) => setF({ ...f, visibility: v })}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="public">Public (guests can take)</SelectItem>
+            <SelectItem value="private">Private (sign-in required)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       <div><Label>Instructions</Label><Textarea value={f.instructions ?? ""} onChange={(e) => setF({ ...f, instructions: e.target.value })} /></div>
       <div className="grid sm:grid-cols-2 gap-3">
         {[
@@ -177,6 +213,10 @@ function SettingsForm({ quiz, onSave }: { quiz: any; onSave: (p: any) => void })
           ["show_explanations", "Show explanations"],
           ["enforce_time", "Enforce time limit"],
           ["allow_retakes", "Allow retakes"],
+          ["allow_likes", "Allow likes"],
+          ["allow_comments", "Allow comments"],
+          ["allow_sharing", "Allow sharing"],
+          ["show_leaderboard", "Show leaderboard"],
         ].map(([k, label]) => (
           <label key={k} className="flex items-center justify-between p-2 border rounded">
             <span className="text-sm">{label}</span>
@@ -185,10 +225,73 @@ function SettingsForm({ quiz, onSave }: { quiz: any; onSave: (p: any) => void })
         ))}
       </div>
       <Button onClick={() => {
-        const { id: _, created_at: _c, updated_at: _u, created_by: _b, ...patch } = f;
+        const { id: _, created_at: _c, updated_at: _u, created_by: _b, banner_url: _bu, share_url: _su, question_count: _qc, social_counts: _sc, ...patch } = f;
         onSave(patch);
       }}>Save settings</Button>
     </CardContent></Card>
+  );
+}
+
+function QuestionCard({ q, index, selected, onToggleSelect, onSave, onDelete }: { q: any; index: number; selected?: boolean; onToggleSelect?: () => void; onSave: (patch: any, options: any[]) => void; onDelete: () => void }) {
+  const [text, setText] = useState(q.text);
+  const [type, setType] = useState(q.type);
+  const [explanation, setExplanation] = useState(q.explanation ?? "");
+  const [difficulty, setDifficulty] = useState(q.difficulty);
+  const [points, setPoints] = useState<string>(q.points != null ? String(q.points) : "");
+  const [subsection, setSubsection] = useState<string>(q.subsection ?? "");
+  const [sampleAnswer, setSampleAnswer] = useState<string>(q.sample_answer ?? "");
+  const [options, setOptions] = useState(
+    (q.options ?? []).sort((a: any, b: any) => a.position - b.position).map((o: any) => ({ text: o.text, is_correct: o.is_correct }))
+  );
+  function setCorrect(i: number) { setOptions(options.map((o: any, idx: number) => ({ ...o, is_correct: idx === i }))); }
+
+  return (
+    <Card>
+      <CardContent className="pt-6 space-y-3">
+        <div className="flex items-start gap-2">
+          {onToggleSelect && <input type="checkbox" checked={!!selected} onChange={onToggleSelect} className="mt-2" />}
+          <Badge>{index + 1}</Badge>
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} className="flex-1" />
+          <Button size="icon" variant="ghost" onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
+        </div>
+        <div className="grid sm:grid-cols-4 gap-3">
+          <Select value={type} onValueChange={(v) => setType(v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mcq">Multiple Choice</SelectItem>
+              <SelectItem value="tf">True / False</SelectItem>
+              <SelectItem value="short">Short answer</SelectItem>
+              <SelectItem value="essay">Essay / Theory</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={difficulty} onValueChange={(v) => setDifficulty(v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="easy">Easy</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="hard">Hard</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input type="number" min={0} step="0.5" placeholder="Points" value={points} onChange={(e) => setPoints(e.target.value)} />
+          <Input placeholder="Subsection (e.g. Obj, Theory)" value={subsection} onChange={(e) => setSubsection(e.target.value)} />
+        </div>
+        {(type === "mcq" || type === "tf") && (
+          <div className="space-y-2">
+            {options.map((o: any, i: number) => (
+              <div key={i} className="flex items-center gap-2">
+                <input type="radio" name={`correct-${q.id}`} checked={o.is_correct} onChange={() => setCorrect(i)} />
+                <Input value={o.text} onChange={(e) => setOptions(options.map((oo: any, ii: number) => ii === i ? { ...oo, text: e.target.value } : oo))} />
+                <Button size="icon" variant="ghost" onClick={() => setOptions(options.filter((_: any, ii: number) => ii !== i))}><Trash2 className="h-3 w-3" /></Button>
+              </div>
+            ))}
+            <Button size="sm" variant="outline" onClick={() => setOptions([...options, { text: "", is_correct: false }])}><Plus className="h-3 w-3 mr-1" />Add option</Button>
+          </div>
+        )}
+        {(type === "short" || type === "essay") && (
+          <div><Label className="text-xs">Sample / model answer (AI uses this to grade)</Label><Textarea value={sampleAnswer} onChange={(e) => setSampleAnswer(e.target.value)} rows={3} /></div>
+        )}
+        <div><Label className="text-xs">Explanation</Label><Textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} rows={2} /></div>
+        <Button size="sm" onClick={() => onSave({ text, type, explanation: explanation || null, difficulty, points: points ? Number(points) : null, subsection: subsection || null, sample_answer: sampleAnswer || null }, options)}>Save question</Button>
+      </CardContent>
+    </Card>
   );
 }
 
