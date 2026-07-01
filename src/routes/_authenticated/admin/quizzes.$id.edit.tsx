@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
 import { getQuizAdmin, updateQuiz, uploadQuizBanner } from "@/lib/quizzes.functions";
 import { createQuestion, updateQuestion, deleteQuestion, bulkInsertQuestions, bulkDeleteQuestions, distributeQuizPoints } from "@/lib/questions.functions";
-import { parseQuestionsFromText } from "@/lib/ai-parse.functions";
+import { parseQuestionsFromText, parseQuestionsHeuristic, validateParseInput } from "@/lib/ai-parse.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
