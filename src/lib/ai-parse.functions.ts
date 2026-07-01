@@ -110,6 +110,74 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
     }
   });
 
+// Lightweight pre-parse validator — runs before any AI or heuristic parse.
+export const validateParseInput = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ text: z.string().max(60000) }).parse(d))
+  .handler(async ({ data }) => validateInputText(data.text));
+
+// Deterministic non-AI parser. Free (no credits), rule-based.
+export const parseQuestionsHeuristic = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => ParseInput.parse(d))
+  .handler(async ({ data }) => {
+    const started = Date.now();
+    const settings = data.settings ?? defaultSettings();
+    const validation = validateInputText(data.text);
+    const heuristic = heuristicParse(data.text, settings.default_question_type);
+    const normalized = normalizeParsed(
+      heuristic,
+      data.text,
+      settings.confidence_threshold,
+      Date.now() - started,
+      "Parsed offline without AI — please review each question.",
+    );
+    return { ...normalized, offline: true, validation };
+  });
+
+function validateInputText(text: string) {
+  const issues: { level: "error" | "warn"; message: string }[] = [];
+  const trimmed = text.trim();
+  if (trimmed.length < 20) issues.push({ level: "error", message: "Text is too short to contain a question." });
+  const hasNumbering = /(^|\n)\s*(?:\d+|Q\d+)[.)\-:]\s+/i.test(trimmed);
+  const hasQuestionMark = /\?/.test(trimmed);
+  const hasAnswerMarker = /(^|\n)\s*(?:answer|ans|correct)\s*[:\-]/i.test(trimmed);
+  if (!hasNumbering && !hasQuestionMark) issues.push({ level: "warn", message: "No question numbering (1., 2., Q1) or '?' detected. Add numbering for best results." });
+  if (!hasAnswerMarker && !/\bTrue\s*\/\s*False\b/i.test(trimmed)) issues.push({ level: "warn", message: "No 'Answer:' lines detected. Missing answers will be flagged for review." });
+  if (trimmed.length > 50000) issues.push({ level: "warn", message: "Very large paste — will be chunked; parsing may take a minute." });
+  const est = (trimmed.match(/(^|\n)\s*(?:\d+|Q\d+)[.)\-:]\s+/gi) ?? []).length || Math.max(1, Math.round(trimmed.split(/\n\s*\n/).length));
+  return { ok: !issues.some((i) => i.level === "error"), issues, estimated_questions: est };
+}
+
+// AI-graded short/essay marker — small, targeted, cheap.
+export const gradeOpenAnswer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    question: z.string().min(1).max(4000),
+    sample_answer: z.string().max(4000).optional().nullable(),
+    student_answer: z.string().max(8000),
+    max_points: z.number().min(0).max(1000).default(10),
+  }).parse(d))
+  .handler(async ({ data }) => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("AI is not configured. Grade manually.");
+    const gateway = createLovableAiGatewayProvider(key);
+    const { text } = await generateText({
+      model: gateway("google/gemini-3-flash-preview"),
+      system: "You are a strict but fair exam marker. Grade the student answer against the model answer (if provided) and the question. Return ONLY JSON: {\"score\":0-<max>,\"percent\":0-100,\"feedback\":\"...\",\"strengths\":[\"...\"],\"weaknesses\":[\"...\"]}. Be concise.",
+      prompt: `Question: ${data.question}\nModel answer: ${data.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${data.student_answer}\nMax points: ${data.max_points}`,
+      temperature: 0,
+      maxOutputTokens: 800,
+    });
+    const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
+    const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
+    if (start === -1 || end < start) throw new Error("Grader returned no result.");
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
+    const score = Math.max(0, Math.min(data.max_points, Number(parsed.score) || 0));
+    const percent = Math.max(0, Math.min(100, Number(parsed.percent) || Math.round((score / (data.max_points || 1)) * 100)));
+    return { score, percent, feedback: String(parsed.feedback ?? ""), strengths: parsed.strengths ?? [], weaknesses: parsed.weaknesses ?? [] };
+  });
+
 function defaultSettings() {
   return {
     strictness: "normal" as const,
