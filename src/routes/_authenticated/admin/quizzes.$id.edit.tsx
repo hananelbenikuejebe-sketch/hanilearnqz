@@ -124,7 +124,7 @@ function EditQuiz() {
         </TabsContent>
 
         <TabsContent value="ai">
-          <AIPanel quizId={id} aiFn={aiFn} bulkFn={bulkFn} onDone={() => qc.invalidateQueries({ queryKey: ["admin-quiz", id] })} />
+          <AIPanel quizId={id} onDone={() => qc.invalidateQueries({ queryKey: ["admin-quiz", id] })} />
         </TabsContent>
       </Tabs>
     </div>
