@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
 import { getQuizAdmin, updateQuiz, uploadQuizBanner } from "@/lib/quizzes.functions";
 import { createQuestion, updateQuestion, deleteQuestion, bulkInsertQuestions, bulkDeleteQuestions, distributeQuizPoints } from "@/lib/questions.functions";
-import { parseQuestionsFromText } from "@/lib/ai-parse.functions";
+import { parseQuestionsFromText, parseQuestionsHeuristic, validateParseInput } from "@/lib/ai-parse.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -124,7 +124,7 @@ function EditQuiz() {
         </TabsContent>
 
         <TabsContent value="ai">
-          <AIPanel quizId={id} aiFn={aiFn} bulkFn={bulkFn} onDone={() => qc.invalidateQueries({ queryKey: ["admin-quiz", id] })} />
+          <AIPanel quizId={id} onDone={() => qc.invalidateQueries({ queryKey: ["admin-quiz", id] })} />
         </TabsContent>
       </Tabs>
     </div>
@@ -300,12 +300,18 @@ function Badge({ children }: { children: any }) {
   return <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-primary text-primary-foreground text-xs font-bold shrink-0">{children}</span>;
 }
 
-function AIPanel({ quizId, aiFn, bulkFn, onDone }: any) {
+function AIPanel({ quizId, onDone }: any) {
+  const aiFn = useServerFn(parseQuestionsFromText);
+  const heuristicFn = useServerFn(parseQuestionsHeuristic);
+  const validateFn = useServerFn(validateParseInput);
+  const bulkFn = useServerFn(bulkInsertQuestions);
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<any[] | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0, label: "" });
   const [running, setRunning] = useState(false);
   const [editing, setEditing] = useState<Record<number, boolean>>({});
+  const [validation, setValidation] = useState<{ ok: boolean; issues: { level: string; message: string }[]; estimated_questions: number } | null>(null);
+  const [mode, setMode] = useState<"ai" | "offline" | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -327,40 +333,67 @@ function AIPanel({ quizId, aiFn, bulkFn, onDone }: any) {
     const chunks: string[] = [];
     let cur = "";
     for (const b of blocks) {
-      if ((cur + "\n\n" + b).length > max && cur) {
-        chunks.push(cur);
-        cur = b;
-      } else {
-        cur = cur ? `${cur}\n\n${b}` : b;
-      }
+      if ((cur + "\n\n" + b).length > max && cur) { chunks.push(cur); cur = b; }
+      else { cur = cur ? `${cur}\n\n${b}` : b; }
     }
     if (cur) chunks.push(cur);
     return chunks;
   }
 
-  async function runParse() {
+  async function preflight(): Promise<boolean> {
+    try {
+      const v: any = await validateFn({ data: { text } });
+      setValidation(v);
+      if (!v.ok) {
+        toast.error(v.issues.find((i: any) => i.level === "error")?.message ?? "Input failed validation.");
+        return false;
+      }
+      return true;
+    } catch { return true; }
+  }
+
+  async function runParse(preferOffline = false) {
     if (!text.trim()) return;
     setRunning(true);
     setParsed(null);
+    setMode(preferOffline ? "offline" : "ai");
+    if (!(await preflight())) { setRunning(false); return; }
     const chunks = chunkText(text);
-    setProgress({ done: 0, total: chunks.length, label: `Preparing ${chunks.length} chunk${chunks.length > 1 ? "s" : ""}…` });
+    setProgress({ done: 0, total: chunks.length, label: preferOffline ? `Applying rule-based parser to ${chunks.length} chunk${chunks.length > 1 ? "s" : ""}…` : `Preparing ${chunks.length} chunk${chunks.length > 1 ? "s" : ""}…` });
     const all: any[] = [];
+    let usedOffline = preferOffline;
     try {
       for (let i = 0; i < chunks.length; i++) {
-        setProgress({ done: i, total: chunks.length, label: `Parsing chunk ${i + 1} of ${chunks.length}…` });
-        const r: any = await aiFn({ data: { text: chunks[i] } });
+        setProgress({ done: i, total: chunks.length, label: usedOffline ? `Offline rule-based parse ${i + 1}/${chunks.length}…` : `AI parsing chunk ${i + 1} of ${chunks.length}…` });
+        let r: any;
+        if (usedOffline) {
+          r = await heuristicFn({ data: { text: chunks[i] } });
+        } else {
+          try {
+            r = await aiFn({ data: { text: chunks[i] } });
+          } catch (err: any) {
+            const msg = String(err?.message ?? err);
+            if (/credit|quota|rate|billing|429|402/i.test(msg)) {
+              usedOffline = true;
+              setMode("offline");
+              toast.warning("AI credits unavailable — falling back to rule-based parser. Please review results carefully.");
+              r = await heuristicFn({ data: { text: chunks[i] } });
+            } else { throw err; }
+          }
+        }
         all.push(...(r.questions ?? []));
       }
       setProgress({ done: chunks.length, total: chunks.length, label: "Done" });
       setParsed(all);
       const needs = all.filter((q) => q.needs_review).length;
-      toast.success(`Parsed ${all.length} question${all.length === 1 ? "" : "s"}${needs ? ` · ${needs} need review` : ""}`);
+      toast.success(`${usedOffline ? "Offline-parsed" : "Parsed"} ${all.length} question${all.length === 1 ? "" : "s"}${needs ? ` · ${needs} need review` : ""}`);
     } catch (e: any) {
       toast.error(e.message ?? "Parse failed");
     } finally {
       setRunning(false);
     }
   }
+
 
   function updateQ(i: number, patch: any) {
     setParsed((prev) => prev?.map((q, idx) => idx === i ? { ...q, ...patch } : q) ?? null);
@@ -405,11 +438,31 @@ function AIPanel({ quizId, aiFn, bulkFn, onDone }: any) {
         <div className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters · ~{Math.max(1, Math.ceil(text.length / 6000))} chunk(s)</div>
       </div>
 
+      {validation && validation.issues.length > 0 && (
+        <div className="rounded-md border p-3 text-xs space-y-1">
+          <div className="font-medium">Pre-parse check · est. {validation.estimated_questions} question{validation.estimated_questions === 1 ? "" : "s"}</div>
+          {validation.issues.map((iss, k) => (
+            <div key={k} className={iss.level === "error" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}>
+              <AlertTriangle className="inline h-3 w-3 mr-1" />{iss.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {mode === "offline" && (
+        <div className="rounded-md border border-amber-400/50 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+          <strong>Rule-based mode (no AI):</strong> Applying deterministic parsing rules — detecting numbered questions, "Answer:" markers, A/B/C/D options, and True/False patterns. No dynamic understanding of passages. Please review each question before saving.
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={runParse} disabled={!text.trim() || running}>
-          <Sparkles className="h-4 w-4 mr-1" />{running ? "Parsing…" : "Parse with AI"}
+        <Button type="button" onClick={() => runParse(false)} disabled={!text.trim() || running}>
+          <Sparkles className="h-4 w-4 mr-1" />{running && mode === "ai" ? "Parsing…" : "Parse with AI"}
         </Button>
-        {parsed && <Button type="button" variant="ghost" onClick={() => { setParsed(null); setProgress({ done: 0, total: 0, label: "" }); }}>Discard parsed</Button>}
+        <Button type="button" variant="outline" onClick={() => runParse(true)} disabled={!text.trim() || running}>
+          {running && mode === "offline" ? "Parsing…" : "Offline parse (no AI)"}
+        </Button>
+        {parsed && <Button type="button" variant="ghost" onClick={() => { setParsed(null); setProgress({ done: 0, total: 0, label: "" }); setMode(null); }}>Discard parsed</Button>}
       </div>
 
       {(running || progress.total > 0) && (

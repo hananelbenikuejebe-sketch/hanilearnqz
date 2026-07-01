@@ -110,6 +110,74 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
     }
   });
 
+// Lightweight pre-parse validator — runs before any AI or heuristic parse.
+export const validateParseInput = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ text: z.string().max(60000) }).parse(d))
+  .handler(async ({ data }) => validateInputText(data.text));
+
+// Deterministic non-AI parser. Free (no credits), rule-based.
+export const parseQuestionsHeuristic = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => ParseInput.parse(d))
+  .handler(async ({ data }) => {
+    const started = Date.now();
+    const settings = data.settings ?? defaultSettings();
+    const validation = validateInputText(data.text);
+    const heuristic = heuristicParse(data.text, settings.default_question_type);
+    const normalized = normalizeParsed(
+      heuristic,
+      data.text,
+      settings.confidence_threshold,
+      Date.now() - started,
+      "Parsed offline without AI — please review each question.",
+    );
+    return { ...normalized, offline: true, validation };
+  });
+
+function validateInputText(text: string) {
+  const issues: { level: "error" | "warn"; message: string }[] = [];
+  const trimmed = text.trim();
+  if (trimmed.length < 20) issues.push({ level: "error", message: "Text is too short to contain a question." });
+  const hasNumbering = /(^|\n)\s*(?:\d+|Q\d+)[.)\-:]\s+/i.test(trimmed);
+  const hasQuestionMark = /\?/.test(trimmed);
+  const hasAnswerMarker = /(^|\n)\s*(?:answer|ans|correct)\s*[:\-]/i.test(trimmed);
+  if (!hasNumbering && !hasQuestionMark) issues.push({ level: "warn", message: "No question numbering (1., 2., Q1) or '?' detected. Add numbering for best results." });
+  if (!hasAnswerMarker && !/\bTrue\s*\/\s*False\b/i.test(trimmed)) issues.push({ level: "warn", message: "No 'Answer:' lines detected. Missing answers will be flagged for review." });
+  if (trimmed.length > 50000) issues.push({ level: "warn", message: "Very large paste — will be chunked; parsing may take a minute." });
+  const est = (trimmed.match(/(^|\n)\s*(?:\d+|Q\d+)[.)\-:]\s+/gi) ?? []).length || Math.max(1, Math.round(trimmed.split(/\n\s*\n/).length));
+  return { ok: !issues.some((i) => i.level === "error"), issues, estimated_questions: est };
+}
+
+// AI-graded short/essay marker — small, targeted, cheap.
+export const gradeOpenAnswer = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    question: z.string().min(1).max(4000),
+    sample_answer: z.string().max(4000).optional().nullable(),
+    student_answer: z.string().max(8000),
+    max_points: z.number().min(0).max(1000).default(10),
+  }).parse(d))
+  .handler(async ({ data }) => {
+    const key = process.env.LOVABLE_API_KEY;
+    if (!key) throw new Error("AI is not configured. Grade manually.");
+    const gateway = createLovableAiGatewayProvider(key);
+    const { text } = await generateText({
+      model: gateway("google/gemini-3-flash-preview"),
+      system: "You are a strict but fair exam marker. Grade the student answer against the model answer (if provided) and the question. Return ONLY JSON: {\"score\":0-<max>,\"percent\":0-100,\"feedback\":\"...\",\"strengths\":[\"...\"],\"weaknesses\":[\"...\"]}. Be concise.",
+      prompt: `Question: ${data.question}\nModel answer: ${data.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${data.student_answer}\nMax points: ${data.max_points}`,
+      temperature: 0,
+      maxOutputTokens: 800,
+    });
+    const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
+    const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
+    if (start === -1 || end < start) throw new Error("Grader returned no result.");
+    const parsed = JSON.parse(cleaned.slice(start, end + 1));
+    const score = Math.max(0, Math.min(data.max_points, Number(parsed.score) || 0));
+    const percent = Math.max(0, Math.min(100, Number(parsed.percent) || Math.round((score / (data.max_points || 1)) * 100)));
+    return { score, percent, feedback: String(parsed.feedback ?? ""), strengths: parsed.strengths ?? [], weaknesses: parsed.weaknesses ?? [] };
+  });
+
 function defaultSettings() {
   return {
     strictness: "normal" as const,
@@ -149,14 +217,25 @@ function jsonCandidates(raw: string) {
 }
 
 function normalizeParsed(parsed: z.infer<typeof ParsedSchema>, raw: string, threshold: number, parsingTime: number, forcedReason?: string) {
+  // Detect fractional 0.0–1.0 confidence scale (Gemini often returns fractions) and rescale.
+  const rawConfs = (parsed.questions ?? []).map((q) => q.ai_confidence).filter((n) => typeof n === "number") as number[];
+  const maxConf = rawConfs.length ? Math.max(...rawConfs) : 0;
+  const scale = rawConfs.length && maxConf > 0 && maxConf <= 1 ? 100 : 1;
+
   const seen = new Map<string, number>();
   const questions = (parsed.questions ?? []).map((q, index) => {
     const type = q.type ?? "mcq";
     const text = cleanQuestionText(q.text) || "Unclear question";
-    let options = normalizeOptions(type, q.options ?? [], q.sample_answer ?? undefined);
+    const options = normalizeOptions(type, q.options ?? [], q.sample_answer ?? undefined);
     const correctCount = options.filter((o) => o.is_correct).length;
     const optionIssue = type === "mcq" ? options.length < 2 : type === "tf" ? options.length !== 2 : false;
-    let confidence = Math.round(q.ai_confidence ?? scoreQuestion(text, type, options, correctCount, optionIssue));
+    const modelConf = typeof q.ai_confidence === "number" ? q.ai_confidence * scale : null;
+    const structural = scoreQuestion(text, type, options, correctCount, optionIssue);
+    // Trust structural score when model reports abnormally low but question is sound.
+    let confidence = Math.round(modelConf ?? structural);
+    if (modelConf !== null && confidence < 40 && !optionIssue && (correctCount > 0 || type === "essay") && text.length > 10) {
+      confidence = Math.max(confidence, structural);
+    }
     const signature = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 140);
     const duplicateOf = seen.get(signature);
     if (duplicateOf !== undefined && signature.length > 20) confidence = Math.max(0, confidence - 10);
@@ -184,11 +263,14 @@ function normalizeParsed(parsed: z.infer<typeof ParsedSchema>, raw: string, thre
     };
   }).filter((q) => q.text.length > 3);
   const overall = questions.length ? Math.round(questions.reduce((sum, q) => sum + (q.ai_confidence ?? 0), 0) / questions.length) : 0;
+  const modelOverall = typeof parsed.overall_confidence === "number"
+    ? (parsed.overall_confidence <= 1 ? parsed.overall_confidence * 100 : parsed.overall_confidence)
+    : overall;
   return {
     questions,
     needs_review_count: questions.filter((q) => q.needs_review).length,
     failed_count: questions.filter((q) => (q.ai_confidence ?? 0) < 30).length,
-    overall_confidence: clamp(parsed.overall_confidence ?? overall),
+    overall_confidence: clamp(modelOverall),
     parsing_time_ms: parsed.parsing_time_ms ?? parsingTime,
   };
 }
