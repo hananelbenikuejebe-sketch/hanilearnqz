@@ -149,14 +149,25 @@ function jsonCandidates(raw: string) {
 }
 
 function normalizeParsed(parsed: z.infer<typeof ParsedSchema>, raw: string, threshold: number, parsingTime: number, forcedReason?: string) {
+  // Detect fractional 0.0–1.0 confidence scale (Gemini often returns fractions) and rescale.
+  const rawConfs = (parsed.questions ?? []).map((q) => q.ai_confidence).filter((n) => typeof n === "number") as number[];
+  const maxConf = rawConfs.length ? Math.max(...rawConfs) : 0;
+  const scale = rawConfs.length && maxConf > 0 && maxConf <= 1 ? 100 : 1;
+
   const seen = new Map<string, number>();
   const questions = (parsed.questions ?? []).map((q, index) => {
     const type = q.type ?? "mcq";
     const text = cleanQuestionText(q.text) || "Unclear question";
-    let options = normalizeOptions(type, q.options ?? [], q.sample_answer ?? undefined);
+    const options = normalizeOptions(type, q.options ?? [], q.sample_answer ?? undefined);
     const correctCount = options.filter((o) => o.is_correct).length;
     const optionIssue = type === "mcq" ? options.length < 2 : type === "tf" ? options.length !== 2 : false;
-    let confidence = Math.round(q.ai_confidence ?? scoreQuestion(text, type, options, correctCount, optionIssue));
+    const modelConf = typeof q.ai_confidence === "number" ? q.ai_confidence * scale : null;
+    const structural = scoreQuestion(text, type, options, correctCount, optionIssue);
+    // Trust structural score when model reports abnormally low but question is sound.
+    let confidence = Math.round(modelConf ?? structural);
+    if (modelConf !== null && confidence < 40 && !optionIssue && (correctCount > 0 || type === "essay") && text.length > 10) {
+      confidence = Math.max(confidence, structural);
+    }
     const signature = text.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().slice(0, 140);
     const duplicateOf = seen.get(signature);
     if (duplicateOf !== undefined && signature.length > 20) confidence = Math.max(0, confidence - 10);
@@ -184,11 +195,14 @@ function normalizeParsed(parsed: z.infer<typeof ParsedSchema>, raw: string, thre
     };
   }).filter((q) => q.text.length > 3);
   const overall = questions.length ? Math.round(questions.reduce((sum, q) => sum + (q.ai_confidence ?? 0), 0) / questions.length) : 0;
+  const modelOverall = typeof parsed.overall_confidence === "number"
+    ? (parsed.overall_confidence <= 1 ? parsed.overall_confidence * 100 : parsed.overall_confidence)
+    : overall;
   return {
     questions,
     needs_review_count: questions.filter((q) => q.needs_review).length,
     failed_count: questions.filter((q) => (q.ai_confidence ?? 0) < 30).length,
-    overall_confidence: clamp(parsed.overall_confidence ?? overall),
+    overall_confidence: clamp(modelOverall),
     parsing_time_ms: parsed.parsing_time_ms ?? parsingTime,
   };
 }
