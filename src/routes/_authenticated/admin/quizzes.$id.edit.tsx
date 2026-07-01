@@ -300,12 +300,18 @@ function Badge({ children }: { children: any }) {
   return <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-primary text-primary-foreground text-xs font-bold shrink-0">{children}</span>;
 }
 
-function AIPanel({ quizId, aiFn, bulkFn, onDone }: any) {
+function AIPanel({ quizId, onDone }: any) {
+  const aiFn = useServerFn(parseQuestionsFromText);
+  const heuristicFn = useServerFn(parseQuestionsHeuristic);
+  const validateFn = useServerFn(validateParseInput);
+  const bulkFn = useServerFn(bulkInsertQuestions);
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<any[] | null>(null);
   const [progress, setProgress] = useState({ done: 0, total: 0, label: "" });
   const [running, setRunning] = useState(false);
   const [editing, setEditing] = useState<Record<number, boolean>>({});
+  const [validation, setValidation] = useState<{ ok: boolean; issues: { level: string; message: string }[]; estimated_questions: number } | null>(null);
+  const [mode, setMode] = useState<"ai" | "offline" | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -327,40 +333,67 @@ function AIPanel({ quizId, aiFn, bulkFn, onDone }: any) {
     const chunks: string[] = [];
     let cur = "";
     for (const b of blocks) {
-      if ((cur + "\n\n" + b).length > max && cur) {
-        chunks.push(cur);
-        cur = b;
-      } else {
-        cur = cur ? `${cur}\n\n${b}` : b;
-      }
+      if ((cur + "\n\n" + b).length > max && cur) { chunks.push(cur); cur = b; }
+      else { cur = cur ? `${cur}\n\n${b}` : b; }
     }
     if (cur) chunks.push(cur);
     return chunks;
   }
 
-  async function runParse() {
+  async function preflight(): Promise<boolean> {
+    try {
+      const v: any = await validateFn({ data: { text } });
+      setValidation(v);
+      if (!v.ok) {
+        toast.error(v.issues.find((i: any) => i.level === "error")?.message ?? "Input failed validation.");
+        return false;
+      }
+      return true;
+    } catch { return true; }
+  }
+
+  async function runParse(preferOffline = false) {
     if (!text.trim()) return;
     setRunning(true);
     setParsed(null);
+    setMode(preferOffline ? "offline" : "ai");
+    if (!(await preflight())) { setRunning(false); return; }
     const chunks = chunkText(text);
-    setProgress({ done: 0, total: chunks.length, label: `Preparing ${chunks.length} chunk${chunks.length > 1 ? "s" : ""}…` });
+    setProgress({ done: 0, total: chunks.length, label: preferOffline ? `Applying rule-based parser to ${chunks.length} chunk${chunks.length > 1 ? "s" : ""}…` : `Preparing ${chunks.length} chunk${chunks.length > 1 ? "s" : ""}…` });
     const all: any[] = [];
+    let usedOffline = preferOffline;
     try {
       for (let i = 0; i < chunks.length; i++) {
-        setProgress({ done: i, total: chunks.length, label: `Parsing chunk ${i + 1} of ${chunks.length}…` });
-        const r: any = await aiFn({ data: { text: chunks[i] } });
+        setProgress({ done: i, total: chunks.length, label: usedOffline ? `Offline rule-based parse ${i + 1}/${chunks.length}…` : `AI parsing chunk ${i + 1} of ${chunks.length}…` });
+        let r: any;
+        if (usedOffline) {
+          r = await heuristicFn({ data: { text: chunks[i] } });
+        } else {
+          try {
+            r = await aiFn({ data: { text: chunks[i] } });
+          } catch (err: any) {
+            const msg = String(err?.message ?? err);
+            if (/credit|quota|rate|billing|429|402/i.test(msg)) {
+              usedOffline = true;
+              setMode("offline");
+              toast.warning("AI credits unavailable — falling back to rule-based parser. Please review results carefully.");
+              r = await heuristicFn({ data: { text: chunks[i] } });
+            } else { throw err; }
+          }
+        }
         all.push(...(r.questions ?? []));
       }
       setProgress({ done: chunks.length, total: chunks.length, label: "Done" });
       setParsed(all);
       const needs = all.filter((q) => q.needs_review).length;
-      toast.success(`Parsed ${all.length} question${all.length === 1 ? "" : "s"}${needs ? ` · ${needs} need review` : ""}`);
+      toast.success(`${usedOffline ? "Offline-parsed" : "Parsed"} ${all.length} question${all.length === 1 ? "" : "s"}${needs ? ` · ${needs} need review` : ""}`);
     } catch (e: any) {
       toast.error(e.message ?? "Parse failed");
     } finally {
       setRunning(false);
     }
   }
+
 
   function updateQ(i: number, patch: any) {
     setParsed((prev) => prev?.map((q, idx) => idx === i ? { ...q, ...patch } : q) ?? null);
