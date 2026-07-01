@@ -438,11 +438,31 @@ function AIPanel({ quizId, onDone }: any) {
         <div className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters · ~{Math.max(1, Math.ceil(text.length / 6000))} chunk(s)</div>
       </div>
 
+      {validation && validation.issues.length > 0 && (
+        <div className="rounded-md border p-3 text-xs space-y-1">
+          <div className="font-medium">Pre-parse check · est. {validation.estimated_questions} question{validation.estimated_questions === 1 ? "" : "s"}</div>
+          {validation.issues.map((iss, k) => (
+            <div key={k} className={iss.level === "error" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}>
+              <AlertTriangle className="inline h-3 w-3 mr-1" />{iss.message}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {mode === "offline" && (
+        <div className="rounded-md border border-amber-400/50 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-200">
+          <strong>Rule-based mode (no AI):</strong> Applying deterministic parsing rules — detecting numbered questions, "Answer:" markers, A/B/C/D options, and True/False patterns. No dynamic understanding of passages. Please review each question before saving.
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={runParse} disabled={!text.trim() || running}>
-          <Sparkles className="h-4 w-4 mr-1" />{running ? "Parsing…" : "Parse with AI"}
+        <Button type="button" onClick={() => runParse(false)} disabled={!text.trim() || running}>
+          <Sparkles className="h-4 w-4 mr-1" />{running && mode === "ai" ? "Parsing…" : "Parse with AI"}
         </Button>
-        {parsed && <Button type="button" variant="ghost" onClick={() => { setParsed(null); setProgress({ done: 0, total: 0, label: "" }); }}>Discard parsed</Button>}
+        <Button type="button" variant="outline" onClick={() => runParse(true)} disabled={!text.trim() || running}>
+          {running && mode === "offline" ? "Parsing…" : "Offline parse (no AI)"}
+        </Button>
+        {parsed && <Button type="button" variant="ghost" onClick={() => { setParsed(null); setProgress({ done: 0, total: 0, label: "" }); setMode(null); }}>Discard parsed</Button>}
       </div>
 
       {(running || progress.total > 0) && (
