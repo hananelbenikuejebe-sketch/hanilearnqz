@@ -85,6 +85,120 @@ export type Database = {
           },
         ]
       }
+      creator_permissions: {
+        Row: {
+          ai_enabled: boolean
+          analytics_enabled: boolean
+          can_publish: boolean
+          created_at: string
+          granted_by: string | null
+          id: string
+          max_quizzes: number
+          notes: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_enabled?: boolean
+          analytics_enabled?: boolean
+          can_publish?: boolean
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          max_quizzes?: number
+          notes?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_enabled?: boolean
+          analytics_enabled?: boolean
+          can_publish?: boolean
+          created_at?: string
+          granted_by?: string | null
+          id?: string
+          max_quizzes?: number
+          notes?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      exam_quizzes: {
+        Row: {
+          created_at: string
+          exam_id: string
+          id: string
+          position: number
+          quiz_id: string
+        }
+        Insert: {
+          created_at?: string
+          exam_id: string
+          id?: string
+          position?: number
+          quiz_id: string
+        }
+        Update: {
+          created_at?: string
+          exam_id?: string
+          id?: string
+          position?: number
+          quiz_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_quizzes_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_quizzes_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exams: {
+        Row: {
+          banner_path: string | null
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_published: boolean
+          order_mode: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          banner_path?: string | null
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          order_mode?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          banner_path?: string | null
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          order_mode?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       options: {
         Row: {
           id: string
@@ -470,6 +584,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "student" | "creator" | "super_admin"
