@@ -13,7 +13,9 @@ export const getMyRole = createServerFn({ method: "GET" })
     const roles = (data ?? []).map((r) => r.role);
     return {
       userId,
-      isAdmin: roles.includes("admin"),
+      isAdmin: roles.includes("admin") || roles.includes("super_admin"),
+      isSuperAdmin: roles.includes("super_admin") || roles.includes("admin"),
+      isCreator: roles.includes("creator") || roles.includes("admin") || roles.includes("super_admin"),
       isStudent: roles.includes("student"),
       roles,
     };

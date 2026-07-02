@@ -13,6 +13,10 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedResultsRouteImport } from './routes/_authenticated/results'
+import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
+import { Route as AuthenticatedExploreRouteImport } from './routes/_authenticated/explore'
+import { Route as AuthenticatedExamsRouteImport } from './routes/_authenticated/exams'
+import { Route as AuthenticatedCreateRouteImport } from './routes/_authenticated/create'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
 import { Route as ShareQuizQuizIdRouteImport } from './routes/share.quiz.$quizId'
@@ -20,6 +24,7 @@ import { Route as AuthenticatedQuizQuizIdRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminStudentsRouteImport } from './routes/_authenticated/admin/students'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminQuizzesRouteImport } from './routes/_authenticated/admin/quizzes'
+import { Route as AuthenticatedAdminCreatorsRouteImport } from './routes/_authenticated/admin/creators'
 import { Route as AuthenticatedQuizQuizIdIndexRouteImport } from './routes/_authenticated/quiz.$quizId.index'
 import { Route as AuthenticatedAdminQuizzesIndexRouteImport } from './routes/_authenticated/admin/quizzes.index'
 import { Route as AuthenticatedQuizQuizIdTakeRouteImport } from './routes/_authenticated/quiz.$quizId.take'
@@ -45,6 +50,26 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const AuthenticatedResultsRoute = AuthenticatedResultsRouteImport.update({
   id: '/results',
   path: '/results',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedProfileRoute = AuthenticatedProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedExploreRoute = AuthenticatedExploreRouteImport.update({
+  id: '/explore',
+  path: '/explore',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedExamsRoute = AuthenticatedExamsRouteImport.update({
+  id: '/exams',
+  path: '/exams',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCreateRoute = AuthenticatedCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAdminRouteRoute = AuthenticatedAdminRouteRouteImport.update({
@@ -83,6 +108,12 @@ const AuthenticatedAdminQuizzesRoute =
   AuthenticatedAdminQuizzesRouteImport.update({
     id: '/quizzes',
     path: '/quizzes',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
+const AuthenticatedAdminCreatorsRoute =
+  AuthenticatedAdminCreatorsRouteImport.update({
+    id: '/creators',
+    path: '/creators',
     getParentRoute: () => AuthenticatedAdminRouteRoute,
   } as any)
 const AuthenticatedQuizQuizIdIndexRoute =
@@ -132,7 +163,12 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/create': typeof AuthenticatedCreateRoute
+  '/exams': typeof AuthenticatedExamsRoute
+  '/explore': typeof AuthenticatedExploreRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/results': typeof AuthenticatedResultsRoute
+  '/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/students': typeof AuthenticatedAdminStudentsRoute
@@ -149,8 +185,13 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/create': typeof AuthenticatedCreateRoute
+  '/exams': typeof AuthenticatedExamsRoute
+  '/explore': typeof AuthenticatedExploreRoute
+  '/profile': typeof AuthenticatedProfileRoute
   '/results': typeof AuthenticatedResultsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/students': typeof AuthenticatedAdminStudentsRoute
   '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
@@ -168,8 +209,13 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/_authenticated/create': typeof AuthenticatedCreateRoute
+  '/_authenticated/exams': typeof AuthenticatedExamsRoute
+  '/_authenticated/explore': typeof AuthenticatedExploreRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/results': typeof AuthenticatedResultsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/_authenticated/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/students': typeof AuthenticatedAdminStudentsRoute
@@ -190,7 +236,12 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/admin'
+    | '/create'
+    | '/exams'
+    | '/explore'
+    | '/profile'
     | '/results'
+    | '/admin/creators'
     | '/admin/quizzes'
     | '/admin/settings'
     | '/admin/students'
@@ -207,8 +258,13 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/auth'
+    | '/create'
+    | '/exams'
+    | '/explore'
+    | '/profile'
     | '/results'
     | '/'
+    | '/admin/creators'
     | '/admin/settings'
     | '/admin/students'
     | '/share/quiz/$quizId'
@@ -225,8 +281,13 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/admin'
+    | '/_authenticated/create'
+    | '/_authenticated/exams'
+    | '/_authenticated/explore'
+    | '/_authenticated/profile'
     | '/_authenticated/results'
     | '/_authenticated/'
+    | '/_authenticated/admin/creators'
     | '/_authenticated/admin/quizzes'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/students'
@@ -278,6 +339,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedResultsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/profile': {
+      id: '/_authenticated/profile'
+      path: '/profile'
+      fullPath: '/profile'
+      preLoaderRoute: typeof AuthenticatedProfileRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/explore': {
+      id: '/_authenticated/explore'
+      path: '/explore'
+      fullPath: '/explore'
+      preLoaderRoute: typeof AuthenticatedExploreRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/exams': {
+      id: '/_authenticated/exams'
+      path: '/exams'
+      fullPath: '/exams'
+      preLoaderRoute: typeof AuthenticatedExamsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/create': {
+      id: '/_authenticated/create'
+      path: '/create'
+      fullPath: '/create'
+      preLoaderRoute: typeof AuthenticatedCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin': {
       id: '/_authenticated/admin'
       path: '/admin'
@@ -325,6 +414,13 @@ declare module '@tanstack/react-router' {
       path: '/quizzes'
       fullPath: '/admin/quizzes'
       preLoaderRoute: typeof AuthenticatedAdminQuizzesRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
+    '/_authenticated/admin/creators': {
+      id: '/_authenticated/admin/creators'
+      path: '/creators'
+      fullPath: '/admin/creators'
+      preLoaderRoute: typeof AuthenticatedAdminCreatorsRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
     '/_authenticated/quiz/$quizId/': {
@@ -401,6 +497,7 @@ const AuthenticatedAdminQuizzesRouteWithChildren =
   )
 
 interface AuthenticatedAdminRouteRouteChildren {
+  AuthenticatedAdminCreatorsRoute: typeof AuthenticatedAdminCreatorsRoute
   AuthenticatedAdminQuizzesRoute: typeof AuthenticatedAdminQuizzesRouteWithChildren
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminStudentsRoute: typeof AuthenticatedAdminStudentsRoute
@@ -409,6 +506,7 @@ interface AuthenticatedAdminRouteRouteChildren {
 
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
   {
+    AuthenticatedAdminCreatorsRoute: AuthenticatedAdminCreatorsRoute,
     AuthenticatedAdminQuizzesRoute: AuthenticatedAdminQuizzesRouteWithChildren,
     AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
     AuthenticatedAdminStudentsRoute: AuthenticatedAdminStudentsRoute,
@@ -441,6 +539,10 @@ const AuthenticatedQuizQuizIdRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRouteRoute: typeof AuthenticatedAdminRouteRouteWithChildren
+  AuthenticatedCreateRoute: typeof AuthenticatedCreateRoute
+  AuthenticatedExamsRoute: typeof AuthenticatedExamsRoute
+  AuthenticatedExploreRoute: typeof AuthenticatedExploreRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
   AuthenticatedResultsRoute: typeof AuthenticatedResultsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedQuizQuizIdRoute: typeof AuthenticatedQuizQuizIdRouteWithChildren
@@ -448,6 +550,10 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRouteRoute: AuthenticatedAdminRouteRouteWithChildren,
+  AuthenticatedCreateRoute: AuthenticatedCreateRoute,
+  AuthenticatedExamsRoute: AuthenticatedExamsRoute,
+  AuthenticatedExploreRoute: AuthenticatedExploreRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
   AuthenticatedResultsRoute: AuthenticatedResultsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedQuizQuizIdRoute: AuthenticatedQuizQuizIdRouteWithChildren,
