@@ -83,7 +83,7 @@ function CreatorsAdmin() {
           <EditForm
             user={editing}
             saving={grant.isPending}
-            onSave={(v) => grant.mutate({ user_id: editing.user_id, ...v })}
+            onSave={(v: any) => grant.mutate({ user_id: editing.user_id, ...v })}
           />
         )}
       </Dialog>
