@@ -120,6 +120,6 @@ function EditForm({ user, saving, onSave }: any) {
     </DialogContent>
   );
 }
-function Row({ label, v, set }: any) {
+function Row({ label, v, set }: { label: string; v: boolean; set: (b: boolean) => void }) {
   return <div className="flex items-center justify-between"><span className="text-sm">{label}</span><Switch checked={v} onCheckedChange={set} /></div>;
 }
