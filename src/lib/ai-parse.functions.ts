@@ -11,6 +11,7 @@ const ParsedQuestionSchema = z.object({
   explanation: z.string().optional().nullable(),
   difficulty: z.enum(["easy", "medium", "hard"]).optional().catch("medium"),
   tags: z.array(z.string()).optional().default([]),
+  subsection: z.string().max(120).optional().nullable(),
   ai_confidence: z.coerce.number().optional(),
   needs_review: z.boolean().optional(),
   review_reason: z.string().optional().nullable(),
