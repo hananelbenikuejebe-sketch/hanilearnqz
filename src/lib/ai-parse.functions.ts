@@ -170,14 +170,16 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
     student_answer: z.string().max(8000),
     max_points: z.number().min(0).max(1000).default(10),
   }).parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAiAllowed(context.supabase, context.userId);
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI is not configured. Grade manually.");
     const gateway = createLovableAiGatewayProvider(key);
-    const { text } = await generateText({
+    const result = await generateText({
       model: gateway("google/gemini-3-flash-preview"),
       system: "You are a strict but fair exam marker. Grade the student answer against the model answer (if provided) and the question. Return ONLY JSON: {\"score\":0-<max>,\"percent\":0-100,\"feedback\":\"...\",\"strengths\":[\"...\"],\"weaknesses\":[\"...\"]}. Be concise.",
       prompt: `Question: ${data.question}\nModel answer: ${data.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${data.student_answer}\nMax points: ${data.max_points}`,
+
       temperature: 0,
       maxOutputTokens: 800,
     });
