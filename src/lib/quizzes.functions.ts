@@ -2,17 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { assertAdmin, assertCanEditQuiz, canCreate, getCreatorPerms, isSuperAdmin } from "./authz.server";
 
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("Forbidden: admin only");
-}
 
 async function signBanner(adminDb: any, path?: string | null) {
   if (!path) return null;
@@ -132,7 +123,8 @@ export const getQuizAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    // Owner or admin. Creators editing their own quiz must be allowed too.
+    await assertCanEditQuiz(context.supabase, context.userId, data.id);
     const { data: quiz, error } = await context.supabase.from("quizzes").select("*").eq("id", data.id).single();
     if (error) throw error;
     const { data: questions } = await context.supabase
@@ -145,7 +137,9 @@ export const getQuizAdmin = createServerFn({ method: "GET" })
 
 export const getQuizForPlayer = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ id: z.string().uuid(), access_key: z.string().max(80).optional().nullable() }).parse(d),
+  )
   .handler(async ({ context, data }) => {
     const { data: quiz, error } = await context.supabase
       .from("quizzes")
@@ -155,6 +149,23 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
       .maybeSingle();
     if (error) throw error;
     if (!quiz) throw new Error("Quiz not found or not published");
+
+    // Private quizzes require the correct access key (unless the requester is the creator/admin).
+    if ((quiz as any).visibility === "private") {
+      const isOwner = (quiz as any).created_by === context.userId;
+      const admin = await isSuperAdmin(context.supabase, context.userId);
+      if (!isOwner && !admin) {
+        const expected = ((quiz as any).access_key ?? "").trim();
+        const provided = (data.access_key ?? "").trim();
+        if (!expected) throw new Error("This quiz is private and has no access key set. Ask the creator.");
+        if (!provided || provided !== expected) {
+          const err: any = new Error("Access key required for this private quiz.");
+          err.code = "ACCESS_KEY_REQUIRED";
+          throw err;
+        }
+      }
+    }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: questions } = await context.supabase
       .from("questions")
@@ -229,7 +240,7 @@ export const uploadQuizBanner = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const buf = Buffer.from(data.base64, "base64");
     const ext = data.filename.split(".").pop()?.toLowerCase() || "jpg";
@@ -248,7 +259,20 @@ export const createQuiz = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => QuizInput.parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    const gate = await canCreate(context.supabase, context.userId);
+    if (!gate.ok) throw new Error(gate.reason ?? "Not allowed to create quizzes.");
+    // Enforce publish + quota rules for non-admin creators.
+    const isAdmin = gate.roles.includes("admin") || gate.roles.includes("super_admin");
+    if (!isAdmin && gate.perms) {
+      const { count } = await context.supabase
+        .from("quizzes").select("id", { count: "exact", head: true }).eq("created_by", context.userId);
+      if ((count ?? 0) >= gate.perms.max_quizzes) {
+        throw new Error(`Quiz cap reached (${gate.perms.max_quizzes}). Ask an admin to raise your limit.`);
+      }
+      if (data.is_published && gate.perms.can_publish === false) {
+        data = { ...data, is_published: false };
+      }
+    }
     const { data: row, error } = await context.supabase
       .from("quizzes")
       .insert({ ...data, created_by: context.userId })
@@ -264,7 +288,14 @@ export const updateQuiz = createServerFn({ method: "POST" })
     z.object({ id: z.string().uuid(), patch: QuizInput.partial() }).parse(d),
   )
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    const gate = await assertCanEditQuiz(context.supabase, context.userId, data.id);
+    // Non-admin creators cannot flip publish on if their perms forbid it.
+    if (!gate.admin && data.patch.is_published === true) {
+      const perms = await getCreatorPerms(context.supabase, context.userId);
+      if (perms && perms.can_publish === false) {
+        data.patch = { ...data.patch, is_published: false };
+      }
+    }
     const { data: row, error } = await context.supabase
       .from("quizzes")
       .update(data.patch)
@@ -279,7 +310,7 @@ export const deleteQuiz = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuiz(context.supabase, context.userId, data.id);
     const { error } = await context.supabase.from("quizzes").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
@@ -289,7 +320,9 @@ export const duplicateQuiz = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    // The source must be readable (via RLS: admins or owner or published).
+    const gate = await canCreate(context.supabase, context.userId);
+    if (!gate.ok) throw new Error(gate.reason ?? "Not allowed.");
     const { data: orig } = await context.supabase.from("quizzes").select("*").eq("id", data.id).single();
     if (!orig) throw new Error("Quiz not found");
     const { id: _id, created_at: _c, updated_at: _u, ...rest } = orig as any;
@@ -319,4 +352,41 @@ export const duplicateQuiz = createServerFn({ method: "POST" })
       }
     }
     return newQuiz;
+  });
+
+/** Creator dashboard — quizzes owned by the caller (no admin bypass). */
+export const listMyQuizzes = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data: quizzes, error } = await context.supabase
+      .from("quizzes")
+      .select("*")
+      .eq("created_by", context.userId)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    const ids = (quizzes ?? []).map((q) => q.id);
+    const counts: Record<string, { questions: number; attempts: number }> = {};
+    if (ids.length) {
+      const { data: qs } = await context.supabase.from("questions").select("quiz_id").in("quiz_id", ids);
+      const { data: as } = await context.supabase.from("attempts").select("quiz_id").in("quiz_id", ids);
+      for (const id of ids) counts[id] = { questions: 0, attempts: 0 };
+      (qs ?? []).forEach((r: any) => { counts[r.quiz_id].questions++; });
+      (as ?? []).forEach((r: any) => { counts[r.quiz_id].attempts++; });
+    }
+    return (quizzes ?? []).map((q) => ({ ...q, ...counts[q.id] }));
+  });
+
+/** Admin review — list a specific creator's quizzes. */
+export const listQuizzesByCreator = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: quizzes } = await (supabaseAdmin as any)
+      .from("quizzes")
+      .select("id, title, category, difficulty, is_published, visibility, created_at, updated_at, banner_path")
+      .eq("created_by", data.user_id)
+      .order("created_at", { ascending: false });
+    return quizzes ?? [];
   });

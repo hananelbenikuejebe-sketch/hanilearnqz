@@ -1,17 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("Forbidden: admin only");
-}
+import { assertAdmin, assertAnalyticsAllowed, assertAiAllowed, logAiUsage } from "./authz.server";
 
 function bucketByDay(rows: { submitted_at: string | null; score_pct: number | string }[], days = 30) {
   const out: { date: string; attempts: number; avg: number }[] = [];
@@ -158,6 +148,8 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ student_id: z.string().uuid().optional() }).parse(d ?? {}))
   .handler(async ({ context, data }) => {
+    // AI features may be disabled by admin.
+    await assertAiAllowed(context.supabase, context.userId);
     let studentId = context.userId;
     if (data.student_id && data.student_id !== context.userId) {
       const { data: isAdmin } = await context.supabase
@@ -204,5 +196,110 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
     }
     const json = await res.json();
     const summary = json.choices?.[0]?.message?.content ?? "Could not generate a summary.";
+    await logAiUsage(context.supabase, context.userId, {
+      feature: "student_summary",
+      model: "google/gemini-3-flash-preview",
+      input_tokens: json.usage?.prompt_tokens ?? 0,
+      output_tokens: json.usage?.completion_tokens ?? 0,
+      credits_cost: Number(json.usage?.total_tokens ?? 0) / 1000 * 0.02,
+    });
     return { summary };
+  });
+
+
+/** Analytics scoped to a creator's own quizzes. */
+export const getMyCreatorAnalytics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAnalyticsAllowed(context.supabase, context.userId);
+    const { data: quizzes } = await context.supabase
+      .from("quizzes").select("id, title, category, subject, is_published, created_at")
+      .eq("created_by", context.userId);
+    const ids = (quizzes ?? []).map((q: any) => q.id);
+    let attempts: any[] = [];
+    if (ids.length) {
+      const { data } = await context.supabase
+        .from("attempts")
+        .select("id, quiz_id, student_id, score_pct, correct_count, total, time_taken_sec, submitted_at")
+        .in("quiz_id", ids);
+      attempts = data ?? [];
+    }
+    const qById = new Map((quizzes ?? []).map((q: any) => [q.id, q]));
+    const total = attempts.length;
+    const avg = total ? attempts.reduce((s, a) => s + Number(a.score_pct), 0) / total : 0;
+    const passing = attempts.filter((a) => Number(a.score_pct) >= 50).length;
+    const perQuiz = new Map<string, { attempts: number; sum: number }>();
+    for (const a of attempts) {
+      const e = perQuiz.get(a.quiz_id) ?? { attempts: 0, sum: 0 };
+      e.attempts++; e.sum += Number(a.score_pct);
+      perQuiz.set(a.quiz_id, e);
+    }
+    const topQuizzes = [...perQuiz.entries()]
+      .map(([id, v]) => ({ id, title: (qById.get(id) as any)?.title ?? "Untitled", attempts: v.attempts, avg: Math.round((v.sum / v.attempts) * 10) / 10 }))
+      .sort((a, b) => b.attempts - a.attempts).slice(0, 10);
+    return {
+      summary: {
+        quizzes: quizzes?.length ?? 0,
+        published: (quizzes ?? []).filter((q: any) => q.is_published).length,
+        attempts: total,
+        avg_score: Math.round(avg * 10) / 10,
+        pass_rate: total ? Math.round((passing / total) * 100) : 0,
+      },
+      top_quizzes: topQuizzes,
+      trend: bucketByDay(attempts as any, 30),
+    };
+  });
+
+/** Aggregated AI usage — self only unless admin. */
+export const getAiUsageSummary = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid().optional(), days: z.number().int().min(1).max(365).default(30) }).parse(d ?? {}))
+  .handler(async ({ context, data }) => {
+    let target = context.userId;
+    if (data.user_id && data.user_id !== context.userId) {
+      await assertAdmin(context.supabase, context.userId);
+      target = data.user_id;
+    }
+    const since = new Date(Date.now() - data.days * 24 * 3600 * 1000).toISOString();
+    const { data: rows } = await context.supabase
+      .from("ai_usage_log").select("*").eq("user_id", target).gte("created_at", since);
+    const arr = rows ?? [];
+    const byFeature: Record<string, { calls: number; credits: number; tokens: number }> = {};
+    let credits = 0, tokens = 0;
+    for (const r of arr) {
+      const f = r.feature ?? "other";
+      const cost = Number(r.credits_cost ?? 0);
+      const t = (r.input_tokens ?? 0) + (r.output_tokens ?? 0);
+      credits += cost; tokens += t;
+      byFeature[f] = byFeature[f] ?? { calls: 0, credits: 0, tokens: 0 };
+      byFeature[f].calls++; byFeature[f].credits += cost; byFeature[f].tokens += t;
+    }
+    return { total_calls: arr.length, total_credits: Math.round(credits * 100) / 100, total_tokens: tokens, by_feature: byFeature };
+  });
+
+/** Admin AI usage leaderboard — top users by credits over a window. */
+export const getAiUsageLeaderboard = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ days: z.number().int().min(1).max(365).default(30) }).parse(d ?? {}))
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const since = new Date(Date.now() - data.days * 24 * 3600 * 1000).toISOString();
+    const { data: rows } = await (supabaseAdmin as any).from("ai_usage_log").select("user_id, feature, credits_cost, input_tokens, output_tokens").gte("created_at", since);
+    const perUser: Record<string, { calls: number; credits: number; tokens: number }> = {};
+    for (const r of rows ?? []) {
+      const u = r.user_id ?? "unknown";
+      const cost = Number(r.credits_cost ?? 0);
+      const t = (r.input_tokens ?? 0) + (r.output_tokens ?? 0);
+      perUser[u] = perUser[u] ?? { calls: 0, credits: 0, tokens: 0 };
+      perUser[u].calls++; perUser[u].credits += cost; perUser[u].tokens += t;
+    }
+    const ids = Object.keys(perUser);
+    const { data: profs } = ids.length
+      ? await (supabaseAdmin as any).from("profiles").select("id, full_name, email, handle").in("id", ids)
+      : { data: [] };
+    const profMap = new Map((profs ?? []).map((p: any) => [p.id, p]));
+    return Object.entries(perUser)
+      .map(([user_id, v]) => ({ user_id, profile: profMap.get(user_id) ?? null, ...v, credits: Math.round(v.credits * 100) / 100 }))
+      .sort((a, b) => b.credits - a.credits);
   });

@@ -1,16 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { assertCanEditQuiz } from "./authz.server";
 
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("Forbidden: admin only");
+async function assertCanEditQuestion(supabase: any, userId: string, questionId: string) {
+  const { data: q } = await supabase.from("questions").select("quiz_id").eq("id", questionId).maybeSingle();
+  if (!q) throw new Error("Question not found");
+  await assertCanEditQuiz(supabase, userId, q.quiz_id);
 }
 
 const OptionSchema = z.object({
@@ -39,7 +35,7 @@ export const createQuestion = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => QuestionInput.parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
     const { data: maxRow } = await context.supabase
       .from("questions")
       .select("position")
@@ -100,7 +96,7 @@ export const updateQuestion = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuestion(context.supabase, context.userId, data.id);
     const { error } = await context.supabase.from("questions").update(data.patch as any).eq("id", data.id);
     if (error) throw error;
     if (data.options) {
@@ -118,7 +114,7 @@ export const deleteQuestion = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuestion(context.supabase, context.userId, data.id);
     const { error } = await context.supabase.from("questions").delete().eq("id", data.id);
     if (error) throw error;
     return { ok: true };
@@ -128,7 +124,10 @@ export const bulkDeleteQuestions = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ ids: z.array(z.string().uuid()).min(1).max(500) }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    // Verify caller can edit every quiz referenced by these questions.
+    const { data: rows } = await context.supabase.from("questions").select("quiz_id").in("id", data.ids);
+    const quizIds = Array.from(new Set((rows ?? []).map((r: any) => r.quiz_id)));
+    for (const qid of quizIds) await assertCanEditQuiz(context.supabase, context.userId, qid as string);
     const { error } = await context.supabase.from("questions").delete().in("id", data.ids);
     if (error) throw error;
     return { ok: true, count: data.ids.length };
@@ -138,7 +137,7 @@ export const distributeQuizPoints = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid(), total: z.number().min(0).max(10000) }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
     const { data: qs } = await context.supabase.from("questions").select("id").eq("quiz_id", data.quiz_id);
     const n = qs?.length ?? 0;
     if (n === 0) return { ok: true, per_question: 0 };
@@ -156,7 +155,7 @@ export const reorderQuestions = createServerFn({ method: "POST" })
     z.object({ quiz_id: z.string().uuid(), order: z.array(z.string().uuid()) }).parse(d),
   )
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
     for (let i = 0; i < data.order.length; i++) {
       await context.supabase.from("questions").update({ position: i }).eq("id", data.order[i]).eq("quiz_id", data.quiz_id);
     }
@@ -167,7 +166,7 @@ export const duplicateQuestion = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuestion(context.supabase, context.userId, data.id);
     const { data: q } = await context.supabase.from("questions").select("*, options(*)").eq("id", data.id).single();
     if (!q) throw new Error("Question not found");
     const { id: _, created_at: _c, options, position, ...rest } = q as any;
@@ -195,7 +194,7 @@ export const bulkInsertQuestions = createServerFn({ method: "POST" })
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
+    await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
     const { data: maxRow } = await context.supabase
       .from("questions").select("position").eq("quiz_id", data.quiz_id)
       .order("position", { ascending: false }).limit(1).maybeSingle();

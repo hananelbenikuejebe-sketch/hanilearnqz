@@ -3,6 +3,8 @@ import { z } from "zod";
 import { generateText } from "ai";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { assertAiAllowed, logAiUsage } from "./authz.server";
+
 
 const ParsedQuestionSchema = z.object({
   text: z.string().default(""),
@@ -69,13 +71,15 @@ type ParseSettings = NonNullable<z.infer<typeof ParseInput>["settings"]>;
 export const parseQuestionsFromText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ParseInput.parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAiAllowed(context.supabase, context.userId);
     const started = Date.now();
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI is not configured yet.");
     const gateway = createLovableAiGatewayProvider(key);
     const settings = data.settings ?? defaultSettings();
     const prompt = buildPrompt(data.text, settings, data.format_hint);
+
 
     try {
       const first = await generateText({
@@ -85,7 +89,13 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
         temperature: 0,
         maxOutputTokens: 16000,
       });
+      await logAiUsage(context.supabase, context.userId, {
+        feature: "parse_questions", model: "google/gemini-3-flash-preview",
+        input_tokens: (first as any).usage?.inputTokens ?? 0, output_tokens: (first as any).usage?.outputTokens ?? 0,
+        credits_cost: (((first as any).usage?.totalTokens ?? 0) / 1000) * 0.02,
+      });
       const parsed = safeParseAiJson(first.text);
+
       return normalizeParsed(parsed, data.text, settings.confidence_threshold, Date.now() - started);
     } catch (firstError: any) {
       const firstMsg = String(firstError?.message ?? firstError);
@@ -160,16 +170,24 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
     student_answer: z.string().max(8000),
     max_points: z.number().min(0).max(1000).default(10),
   }).parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAiAllowed(context.supabase, context.userId);
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI is not configured. Grade manually.");
     const gateway = createLovableAiGatewayProvider(key);
-    const { text } = await generateText({
+    const result = await generateText({
       model: gateway("google/gemini-3-flash-preview"),
       system: "You are a strict but fair exam marker. Grade the student answer against the model answer (if provided) and the question. Return ONLY JSON: {\"score\":0-<max>,\"percent\":0-100,\"feedback\":\"...\",\"strengths\":[\"...\"],\"weaknesses\":[\"...\"]}. Be concise.",
       prompt: `Question: ${data.question}\nModel answer: ${data.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${data.student_answer}\nMax points: ${data.max_points}`,
+
       temperature: 0,
       maxOutputTokens: 800,
+    });
+    const text = result.text;
+    await logAiUsage(context.supabase, context.userId, {
+      feature: "grade_open", model: "google/gemini-3-flash-preview",
+      input_tokens: (result as any).usage?.inputTokens ?? 0, output_tokens: (result as any).usage?.outputTokens ?? 0,
+      credits_cost: (((result as any).usage?.totalTokens ?? 0) / 1000) * 0.02,
     });
     const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
     const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");

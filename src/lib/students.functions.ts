@@ -1,31 +1,34 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-
-async function assertAdmin(supabase: any, userId: string) {
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("role", "admin")
-    .maybeSingle();
-  if (error) throw error;
-  if (!data) throw new Error("Forbidden: admin only");
-}
+import { assertAdmin } from "./authz.server";
 
 export const listStudents = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async ({ context }) => {
+  .inputValidator((d: unknown) => z.object({
+    q: z.string().max(120).optional(),
+    include_guests: z.boolean().default(true),
+  }).parse(d ?? {}))
+  .handler(async ({ context, data }) => {
     await assertAdmin(context.supabase, context.userId);
-    const { data: roles } = await context.supabase.from("user_roles").select("user_id").eq("role", "student");
-    const ids = (roles ?? []).map((r: any) => r.user_id);
-    if (!ids.length) return [];
-    const { data: profiles } = await context.supabase
-      .from("profiles").select("id, full_name, email, created_at").in("id", ids);
-    const { data: attempts } = await context.supabase
-      .from("attempts").select("student_id, score_pct").in("student_id", ids);
+    // Use admin client so we see ALL profiles regardless of RLS, including guests.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    let query = db.from("profiles").select("id, full_name, email, handle, is_guest, created_at").order("created_at", { ascending: false });
+    if (!data.include_guests) query = query.eq("is_guest", false);
+    if (data.q?.trim()) {
+      const pattern = `%${data.q.trim().replace(/[%_]/g, "")}%`;
+      query = query.or(`full_name.ilike.${pattern},email.ilike.${pattern},handle.ilike.${pattern}`);
+    }
+    const { data: profiles } = await query.limit(500);
+    const ids = (profiles ?? []).map((p: any) => p.id);
+    let attempts: any[] = [];
+    if (ids.length) {
+      const { data } = await db.from("attempts").select("student_id, score_pct").in("student_id", ids);
+      attempts = data ?? [];
+    }
     const stats = new Map<string, { count: number; avg: number }>();
-    (attempts ?? []).forEach((a: any) => {
+    attempts.forEach((a: any) => {
       const s = stats.get(a.student_id) ?? { count: 0, avg: 0 };
       s.avg = (s.avg * s.count + Number(a.score_pct)) / (s.count + 1);
       s.count++;
@@ -37,6 +40,7 @@ export const listStudents = createServerFn({ method: "GET" })
       avg_score: Math.round((stats.get(p.id)?.avg ?? 0) * 100) / 100,
     }));
   });
+
 
 export const addStudent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
