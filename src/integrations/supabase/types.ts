@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_usage_log: {
+        Row: {
+          created_at: string
+          credits_cost: number | null
+          feature: string
+          id: string
+          input_tokens: number | null
+          meta: Json | null
+          model: string | null
+          output_tokens: number | null
+          quiz_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          credits_cost?: number | null
+          feature: string
+          id?: string
+          input_tokens?: number | null
+          meta?: Json | null
+          model?: string | null
+          output_tokens?: number | null
+          quiz_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          credits_cost?: number | null
+          feature?: string
+          id?: string
+          input_tokens?: number | null
+          meta?: Json | null
+          model?: string | null
+          output_tokens?: number | null
+          quiz_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_log_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       app_settings: {
         Row: {
           key: string
@@ -233,22 +280,37 @@ export type Database = {
       }
       profiles: {
         Row: {
+          avatar_url: string | null
+          bio: string | null
           created_at: string
+          device_fingerprint: string | null
           email: string | null
           full_name: string | null
+          handle: string | null
           id: string
+          is_guest: boolean
         }
         Insert: {
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string
+          device_fingerprint?: string | null
           email?: string | null
           full_name?: string | null
+          handle?: string | null
           id: string
+          is_guest?: boolean
         }
         Update: {
+          avatar_url?: string | null
+          bio?: string | null
           created_at?: string
+          device_fingerprint?: string | null
           email?: string | null
           full_name?: string | null
+          handle?: string | null
           id?: string
+          is_guest?: boolean
         }
         Relationships: []
       }
@@ -548,6 +610,24 @@ export type Database = {
           total_score?: number | null
           updated_at?: string
           visibility?: string
+        }
+        Relationships: []
+      }
+      user_follows: {
+        Row: {
+          created_at: string
+          follower_id: string
+          following_id: string
+        }
+        Insert: {
+          created_at?: string
+          follower_id: string
+          following_id: string
+        }
+        Update: {
+          created_at?: string
+          follower_id?: string
+          following_id?: string
         }
         Relationships: []
       }
