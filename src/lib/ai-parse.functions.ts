@@ -89,7 +89,13 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
         temperature: 0,
         maxOutputTokens: 16000,
       });
+      await logAiUsage(context.supabase, context.userId, {
+        feature: "parse_questions", model: "google/gemini-3-flash-preview",
+        input_tokens: (first as any).usage?.inputTokens ?? 0, output_tokens: (first as any).usage?.outputTokens ?? 0,
+        credits_cost: (((first as any).usage?.totalTokens ?? 0) / 1000) * 0.02,
+      });
       const parsed = safeParseAiJson(first.text);
+
       return normalizeParsed(parsed, data.text, settings.confidence_threshold, Date.now() - started);
     } catch (firstError: any) {
       const firstMsg = String(firstError?.message ?? firstError);
