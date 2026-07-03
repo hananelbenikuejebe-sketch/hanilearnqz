@@ -48,8 +48,8 @@ function Create() {
                 title="New quiz"
                 desc="Manually build questions, paste from a document, or use AI to import."
                 to="/admin/quizzes/new"
-                cta={status.is_super_admin ? "Start quiz" : "Coming soon for creators"}
-                disabled={!status.is_super_admin}
+                cta="Start quiz"
+                disabled={false}
               />
               <ActionCard
                 icon={GraduationCap}
