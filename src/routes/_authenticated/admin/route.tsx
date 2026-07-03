@@ -16,12 +16,14 @@ function AdminLayout() {
   const { data, isLoading } = useQuery({ queryKey: ["role"], queryFn: () => fetchRole() });
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
-  if (!data?.isAdmin) {
+  const isCreator = !!data?.isCreator;
+  const isAdmin = !!data?.isAdmin;
+  if (!isCreator && !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center max-w-md">
-          <h1 className="text-2xl font-bold mb-2">Admin only</h1>
-          <p className="text-muted-foreground mb-4">You don't have admin access.</p>
+          <h1 className="text-2xl font-bold mb-2">Creators only</h1>
+          <p className="text-muted-foreground mb-4">Ask an admin to grant you creator access.</p>
           <Button onClick={() => navigate({ to: "/" })}>Go home</Button>
         </div>
       </div>
@@ -29,11 +31,11 @@ function AdminLayout() {
   }
 
   const items = [
-    { to: "/admin", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/admin/quizzes", icon: ListChecks, label: "Quizzes" },
-    { to: "/admin/students", icon: Users, label: "Students" },
-    { to: "/admin/settings", icon: SettingsIcon, label: "Settings" },
-  ];
+    { to: "/admin", icon: LayoutDashboard, label: "Dashboard", adminOnly: true },
+    { to: "/admin/quizzes", icon: ListChecks, label: "Quizzes", adminOnly: false },
+    { to: "/admin/students", icon: Users, label: "Students", adminOnly: true },
+    { to: "/admin/settings", icon: SettingsIcon, label: "Settings", adminOnly: true },
+  ].filter((it) => isAdmin || !it.adminOnly);
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-background">
