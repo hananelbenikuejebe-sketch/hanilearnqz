@@ -71,13 +71,15 @@ type ParseSettings = NonNullable<z.infer<typeof ParseInput>["settings"]>;
 export const parseQuestionsFromText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ParseInput.parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    await assertAiAllowed(context.supabase, context.userId);
     const started = Date.now();
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI is not configured yet.");
     const gateway = createLovableAiGatewayProvider(key);
     const settings = data.settings ?? defaultSettings();
     const prompt = buildPrompt(data.text, settings, data.format_hint);
+
 
     try {
       const first = await generateText({
