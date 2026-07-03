@@ -1,8 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { listCreators, grantCreator, revokeCreator } from "@/lib/creators.functions";
+import { listQuizzesByCreator } from "@/lib/quizzes.functions";
+import { getAiUsageLeaderboard } from "@/lib/analytics.functions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Shield, ShieldCheck, ShieldOff } from "lucide-react";
+import { Shield, ShieldCheck, ShieldOff, Search, ListChecks, Sparkles } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/admin/creators")({
   component: CreatorsAdmin,
