@@ -3,6 +3,8 @@ import { z } from "zod";
 import { generateText } from "ai";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { assertAiAllowed, logAiUsage } from "./authz.server";
+
 
 const ParsedQuestionSchema = z.object({
   text: z.string().default(""),
