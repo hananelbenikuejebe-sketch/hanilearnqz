@@ -14,6 +14,51 @@ export type Database = {
   }
   public: {
     Tables: {
+      affiliate_attributions: {
+        Row: {
+          affiliate_user_id: string
+          code: string
+          created_at: string
+          referred_user_id: string
+        }
+        Insert: {
+          affiliate_user_id: string
+          code: string
+          created_at?: string
+          referred_user_id: string
+        }
+        Update: {
+          affiliate_user_id?: string
+          code?: string
+          created_at?: string
+          referred_user_id?: string
+        }
+        Relationships: []
+      }
+      affiliate_codes: {
+        Row: {
+          clicks: number
+          code: string
+          created_at: string
+          signups: number
+          user_id: string
+        }
+        Insert: {
+          clicks?: number
+          code: string
+          created_at?: string
+          signups?: number
+          user_id: string
+        }
+        Update: {
+          clicks?: number
+          code?: string
+          created_at?: string
+          signups?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_usage_log: {
         Row: {
           created_at: string
@@ -132,6 +177,30 @@ export type Database = {
           },
         ]
       }
+      bank_accounts: {
+        Row: {
+          account_name: string
+          account_number: string
+          bank_name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_name: string
+          account_number: string
+          bank_name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_name?: string
+          account_number?: string
+          bank_name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       creator_permissions: {
         Row: {
           ai_enabled: boolean
@@ -246,6 +315,33 @@ export type Database = {
         }
         Relationships: []
       }
+      monnify_webhook_events: {
+        Row: {
+          event_type: string | null
+          id: string
+          payload: Json
+          processed: boolean
+          received_at: string
+          transaction_reference: string | null
+        }
+        Insert: {
+          event_type?: string | null
+          id?: string
+          payload: Json
+          processed?: boolean
+          received_at?: string
+          transaction_reference?: string | null
+        }
+        Update: {
+          event_type?: string | null
+          id?: string
+          payload?: Json
+          processed?: boolean
+          received_at?: string
+          transaction_reference?: string | null
+        }
+        Relationships: []
+      }
       options: {
         Row: {
           id: string
@@ -277,6 +373,105 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      payment_intents: {
+        Row: {
+          affiliate_user_id: string | null
+          amount_kobo: number
+          created_at: string
+          id: string
+          meta: Json
+          monnify_tx_ref: string | null
+          paid_at: string | null
+          payment_reference: string
+          purpose: string
+          status: string
+          user_id: string
+        }
+        Insert: {
+          affiliate_user_id?: string | null
+          amount_kobo: number
+          created_at?: string
+          id?: string
+          meta?: Json
+          monnify_tx_ref?: string | null
+          paid_at?: string | null
+          payment_reference: string
+          purpose: string
+          status?: string
+          user_id: string
+        }
+        Update: {
+          affiliate_user_id?: string | null
+          amount_kobo?: number
+          created_at?: string
+          id?: string
+          meta?: Json
+          monnify_tx_ref?: string | null
+          paid_at?: string | null
+          payment_reference?: string
+          purpose?: string
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payment_settings: {
+        Row: {
+          affiliate_pct: number
+          ai_credit_expiry_days: number
+          ai_credit_min_topup_kobo: number
+          ai_essay_price_kobo: number
+          ai_parser_rate_per_1k_input_kobo: number
+          ai_parser_rate_per_1k_output_kobo: number
+          ai_result_price_kobo: number
+          creator_access_duration_days: number
+          creator_access_includes_ai: boolean
+          creator_access_price_kobo: number
+          creator_access_quiz_cap: number
+          feature_locks: Json
+          id: string
+          updated_at: string
+          withdrawal_min_kobo: number
+          withdrawal_whatsapp: string
+        }
+        Insert: {
+          affiliate_pct?: number
+          ai_credit_expiry_days?: number
+          ai_credit_min_topup_kobo?: number
+          ai_essay_price_kobo?: number
+          ai_parser_rate_per_1k_input_kobo?: number
+          ai_parser_rate_per_1k_output_kobo?: number
+          ai_result_price_kobo?: number
+          creator_access_duration_days?: number
+          creator_access_includes_ai?: boolean
+          creator_access_price_kobo?: number
+          creator_access_quiz_cap?: number
+          feature_locks?: Json
+          id?: string
+          updated_at?: string
+          withdrawal_min_kobo?: number
+          withdrawal_whatsapp?: string
+        }
+        Update: {
+          affiliate_pct?: number
+          ai_credit_expiry_days?: number
+          ai_credit_min_topup_kobo?: number
+          ai_essay_price_kobo?: number
+          ai_parser_rate_per_1k_input_kobo?: number
+          ai_parser_rate_per_1k_output_kobo?: number
+          ai_result_price_kobo?: number
+          creator_access_duration_days?: number
+          creator_access_includes_ai?: boolean
+          creator_access_price_kobo?: number
+          creator_access_quiz_cap?: number
+          feature_locks?: Json
+          id?: string
+          updated_at?: string
+          withdrawal_min_kobo?: number
+          withdrawal_whatsapp?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -613,6 +808,47 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          active: boolean
+          created_at: string
+          expires_at: string
+          id: string
+          kind: string
+          source_payment_intent: string | null
+          starts_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          expires_at: string
+          id?: string
+          kind?: string
+          source_payment_intent?: string | null
+          starts_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          expires_at?: string
+          id?: string
+          kind?: string
+          source_payment_intent?: string | null
+          starts_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_source_payment_intent_fkey"
+            columns: ["source_payment_intent"]
+            isOneToOne: false
+            referencedRelation: "payment_intents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_follows: {
         Row: {
           created_at: string
@@ -652,11 +888,114 @@ export type Database = {
         }
         Relationships: []
       }
+      wallet_transactions: {
+        Row: {
+          amount_kobo: number
+          bucket: string
+          created_at: string
+          id: string
+          kind: string
+          meta: Json
+          monnify_ref: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount_kobo: number
+          bucket?: string
+          created_at?: string
+          id?: string
+          kind: string
+          meta?: Json
+          monnify_ref?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount_kobo?: number
+          bucket?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          meta?: Json
+          monnify_ref?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wallets: {
+        Row: {
+          ai_credit_balance_kobo: number
+          ai_credit_expires_at: string | null
+          balance_kobo: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_credit_balance_kobo?: number
+          ai_credit_expires_at?: string | null
+          balance_kobo?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_credit_balance_kobo?: number
+          ai_credit_expires_at?: string | null
+          balance_kobo?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      withdrawal_requests: {
+        Row: {
+          account_name: string
+          account_number: string
+          admin_note: string | null
+          amount_kobo: number
+          bank_name: string
+          created_at: string
+          id: string
+          resolved_at: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          account_name: string
+          account_number: string
+          admin_note?: string | null
+          amount_kobo: number
+          bank_name: string
+          created_at?: string
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          account_name?: string
+          account_number?: string
+          admin_note?: string | null
+          amount_kobo?: number
+          bank_name?: string
+          created_at?: string
+          id?: string
+          resolved_at?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      has_active_creator_subscription: {
+        Args: { _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

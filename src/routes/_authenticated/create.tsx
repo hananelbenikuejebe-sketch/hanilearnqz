@@ -36,7 +36,7 @@ function Create() {
               <div className="flex items-center gap-2"><Lock className="h-5 w-5" /><CardTitle>Creator access</CardTitle></div>
               <CardDescription>Creators can publish quizzes, exams, and access analytics. Request access from a super admin to get started.</CardDescription>
             </CardHeader>
-            <CardContent><Button disabled variant="outline">Request creator access (coming soon)</Button></CardContent>
+            <CardContent><Button asChild><Link to="/wallet">Request creator access</Link></Button></CardContent>
           </Card>
         )}
 

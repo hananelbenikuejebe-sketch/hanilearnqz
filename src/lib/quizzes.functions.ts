@@ -141,7 +141,11 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
     z.object({ id: z.string().uuid(), access_key: z.string().max(80).optional().nullable() }).parse(d),
   )
   .handler(async ({ context, data }) => {
-    const { data: quiz, error } = await context.supabase
+    // Use the admin client to bypass RLS for the initial fetch — private quizzes are
+    // filtered out for non-owners by policy, so we must gate on access_key ourselves.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = supabaseAdmin as any;
+    const { data: quiz, error } = await adminDb
       .from("quizzes")
       .select("*")
       .eq("id", data.id)
@@ -166,7 +170,7 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
       }
     }
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    // supabaseAdmin already imported above for the private-quiz fetch
     const { data: questions } = await context.supabase
       .from("questions")
       .select("id, position, type, text, options(id, position, text)")
@@ -178,7 +182,7 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
       return { ...q, options: quiz.shuffle_options ? shuffle(opts) : opts };
     });
     const finalQuestions = quiz.randomize_questions ? shuffle(prepared) : prepared;
-    return { quiz: { ...quiz, banner_url: await signBanner(supabaseAdmin, (quiz as any).banner_path) }, questions: finalQuestions };
+    return { quiz: { ...quiz, banner_url: await signBanner(adminDb, (quiz as any).banner_path) }, questions: finalQuestions };
   });
 
 function shuffle<T>(arr: T[]): T[] {
