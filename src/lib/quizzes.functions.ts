@@ -141,7 +141,11 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
     z.object({ id: z.string().uuid(), access_key: z.string().max(80).optional().nullable() }).parse(d),
   )
   .handler(async ({ context, data }) => {
-    const { data: quiz, error } = await context.supabase
+    // Use the admin client to bypass RLS for the initial fetch — private quizzes are
+    // filtered out for non-owners by policy, so we must gate on access_key ourselves.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = supabaseAdmin as any;
+    const { data: quiz, error } = await adminDb
       .from("quizzes")
       .select("*")
       .eq("id", data.id)
