@@ -3,7 +3,7 @@ import { z } from "zod";
 import { generateText } from "ai";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { createLovableAiGatewayProvider } from "./ai-gateway.server";
-import { assertAiAllowed, logAiUsage } from "./authz.server";
+import { assertAiAllowed, logAiUsage, checkAiAccess, billAiUsage } from "./authz.server";
 
 
 const ParsedQuestionSchema = z.object({
@@ -72,7 +72,7 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ParseInput.parse(d))
   .handler(async ({ data, context }) => {
-    await assertAiAllowed(context.supabase, context.userId);
+    await checkAiAccess(context.supabase, context.userId, "ai_parser");
     const started = Date.now();
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI is not configured yet.");
@@ -89,10 +89,10 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
         temperature: 0,
         maxOutputTokens: 16000,
       });
-      await logAiUsage(context.supabase, context.userId, {
-        feature: "parse_questions", model: "google/gemini-3-flash-preview",
-        input_tokens: (first as any).usage?.inputTokens ?? 0, output_tokens: (first as any).usage?.outputTokens ?? 0,
-        credits_cost: (((first as any).usage?.totalTokens ?? 0) / 1000) * 0.02,
+      await billAiUsage(context.userId, "ai_parser", {
+        model: "google/gemini-3-flash-preview",
+        input_tokens: (first as any).usage?.inputTokens ?? 0,
+        output_tokens: (first as any).usage?.outputTokens ?? 0,
       });
       const parsed = safeParseAiJson(first.text);
 
@@ -171,7 +171,7 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
     max_points: z.number().min(0).max(1000).default(10),
   }).parse(d))
   .handler(async ({ data, context }) => {
-    await assertAiAllowed(context.supabase, context.userId);
+    await checkAiAccess(context.supabase, context.userId, "ai_essay");
     const key = process.env.LOVABLE_API_KEY;
     if (!key) throw new Error("AI is not configured. Grade manually.");
     const gateway = createLovableAiGatewayProvider(key);
