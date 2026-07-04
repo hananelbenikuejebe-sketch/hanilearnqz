@@ -77,3 +77,67 @@ export async function logAiUsage(supabase: any, userId: string, entry: {
     });
   } catch { /* non-fatal */ }
 }
+
+// ================== Wallet-aware per-feature AI access ==================
+export type AiFeature = "ai_result" | "ai_essay" | "ai_parser";
+
+/** Gate before doing an AI call. Throws with a user-friendly message if blocked. */
+export async function checkAiAccess(supabase: any, userId: string, feature: AiFeature) {
+  const roles = await getActorRoles(supabase, userId);
+  if (roles.includes("admin") || roles.includes("super_admin")) return { free: true as const };
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const db = supabaseAdmin as any;
+  const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
+  if (settings?.feature_locks?.[feature]) throw new Error("This AI feature is currently disabled by the platform admin.");
+  const perms = await getCreatorPerms(supabase, userId);
+  if (perms?.ai_enabled) return { free: true as const }; // admin-grandfathered creators
+  const { data: wallet } = await db.from("wallets").select("ai_credit_balance_kobo, ai_credit_expires_at").eq("user_id", userId).maybeSingle();
+  const expired = wallet?.ai_credit_expires_at && new Date(wallet.ai_credit_expires_at).getTime() < Date.now();
+  const bal = expired ? 0 : (wallet?.ai_credit_balance_kobo ?? 0);
+  if (bal <= 0) {
+    const err: any = new Error("You have no AI credits left. Top up in your wallet to use this feature.");
+    err.code = "AI_CREDIT_REQUIRED";
+    throw err;
+  }
+  return { free: false as const };
+}
+
+/** Debit AI credit after usage (metered for parser, flat for result/essay). Always logs usage. */
+export async function billAiUsage(userId: string, feature: AiFeature, opts: {
+  input_tokens?: number; output_tokens?: number; quiz_id?: string | null; model?: string;
+}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const db = supabaseAdmin as any;
+  const roles = await getActorRoles(db, userId);
+  const isAdmin = roles.includes("admin") || roles.includes("super_admin");
+  const perms = isAdmin ? null : await getCreatorPerms(db, userId);
+  const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
+
+  let cost = 0;
+  if (!isAdmin && !perms?.ai_enabled && settings) {
+    if (feature === "ai_result") cost = settings.ai_result_price_kobo ?? 0;
+    else if (feature === "ai_essay") cost = settings.ai_essay_price_kobo ?? 0;
+    else if (feature === "ai_parser") {
+      const inK = (opts.input_tokens ?? 0) / 1000;
+      const outK = (opts.output_tokens ?? 0) / 1000;
+      cost = Math.ceil(inK * (settings.ai_parser_rate_per_1k_input_kobo ?? 0) + outK * (settings.ai_parser_rate_per_1k_output_kobo ?? 0));
+    }
+  }
+  if (cost > 0) {
+    const { data: wallet } = await db.from("wallets").select("ai_credit_balance_kobo").eq("user_id", userId).maybeSingle();
+    const newBal = Math.max(0, (wallet?.ai_credit_balance_kobo ?? 0) - cost);
+    await db.from("wallets").upsert({ user_id: userId, ai_credit_balance_kobo: newBal }, { onConflict: "user_id" });
+    await db.from("wallet_transactions").insert({
+      user_id: userId, kind: "ai_usage", amount_kobo: -cost, bucket: "ai_credit",
+      meta: { feature, model: opts.model ?? null, input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0 },
+    });
+  }
+  try {
+    await db.from("ai_usage_log").insert({
+      user_id: userId, feature, model: opts.model ?? null,
+      input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0,
+      credits_cost: cost, quiz_id: opts.quiz_id ?? null, meta: {},
+    });
+  } catch { /* non-fatal */ }
+  return { debited_kobo: cost };
+}
