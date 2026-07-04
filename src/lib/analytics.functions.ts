@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertAdmin, assertAnalyticsAllowed, assertAiAllowed, logAiUsage } from "./authz.server";
+import { assertAdmin, assertAnalyticsAllowed, assertAiAllowed, logAiUsage, checkAiAccess, billAiUsage } from "./authz.server";
 
 function bucketByDay(rows: { submitted_at: string | null; score_pct: number | string }[], days = 30) {
   const out: { date: string; attempts: number; avg: number }[] = [];
@@ -149,7 +149,7 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ student_id: z.string().uuid().optional() }).parse(d ?? {}))
   .handler(async ({ context, data }) => {
     // AI features may be disabled by admin.
-    await assertAiAllowed(context.supabase, context.userId);
+    await checkAiAccess(context.supabase, context.userId, "ai_result");
     let studentId = context.userId;
     if (data.student_id && data.student_id !== context.userId) {
       const { data: isAdmin } = await context.supabase
@@ -196,12 +196,10 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
     }
     const json = await res.json();
     const summary = json.choices?.[0]?.message?.content ?? "Could not generate a summary.";
-    await logAiUsage(context.supabase, context.userId, {
-      feature: "student_summary",
+    await billAiUsage(context.userId, "ai_result", {
       model: "google/gemini-3-flash-preview",
       input_tokens: json.usage?.prompt_tokens ?? 0,
       output_tokens: json.usage?.completion_tokens ?? 0,
-      credits_cost: Number(json.usage?.total_tokens ?? 0) / 1000 * 0.02,
     });
     return { summary };
   });
