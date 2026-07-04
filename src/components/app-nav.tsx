@@ -1,11 +1,12 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Compass, GraduationCap, Plus, User, Shield } from "lucide-react";
+import { Compass, GraduationCap, Plus, User, Shield, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { to: "/explore", icon: Compass, label: "Explore" },
   { to: "/exams", icon: GraduationCap, label: "Exams" },
   { to: "/create", icon: Plus, label: "Create" },
+  { to: "/wallet", icon: Wallet, label: "Wallet" },
   { to: "/profile", icon: User, label: "Profile" },
 ];
 
@@ -18,13 +19,13 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
         <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs">HQ</div>
         <span className="font-bold text-sm">HaniLearn-QZ</span>
       </div>
-      <div className="flex md:flex-col md:p-2 flex-1 justify-around md:justify-start">
+      <div className="flex md:flex-col md:p-2 flex-1 justify-around md:justify-start overflow-x-auto">
         {full.map((it) => {
           const active = path === it.to || (it.to !== "/explore" && path.startsWith(it.to));
           return (
             <Link key={it.to} to={it.to as any}
               className={cn(
-                "flex md:flex-row flex-col items-center md:justify-start justify-center gap-1 md:gap-3 md:px-3 md:py-2.5 py-2 md:my-0.5 text-xs md:text-sm md:rounded-lg transition flex-1 md:flex-none",
+                "flex md:flex-row flex-col items-center md:justify-start justify-center gap-1 md:gap-3 md:px-3 md:py-2.5 py-2 md:my-0.5 text-[10px] md:text-sm md:rounded-lg transition flex-1 md:flex-none min-w-[52px]",
                 active ? "text-primary md:bg-primary/10 md:text-primary font-semibold" : "text-muted-foreground hover:text-foreground md:hover:bg-accent/50",
               )}
             >
