@@ -114,12 +114,12 @@ function AdminPayments() {
   );
 }
 
-function Money({ label, value, onChange }: any) {
+function Money({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return <div><Label>{label} (₦)</Label><Input type="number" value={value / 100} onChange={(e) => onChange(Math.round(parseFloat(e.target.value) * 100) || 0)} /></div>;
 }
-function Num({ label, value, onChange }: any) {
+function Num({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return <div><Label>{label}</Label><Input type="number" value={value ?? ""} onChange={(e) => onChange(parseInt(e.target.value) || 0)} /></div>;
 }
-function Row({ label, v, set }: any) {
+function Row({ label, v, set }: { label: string; v: boolean; set: (b: boolean) => void }) {
   return <div className="flex items-center justify-between"><span className="text-sm">{label}</span><Switch checked={v} onCheckedChange={set} /></div>;
 }
