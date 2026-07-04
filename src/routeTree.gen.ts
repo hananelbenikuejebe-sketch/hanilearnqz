@@ -27,6 +27,7 @@ import { Route as AuthenticatedAdminQuizzesRouteImport } from './routes/_authent
 import { Route as AuthenticatedAdminCreatorsRouteImport } from './routes/_authenticated/admin/creators'
 import { Route as AuthenticatedQuizQuizIdIndexRouteImport } from './routes/_authenticated/quiz.$quizId.index'
 import { Route as AuthenticatedAdminQuizzesIndexRouteImport } from './routes/_authenticated/admin/quizzes.index'
+import { Route as ApiPublicHooksMonnifyRouteImport } from './routes/api/public/hooks/monnify'
 import { Route as AuthenticatedQuizQuizIdTakeRouteImport } from './routes/_authenticated/quiz.$quizId.take'
 import { Route as AuthenticatedAdminQuizzesNewRouteImport } from './routes/_authenticated/admin/quizzes.new'
 import { Route as AuthenticatedQuizQuizIdResultAttemptIdRouteImport } from './routes/_authenticated/quiz.$quizId.result.$attemptId'
@@ -128,6 +129,11 @@ const AuthenticatedAdminQuizzesIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedAdminQuizzesRoute,
   } as any)
+const ApiPublicHooksMonnifyRoute = ApiPublicHooksMonnifyRouteImport.update({
+  id: '/api/public/hooks/monnify',
+  path: '/api/public/hooks/monnify',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedQuizQuizIdTakeRoute =
   AuthenticatedQuizQuizIdTakeRouteImport.update({
     id: '/take',
@@ -177,6 +183,7 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
+  '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
   '/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
   '/quiz/$quizId/': typeof AuthenticatedQuizQuizIdIndexRoute
   '/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
@@ -198,6 +205,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
+  '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesIndexRoute
   '/quiz/$quizId': typeof AuthenticatedQuizQuizIdIndexRoute
   '/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
@@ -224,6 +232,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/_authenticated/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
+  '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
   '/_authenticated/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
   '/_authenticated/quiz/$quizId/': typeof AuthenticatedQuizQuizIdIndexRoute
   '/_authenticated/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
@@ -250,6 +259,7 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/admin/quizzes/new'
     | '/quiz/$quizId/take'
+    | '/api/public/hooks/monnify'
     | '/admin/quizzes/'
     | '/quiz/$quizId/'
     | '/admin/quizzes/$id/edit'
@@ -271,6 +281,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin/quizzes/new'
     | '/quiz/$quizId/take'
+    | '/api/public/hooks/monnify'
     | '/admin/quizzes'
     | '/quiz/$quizId'
     | '/admin/quizzes/$id/edit'
@@ -296,6 +307,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/'
     | '/_authenticated/admin/quizzes/new'
     | '/_authenticated/quiz/$quizId/take'
+    | '/api/public/hooks/monnify'
     | '/_authenticated/admin/quizzes/'
     | '/_authenticated/quiz/$quizId/'
     | '/_authenticated/admin/quizzes/$id/edit'
@@ -307,6 +319,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   ShareQuizQuizIdRoute: typeof ShareQuizQuizIdRoute
+  ApiPublicHooksMonnifyRoute: typeof ApiPublicHooksMonnifyRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -437,6 +450,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminQuizzesIndexRouteImport
       parentRoute: typeof AuthenticatedAdminQuizzesRoute
     }
+    '/api/public/hooks/monnify': {
+      id: '/api/public/hooks/monnify'
+      path: '/api/public/hooks/monnify'
+      fullPath: '/api/public/hooks/monnify'
+      preLoaderRoute: typeof ApiPublicHooksMonnifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/quiz/$quizId/take': {
       id: '/_authenticated/quiz/$quizId/take'
       path: '/take'
@@ -566,6 +586,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   ShareQuizQuizIdRoute: ShareQuizQuizIdRoute,
+  ApiPublicHooksMonnifyRoute: ApiPublicHooksMonnifyRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
