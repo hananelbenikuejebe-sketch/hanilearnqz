@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { getMyRole } from "@/lib/role.functions";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LayoutDashboard, ListChecks, Users, Settings as SettingsIcon, Home as HomeIcon } from "lucide-react";
+import { LayoutDashboard, ListChecks, Users, Settings as SettingsIcon, Home as HomeIcon, Wallet } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminLayout,
@@ -34,6 +34,7 @@ function AdminLayout() {
     { to: "/admin", icon: LayoutDashboard, label: "Dashboard", adminOnly: true },
     { to: "/admin/quizzes", icon: ListChecks, label: "Quizzes", adminOnly: false },
     { to: "/admin/students", icon: Users, label: "Students", adminOnly: true },
+    { to: "/admin/payments", icon: Wallet, label: "Payments", adminOnly: true },
     { to: "/admin/settings", icon: SettingsIcon, label: "Settings", adminOnly: true },
   ].filter((it) => isAdmin || !it.adminOnly);
 
