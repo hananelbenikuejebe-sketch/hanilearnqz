@@ -184,10 +184,10 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
       maxOutputTokens: 800,
     });
     const text = result.text;
-    await logAiUsage(context.supabase, context.userId, {
-      feature: "grade_open", model: "google/gemini-3-flash-preview",
-      input_tokens: (result as any).usage?.inputTokens ?? 0, output_tokens: (result as any).usage?.outputTokens ?? 0,
-      credits_cost: (((result as any).usage?.totalTokens ?? 0) / 1000) * 0.02,
+    await billAiUsage(context.userId, "ai_essay", {
+      model: "google/gemini-3-flash-preview",
+      input_tokens: (result as any).usage?.inputTokens ?? 0,
+      output_tokens: (result as any).usage?.outputTokens ?? 0,
     });
     const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
     const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
