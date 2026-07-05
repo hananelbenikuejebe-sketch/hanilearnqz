@@ -96,6 +96,17 @@ function AuthPage() {
     finally { setLoading(false); }
   }
 
+  async function handleGoogle() {
+    setLoading(true);
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+      if (result.error) throw result.error;
+      if (result.redirected) return;
+      toast.success("Signed in with Google"); await afterAuth();
+    } catch (e: any) { toast.error(e?.message ?? "Google sign-in failed"); }
+    finally { setLoading(false); }
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background to-secondary">
       <div className="flex justify-between items-center p-4">
