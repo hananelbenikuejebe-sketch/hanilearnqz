@@ -87,6 +87,7 @@ function WalletPage() {
               <div className="flex gap-2">
                 <Input type="number" min={settings?.ai_credit_min_topup_kobo ? settings.ai_credit_min_topup_kobo / 100 : 300} value={aiAmount / 100} onChange={(e) => setAiAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} className="w-28" />
                 <Button size="sm" disabled={buy.isPending} onClick={() => buy.mutate({ purpose: "ai_credit", amount_kobo: aiAmount })}>Top up</Button>
+                <ContactAdmin purpose="AI credit" amount={aiAmount} />
               </div>
               <p className="text-xs text-muted-foreground mt-1">Min ₦{((settings?.ai_credit_min_topup_kobo ?? 30000)/100).toFixed(0)} · expires {settings?.ai_credit_expiry_days ?? 30}d</p>
             </CardContent>
@@ -99,8 +100,9 @@ function WalletPage() {
               <CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4" />Become a creator</CardTitle>
               <CardDescription>{settings ? `₦${(settings.creator_access_price_kobo/100).toFixed(0)} for ${settings.creator_access_duration_days} days · ${settings.creator_access_quiz_cap} quiz cap${settings.creator_access_includes_ai ? " · includes AI" : " · AI billed separately"}` : "…"}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-wrap gap-2">
               <Button disabled={buy.isPending} onClick={() => buy.mutate({ purpose: "creator_access" })}>{buy.isPending ? "Redirecting…" : "Pay & unlock creator"}</Button>
+              <ContactAdmin purpose="creator access" amount={settings?.creator_access_price_kobo} />
             </CardContent>
           </Card>
         )}
@@ -185,5 +187,16 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
         <DialogFooter><Button onClick={submit} disabled={!amount || !form.bank_name || !form.account_number}>Send request</Button></DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ContactAdmin({ purpose, amount }: { purpose: string; amount?: number }) {
+  const amt = amount ? `₦${(amount / 100).toLocaleString("en-NG")}` : "";
+  const msg = encodeURIComponent(`Hi, I'd like to pay for ${purpose}${amt ? ` (${amt})` : ""} manually on HaniLearn-QZ. My account email is:`);
+  const url = `https://wa.me/2349071829295?text=${msg}`;
+  return (
+    <Button size="sm" variant="outline" asChild>
+      <a href={url} target="_blank" rel="noopener noreferrer">Contact on WhatsApp</a>
+    </Button>
   );
 }

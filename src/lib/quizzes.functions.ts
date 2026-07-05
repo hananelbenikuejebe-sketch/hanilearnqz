@@ -33,11 +33,12 @@ function requestOrigin() {
 export const listQuizzesAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { data: quizzes, error } = await context.supabase
-      .from("quizzes")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Admins see everything; creators only their own quizzes/drafts.
+    const { getActorRoles } = await import("./authz.server");
+    const roles = await getActorRoles(context.supabase, context.userId);
+    const isAdmin = roles.includes("admin") || roles.includes("super_admin");
+    const base = context.supabase.from("quizzes").select("*").order("created_at", { ascending: false });
+    const { data: quizzes, error } = isAdmin ? await base : await base.eq("created_by", context.userId);
     if (error) throw error;
 
     const ids = (quizzes ?? []).map((q) => q.id);
@@ -199,7 +200,7 @@ const QuizInput = z.object({
   description: z.string().max(500).optional().nullable(),
   category: z.string().min(1).max(50),
   subject: z.string().max(80).optional().nullable(),
-  duration_min: z.number().int().min(5).max(600),
+  duration_min: z.number().min(0.5).max(600),
   difficulty: z.enum(["easy", "medium", "hard"]),
   instructions: z.string().max(4000).optional().nullable(),
   visibility: z.enum(["public", "private"]).default("public"),
