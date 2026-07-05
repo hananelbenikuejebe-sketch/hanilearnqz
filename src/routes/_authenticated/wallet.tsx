@@ -189,3 +189,14 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
     </Dialog>
   );
 }
+
+function ContactAdmin({ purpose, amount }: { purpose: string; amount?: number }) {
+  const amt = amount ? `₦${(amount / 100).toLocaleString("en-NG")}` : "";
+  const msg = encodeURIComponent(`Hi, I'd like to pay for ${purpose}${amt ? ` (${amt})` : ""} manually on HaniLearn-QZ. My account email is:`);
+  const url = `https://wa.me/2349071829295?text=${msg}`;
+  return (
+    <Button size="sm" variant="outline" asChild>
+      <a href={url} target="_blank" rel="noopener noreferrer">Contact on WhatsApp</a>
+    </Button>
+  );
+}
