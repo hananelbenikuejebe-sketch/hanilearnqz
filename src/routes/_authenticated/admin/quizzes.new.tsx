@@ -91,7 +91,7 @@ function NewQuiz() {
           </RadioGroup>
         </div>
         <div className="grid sm:grid-cols-2 gap-4">
-          <div><Label>Duration (minutes)</Label><Input type="number" min={5} max={600} value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: Number(e.target.value) })} /><p className="mt-1 text-xs text-muted-foreground">Range: 5–600 minutes.</p></div>
+          <div><Label>Duration (minutes)</Label><Input type="number" step={0.5} min={0.5} max={600} value={form.duration_min} onChange={(e) => setForm({ ...form, duration_min: Number(e.target.value) })} /><p className="mt-1 text-xs text-muted-foreground">Range: 0.5–600 minutes (0.5 = 30 seconds).</p></div>
           <div className="space-y-2"><Label>Access</Label>
             <Select value={form.visibility} onValueChange={(v) => setForm({ ...form, visibility: v as any })}>
               <SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="public">Public quiz</SelectItem><SelectItem value="private">Private quiz with key</SelectItem></SelectContent>
