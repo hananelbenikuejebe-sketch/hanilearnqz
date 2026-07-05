@@ -33,11 +33,12 @@ function requestOrigin() {
 export const listQuizzesAdmin = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { data: quizzes, error } = await context.supabase
-      .from("quizzes")
-      .select("*")
-      .order("created_at", { ascending: false });
+    // Admins see everything; creators only their own quizzes/drafts.
+    const { getActorRoles } = await import("./authz.server");
+    const roles = await getActorRoles(context.supabase, context.userId);
+    const isAdmin = roles.includes("admin") || roles.includes("super_admin");
+    const base = context.supabase.from("quizzes").select("*").order("created_at", { ascending: false });
+    const { data: quizzes, error } = isAdmin ? await base : await base.eq("created_by", context.userId);
     if (error) throw error;
 
     const ids = (quizzes ?? []).map((q) => q.id);
