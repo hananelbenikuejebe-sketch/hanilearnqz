@@ -31,8 +31,9 @@ function AdminLayout() {
   }
 
   const items = [
-    { to: "/admin", icon: LayoutDashboard, label: "Dashboard", adminOnly: true },
+    { to: "/admin", icon: LayoutDashboard, label: "Dashboard", adminOnly: false },
     { to: "/admin/quizzes", icon: ListChecks, label: "Quizzes", adminOnly: false },
+    { to: "/admin/exams", icon: ListChecks, label: "Exams", adminOnly: false },
     { to: "/admin/students", icon: Users, label: "Students", adminOnly: true },
     { to: "/admin/payments", icon: Wallet, label: "Payments", adminOnly: true },
     { to: "/admin/settings", icon: SettingsIcon, label: "Settings", adminOnly: true },
