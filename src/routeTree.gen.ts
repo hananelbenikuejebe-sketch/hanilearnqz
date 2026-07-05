@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 import { Route as AuthenticatedWalletRouteImport } from './routes/_authenticated/wallet'
 import { Route as AuthenticatedResultsRouteImport } from './routes/_authenticated/results'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
@@ -52,6 +53,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
+  id: '/profile/$userId',
+  path: '/profile/$userId',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedWalletRoute = AuthenticatedWalletRouteImport.update({
   id: '/wallet',
@@ -208,6 +214,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AuthenticatedProfileRoute
   '/results': typeof AuthenticatedResultsRoute
   '/wallet': typeof AuthenticatedWalletRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/admin/exams': typeof AuthenticatedAdminExamsRouteWithChildren
   '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
@@ -236,6 +243,7 @@ export interface FileRoutesByTo {
   '/profile': typeof AuthenticatedProfileRoute
   '/results': typeof AuthenticatedResultsRoute
   '/wallet': typeof AuthenticatedWalletRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/': typeof AuthenticatedIndexRoute
   '/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
@@ -265,6 +273,7 @@ export interface FileRoutesById {
   '/_authenticated/profile': typeof AuthenticatedProfileRoute
   '/_authenticated/results': typeof AuthenticatedResultsRoute
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute
+  '/profile/$userId': typeof ProfileUserIdRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/_authenticated/admin/exams': typeof AuthenticatedAdminExamsRouteWithChildren
@@ -298,6 +307,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/results'
     | '/wallet'
+    | '/profile/$userId'
     | '/admin/creators'
     | '/admin/exams'
     | '/admin/payments'
@@ -326,6 +336,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/results'
     | '/wallet'
+    | '/profile/$userId'
     | '/'
     | '/admin/creators'
     | '/admin/payments'
@@ -354,6 +365,7 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/results'
     | '/_authenticated/wallet'
+    | '/profile/$userId'
     | '/_authenticated/'
     | '/_authenticated/admin/creators'
     | '/_authenticated/admin/exams'
@@ -379,6 +391,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ProfileUserIdRoute: typeof ProfileUserIdRoute
   ShareQuizQuizIdRoute: typeof ShareQuizQuizIdRoute
   ApiPublicHooksMonnifyRoute: typeof ApiPublicHooksMonnifyRoute
 }
@@ -405,6 +418,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/profile/$userId': {
+      id: '/profile/$userId'
+      path: '/profile/$userId'
+      fullPath: '/profile/$userId'
+      preLoaderRoute: typeof ProfileUserIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/wallet': {
       id: '/_authenticated/wallet'
@@ -703,6 +723,7 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ProfileUserIdRoute: ProfileUserIdRoute,
   ShareQuizQuizIdRoute: ShareQuizQuizIdRoute,
   ApiPublicHooksMonnifyRoute: ApiPublicHooksMonnifyRoute,
 }
