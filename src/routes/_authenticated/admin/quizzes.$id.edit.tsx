@@ -174,7 +174,7 @@ function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints }: { qu
             <SelectContent>{CATS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
           </Select>
         </div>
-        <div><Label>Duration (min)</Label><Input type="number" value={f.duration_min} onChange={(e) => setF({ ...f, duration_min: Number(e.target.value) })} /></div>
+        <div><Label>Duration (min)</Label><Input type="number" step={0.5} min={0.5} max={600} value={f.duration_min} onChange={(e) => setF({ ...f, duration_min: Number(e.target.value) })} /></div>
         <div><Label>Difficulty</Label>
           <Select value={f.difficulty} onValueChange={(v) => setF({ ...f, difficulty: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
