@@ -37,6 +37,7 @@ import { Route as AuthenticatedAdminQuizzesNewRouteImport } from './routes/_auth
 import { Route as AuthenticatedQuizQuizIdResultAttemptIdRouteImport } from './routes/_authenticated/quiz.$quizId.result.$attemptId'
 import { Route as AuthenticatedAdminQuizzesIdResultsRouteImport } from './routes/_authenticated/admin/quizzes.$id.results'
 import { Route as AuthenticatedAdminQuizzesIdEditRouteImport } from './routes/_authenticated/admin/quizzes.$id.edit'
+import { Route as AuthenticatedAdminExamsIdEditRouteImport } from './routes/_authenticated/admin/exams.$id.edit'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -190,6 +191,12 @@ const AuthenticatedAdminQuizzesIdEditRoute =
     path: '/$id/edit',
     getParentRoute: () => AuthenticatedAdminQuizzesRoute,
   } as any)
+const AuthenticatedAdminExamsIdEditRoute =
+  AuthenticatedAdminExamsIdEditRouteImport.update({
+    id: '/$id/edit',
+    path: '/$id/edit',
+    getParentRoute: () => AuthenticatedAdminExamsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -216,6 +223,7 @@ export interface FileRoutesByFullPath {
   '/admin/exams/': typeof AuthenticatedAdminExamsIndexRoute
   '/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
   '/quiz/$quizId/': typeof AuthenticatedQuizQuizIdIndexRoute
+  '/admin/exams/$id/edit': typeof AuthenticatedAdminExamsIdEditRoute
   '/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
   '/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
   '/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
@@ -241,6 +249,7 @@ export interface FileRoutesByTo {
   '/admin/exams': typeof AuthenticatedAdminExamsIndexRoute
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesIndexRoute
   '/quiz/$quizId': typeof AuthenticatedQuizQuizIdIndexRoute
+  '/admin/exams/$id/edit': typeof AuthenticatedAdminExamsIdEditRoute
   '/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
   '/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
   '/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
@@ -272,6 +281,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/exams/': typeof AuthenticatedAdminExamsIndexRoute
   '/_authenticated/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
   '/_authenticated/quiz/$quizId/': typeof AuthenticatedQuizQuizIdIndexRoute
+  '/_authenticated/admin/exams/$id/edit': typeof AuthenticatedAdminExamsIdEditRoute
   '/_authenticated/admin/quizzes/$id/edit': typeof AuthenticatedAdminQuizzesIdEditRoute
   '/_authenticated/admin/quizzes/$id/results': typeof AuthenticatedAdminQuizzesIdResultsRoute
   '/_authenticated/quiz/$quizId/result/$attemptId': typeof AuthenticatedQuizQuizIdResultAttemptIdRoute
@@ -303,6 +313,7 @@ export interface FileRouteTypes {
     | '/admin/exams/'
     | '/admin/quizzes/'
     | '/quiz/$quizId/'
+    | '/admin/exams/$id/edit'
     | '/admin/quizzes/$id/edit'
     | '/admin/quizzes/$id/results'
     | '/quiz/$quizId/result/$attemptId'
@@ -328,6 +339,7 @@ export interface FileRouteTypes {
     | '/admin/exams'
     | '/admin/quizzes'
     | '/quiz/$quizId'
+    | '/admin/exams/$id/edit'
     | '/admin/quizzes/$id/edit'
     | '/admin/quizzes/$id/results'
     | '/quiz/$quizId/result/$attemptId'
@@ -358,6 +370,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/exams/'
     | '/_authenticated/admin/quizzes/'
     | '/_authenticated/quiz/$quizId/'
+    | '/_authenticated/admin/exams/$id/edit'
     | '/_authenticated/admin/quizzes/$id/edit'
     | '/_authenticated/admin/quizzes/$id/results'
     | '/_authenticated/quiz/$quizId/result/$attemptId'
@@ -568,16 +581,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminQuizzesIdEditRouteImport
       parentRoute: typeof AuthenticatedAdminQuizzesRoute
     }
+    '/_authenticated/admin/exams/$id/edit': {
+      id: '/_authenticated/admin/exams/$id/edit'
+      path: '/$id/edit'
+      fullPath: '/admin/exams/$id/edit'
+      preLoaderRoute: typeof AuthenticatedAdminExamsIdEditRouteImport
+      parentRoute: typeof AuthenticatedAdminExamsRoute
+    }
   }
 }
 
 interface AuthenticatedAdminExamsRouteChildren {
   AuthenticatedAdminExamsIndexRoute: typeof AuthenticatedAdminExamsIndexRoute
+  AuthenticatedAdminExamsIdEditRoute: typeof AuthenticatedAdminExamsIdEditRoute
 }
 
 const AuthenticatedAdminExamsRouteChildren: AuthenticatedAdminExamsRouteChildren =
   {
     AuthenticatedAdminExamsIndexRoute: AuthenticatedAdminExamsIndexRoute,
+    AuthenticatedAdminExamsIdEditRoute: AuthenticatedAdminExamsIdEditRoute,
   }
 
 const AuthenticatedAdminExamsRouteWithChildren =
