@@ -200,7 +200,7 @@ const QuizInput = z.object({
   description: z.string().max(500).optional().nullable(),
   category: z.string().min(1).max(50),
   subject: z.string().max(80).optional().nullable(),
-  duration_min: z.number().int().min(5).max(600),
+  duration_min: z.number().min(0.5).max(600),
   difficulty: z.enum(["easy", "medium", "hard"]),
   instructions: z.string().max(4000).optional().nullable(),
   visibility: z.enum(["public", "private"]).default("public"),
