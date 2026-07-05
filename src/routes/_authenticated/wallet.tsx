@@ -87,6 +87,7 @@ function WalletPage() {
               <div className="flex gap-2">
                 <Input type="number" min={settings?.ai_credit_min_topup_kobo ? settings.ai_credit_min_topup_kobo / 100 : 300} value={aiAmount / 100} onChange={(e) => setAiAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} className="w-28" />
                 <Button size="sm" disabled={buy.isPending} onClick={() => buy.mutate({ purpose: "ai_credit", amount_kobo: aiAmount })}>Top up</Button>
+                <ContactAdmin purpose="AI credit" amount={aiAmount} />
               </div>
               <p className="text-xs text-muted-foreground mt-1">Min ₦{((settings?.ai_credit_min_topup_kobo ?? 30000)/100).toFixed(0)} · expires {settings?.ai_credit_expiry_days ?? 30}d</p>
             </CardContent>
