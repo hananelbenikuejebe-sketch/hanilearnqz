@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { UserPlus, UserCheck, ListChecks } from "lucide-react";
 
-export const Route = createFileRoute("/profile/$userId")({
+export const Route = createFileRoute("/_authenticated/profile/$userId")({
   head: () => ({ meta: [{ title: "Profile — HaniLearn-QZ" }] }),
   component: PublicProfile,
 });

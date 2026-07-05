@@ -12,7 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as ProfileUserIdRouteImport } from './routes/profile.$userId'
 import { Route as AuthenticatedWalletRouteImport } from './routes/_authenticated/wallet'
 import { Route as AuthenticatedResultsRouteImport } from './routes/_authenticated/results'
 import { Route as AuthenticatedProfileRouteImport } from './routes/_authenticated/profile'
@@ -23,6 +22,7 @@ import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
 import { Route as ShareQuizQuizIdRouteImport } from './routes/share.quiz.$quizId'
 import { Route as AuthenticatedQuizQuizIdRouteImport } from './routes/_authenticated/quiz.$quizId'
+import { Route as AuthenticatedProfileUserIdRouteImport } from './routes/_authenticated/profile.$userId'
 import { Route as AuthenticatedAdminStudentsRouteImport } from './routes/_authenticated/admin/students'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminQuizzesRouteImport } from './routes/_authenticated/admin/quizzes'
@@ -53,11 +53,6 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
-const ProfileUserIdRoute = ProfileUserIdRouteImport.update({
-  id: '/profile/$userId',
-  path: '/profile/$userId',
-  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedWalletRoute = AuthenticatedWalletRouteImport.update({
   id: '/wallet',
@@ -109,6 +104,12 @@ const AuthenticatedQuizQuizIdRoute = AuthenticatedQuizQuizIdRouteImport.update({
   path: '/quiz/$quizId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedProfileUserIdRoute =
+  AuthenticatedProfileUserIdRouteImport.update({
+    id: '/$userId',
+    path: '/$userId',
+    getParentRoute: () => AuthenticatedProfileRoute,
+  } as any)
 const AuthenticatedAdminStudentsRoute =
   AuthenticatedAdminStudentsRouteImport.update({
     id: '/students',
@@ -211,16 +212,16 @@ export interface FileRoutesByFullPath {
   '/create': typeof AuthenticatedCreateRoute
   '/exams': typeof AuthenticatedExamsRoute
   '/explore': typeof AuthenticatedExploreRoute
-  '/profile': typeof AuthenticatedProfileRoute
+  '/profile': typeof AuthenticatedProfileRouteWithChildren
   '/results': typeof AuthenticatedResultsRoute
   '/wallet': typeof AuthenticatedWalletRoute
-  '/profile/$userId': typeof ProfileUserIdRoute
   '/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/admin/exams': typeof AuthenticatedAdminExamsRouteWithChildren
   '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/students': typeof AuthenticatedAdminStudentsRoute
+  '/profile/$userId': typeof AuthenticatedProfileUserIdRoute
   '/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
   '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
@@ -240,15 +241,15 @@ export interface FileRoutesByTo {
   '/create': typeof AuthenticatedCreateRoute
   '/exams': typeof AuthenticatedExamsRoute
   '/explore': typeof AuthenticatedExploreRoute
-  '/profile': typeof AuthenticatedProfileRoute
+  '/profile': typeof AuthenticatedProfileRouteWithChildren
   '/results': typeof AuthenticatedResultsRoute
   '/wallet': typeof AuthenticatedWalletRoute
-  '/profile/$userId': typeof ProfileUserIdRoute
   '/': typeof AuthenticatedIndexRoute
   '/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/students': typeof AuthenticatedAdminStudentsRoute
+  '/profile/$userId': typeof AuthenticatedProfileUserIdRoute
   '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
@@ -270,10 +271,9 @@ export interface FileRoutesById {
   '/_authenticated/create': typeof AuthenticatedCreateRoute
   '/_authenticated/exams': typeof AuthenticatedExamsRoute
   '/_authenticated/explore': typeof AuthenticatedExploreRoute
-  '/_authenticated/profile': typeof AuthenticatedProfileRoute
+  '/_authenticated/profile': typeof AuthenticatedProfileRouteWithChildren
   '/_authenticated/results': typeof AuthenticatedResultsRoute
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute
-  '/profile/$userId': typeof ProfileUserIdRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/_authenticated/admin/exams': typeof AuthenticatedAdminExamsRouteWithChildren
@@ -281,6 +281,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/students': typeof AuthenticatedAdminStudentsRoute
+  '/_authenticated/profile/$userId': typeof AuthenticatedProfileUserIdRoute
   '/_authenticated/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
   '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
@@ -307,13 +308,13 @@ export interface FileRouteTypes {
     | '/profile'
     | '/results'
     | '/wallet'
-    | '/profile/$userId'
     | '/admin/creators'
     | '/admin/exams'
     | '/admin/payments'
     | '/admin/quizzes'
     | '/admin/settings'
     | '/admin/students'
+    | '/profile/$userId'
     | '/quiz/$quizId'
     | '/share/quiz/$quizId'
     | '/admin/'
@@ -336,12 +337,12 @@ export interface FileRouteTypes {
     | '/profile'
     | '/results'
     | '/wallet'
-    | '/profile/$userId'
     | '/'
     | '/admin/creators'
     | '/admin/payments'
     | '/admin/settings'
     | '/admin/students'
+    | '/profile/$userId'
     | '/share/quiz/$quizId'
     | '/admin'
     | '/admin/quizzes/new'
@@ -365,7 +366,6 @@ export interface FileRouteTypes {
     | '/_authenticated/profile'
     | '/_authenticated/results'
     | '/_authenticated/wallet'
-    | '/profile/$userId'
     | '/_authenticated/'
     | '/_authenticated/admin/creators'
     | '/_authenticated/admin/exams'
@@ -373,6 +373,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/quizzes'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/students'
+    | '/_authenticated/profile/$userId'
     | '/_authenticated/quiz/$quizId'
     | '/share/quiz/$quizId'
     | '/_authenticated/admin/'
@@ -391,7 +392,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
-  ProfileUserIdRoute: typeof ProfileUserIdRoute
   ShareQuizQuizIdRoute: typeof ShareQuizQuizIdRoute
   ApiPublicHooksMonnifyRoute: typeof ApiPublicHooksMonnifyRoute
 }
@@ -418,13 +418,6 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/profile/$userId': {
-      id: '/profile/$userId'
-      path: '/profile/$userId'
-      fullPath: '/profile/$userId'
-      preLoaderRoute: typeof ProfileUserIdRouteImport
-      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/wallet': {
       id: '/_authenticated/wallet'
@@ -495,6 +488,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/quiz/$quizId'
       preLoaderRoute: typeof AuthenticatedQuizQuizIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/profile/$userId': {
+      id: '/_authenticated/profile/$userId'
+      path: '/$userId'
+      fullPath: '/profile/$userId'
+      preLoaderRoute: typeof AuthenticatedProfileUserIdRouteImport
+      parentRoute: typeof AuthenticatedProfileRoute
     }
     '/_authenticated/admin/students': {
       id: '/_authenticated/admin/students'
@@ -674,6 +674,17 @@ const AuthenticatedAdminRouteRouteWithChildren =
     AuthenticatedAdminRouteRouteChildren,
   )
 
+interface AuthenticatedProfileRouteChildren {
+  AuthenticatedProfileUserIdRoute: typeof AuthenticatedProfileUserIdRoute
+}
+
+const AuthenticatedProfileRouteChildren: AuthenticatedProfileRouteChildren = {
+  AuthenticatedProfileUserIdRoute: AuthenticatedProfileUserIdRoute,
+}
+
+const AuthenticatedProfileRouteWithChildren =
+  AuthenticatedProfileRoute._addFileChildren(AuthenticatedProfileRouteChildren)
+
 interface AuthenticatedQuizQuizIdRouteChildren {
   AuthenticatedQuizQuizIdTakeRoute: typeof AuthenticatedQuizQuizIdTakeRoute
   AuthenticatedQuizQuizIdIndexRoute: typeof AuthenticatedQuizQuizIdIndexRoute
@@ -698,7 +709,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedCreateRoute: typeof AuthenticatedCreateRoute
   AuthenticatedExamsRoute: typeof AuthenticatedExamsRoute
   AuthenticatedExploreRoute: typeof AuthenticatedExploreRoute
-  AuthenticatedProfileRoute: typeof AuthenticatedProfileRoute
+  AuthenticatedProfileRoute: typeof AuthenticatedProfileRouteWithChildren
   AuthenticatedResultsRoute: typeof AuthenticatedResultsRoute
   AuthenticatedWalletRoute: typeof AuthenticatedWalletRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -710,7 +721,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedCreateRoute: AuthenticatedCreateRoute,
   AuthenticatedExamsRoute: AuthenticatedExamsRoute,
   AuthenticatedExploreRoute: AuthenticatedExploreRoute,
-  AuthenticatedProfileRoute: AuthenticatedProfileRoute,
+  AuthenticatedProfileRoute: AuthenticatedProfileRouteWithChildren,
   AuthenticatedResultsRoute: AuthenticatedResultsRoute,
   AuthenticatedWalletRoute: AuthenticatedWalletRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
@@ -723,7 +734,6 @@ const AuthenticatedRouteRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
-  ProfileUserIdRoute: ProfileUserIdRoute,
   ShareQuizQuizIdRoute: ShareQuizQuizIdRoute,
   ApiPublicHooksMonnifyRoute: ApiPublicHooksMonnifyRoute,
 }
