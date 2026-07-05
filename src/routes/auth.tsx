@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate, Link, useSearch } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { useServerFn } from "@tanstack/react-start";
 import { trackAffiliateClick, attributeAffiliate } from "@/lib/affiliate.functions";
 import { getOrCreateGuestIdentity } from "@/lib/guest-identity";
