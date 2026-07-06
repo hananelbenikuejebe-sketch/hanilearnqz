@@ -250,3 +250,49 @@ export const getMySubscription = createServerFn({ method: "GET" })
     const active = !!data.active && new Date(data.expires_at).getTime() > Date.now();
     return { active, expires_at: data.expires_at, starts_at: data.starts_at };
   });
+
+/** Start a Monnify checkout to buy access to a single paid quiz. */
+export const initiateQuizPurchase = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { initTransaction } = await import("./monnify.server");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+
+    const { data: quiz } = await db.from("quizzes")
+      .select("id, title, price_kobo, created_by, is_published, visibility")
+      .eq("id", data.quiz_id).maybeSingle();
+    if (!quiz) throw new Error("Quiz not found");
+    if (!quiz.is_published) throw new Error("Quiz not published");
+    if (!quiz.price_kobo || quiz.price_kobo <= 0) throw new Error("This quiz is free — no purchase needed.");
+    if (quiz.created_by === context.userId) throw new Error("You own this quiz.");
+    const { data: existing } = await db.from("quiz_purchases")
+      .select("id").eq("user_id", context.userId).eq("quiz_id", data.quiz_id).maybeSingle();
+    if (existing) throw new Error("You already purchased this quiz.");
+
+    const { data: profile } = await db.from("profiles").select("full_name, email").eq("id", context.userId).maybeSingle();
+    const email = profile?.email ?? `${context.userId}@user.hanilearnqz.local`;
+    const name = profile?.full_name ?? "HaniLearn User";
+    const reference = makeRef("QZ");
+    const origin = requestOrigin();
+
+    const init = await initTransaction({
+      amount: quiz.price_kobo / 100,
+      reference,
+      narration: `Quiz — ${String(quiz.title).slice(0, 50)}`,
+      customerName: name,
+      customerEmail: email,
+      redirectUrl: `${origin}/quiz/${data.quiz_id}?ref=${encodeURIComponent(reference)}`,
+    });
+
+    await db.from("payment_intents").insert({
+      user_id: context.userId,
+      payment_reference: reference,
+      purpose: "quiz_purchase",
+      amount_kobo: quiz.price_kobo,
+      monnify_tx_ref: init.transactionReference,
+      meta: { name, email, quiz_id: data.quiz_id, creator_id: quiz.created_by, quiz_title: quiz.title },
+    });
+    return { checkoutUrl: init.checkoutUrl, reference };
+  });
