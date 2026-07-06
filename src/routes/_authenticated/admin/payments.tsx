@@ -76,11 +76,13 @@ function AdminPayments() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Affiliate &amp; payouts</CardTitle></CardHeader>
+        <CardHeader><CardTitle className="text-base">Affiliate, quiz sales &amp; payouts</CardTitle></CardHeader>
         <CardContent className="grid sm:grid-cols-2 gap-3">
           <Num label="Affiliate %" value={form.affiliate_pct} onChange={(v) => setForm({ ...form, affiliate_pct: v })} />
+          <Num label="Quiz sale platform fee %" value={form.quiz_platform_fee_pct ?? 10} onChange={(v) => setForm({ ...form, quiz_platform_fee_pct: Math.max(0, Math.min(90, v)) })} />
           <Money label="Min withdrawal" value={form.withdrawal_min_kobo} onChange={(v) => setForm({ ...form, withdrawal_min_kobo: v })} />
           <div className="col-span-2"><Label>Withdrawal WhatsApp</Label><Input value={form.withdrawal_whatsapp} onChange={(e) => setForm({ ...form, withdrawal_whatsapp: e.target.value })} /></div>
+          <p className="col-span-2 text-xs text-muted-foreground">Platform fee is deducted from each paid-quiz sale; the remainder is credited to the creator's earnings wallet.</p>
         </CardContent>
       </Card>
 
