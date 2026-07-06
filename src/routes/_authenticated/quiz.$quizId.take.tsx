@@ -54,6 +54,15 @@ function QuizPlayer() {
   const answeredCount = useMemo(() => questions.filter((q: any) => { const a = answers[q.id]; return Array.isArray(a) ? a.length > 0 : !!a; }).length, [answers, questions]);
   const timeStr = useMemo(() => remaining === null ? "" : `${Math.floor(remaining / 60)}:${(remaining % 60).toString().padStart(2, "0")}`, [remaining]);
   if (isLoading || submitted) return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">{submitted ? "Scoring and opening corrections…" : "Loading quiz…"}</div>;
+  if (error) return (
+    <div className="min-h-screen grid place-items-center p-6">
+      <div className="max-w-md rounded-lg border bg-card p-6 text-center space-y-3">
+        <div className="text-sm font-semibold">Cannot start quiz</div>
+        <div className="text-sm text-muted-foreground">{(error as any)?.message ?? "Unknown error"}</div>
+        <Button onClick={() => navigate({ to: "/quiz/$quizId", params: { quizId } })}>Back to quiz page</Button>
+      </div>
+    </div>
+  );
   if (!data || !current) return <div className="min-h-screen grid place-items-center text-sm text-muted-foreground">Quiz unavailable</div>;
   const ans = answers[current.id];
   const unanswered = questions.length - answeredCount;
