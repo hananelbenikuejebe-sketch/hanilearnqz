@@ -1,7 +1,8 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, useSearch } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { z } from "zod";
 import { getQuizForPlayer } from "@/lib/quizzes.functions";
 import { submitAttempt } from "@/lib/attempts.functions";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -14,14 +15,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ArrowRight, Clock, Send } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/quiz/$quizId/take")({ component: QuizPlayer });
+const takeSearch = z.object({ key: z.string().max(40).optional() });
+
+export const Route = createFileRoute("/_authenticated/quiz/$quizId/take")({
+  validateSearch: (s) => takeSearch.parse(s),
+  component: QuizPlayer,
+});
 
 function QuizPlayer() {
   const { quizId } = Route.useParams();
+  const { key } = useSearch({ from: Route.id });
   const navigate = useNavigate();
   const fetchQuiz = useServerFn(getQuizForPlayer);
   const submitFn = useServerFn(submitAttempt);
-  const { data, isLoading } = useQuery({ queryKey: ["quiz-player", quizId], queryFn: () => fetchQuiz({ data: { id: quizId } }) });
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["quiz-player", quizId, key ?? ""],
+    queryFn: () => fetchQuiz({ data: { id: quizId, access_key: key ?? null } }),
+    retry: false,
+  });
   const [idx, setIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [remaining, setRemaining] = useState<number | null>(null);
