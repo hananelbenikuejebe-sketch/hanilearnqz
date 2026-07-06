@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
-import { getQuizAdmin, updateQuiz, uploadQuizBanner } from "@/lib/quizzes.functions";
+import { getQuizAdmin, updateQuiz, uploadQuizBanner, generateQuizAccessKey } from "@/lib/quizzes.functions";
 import { createQuestion, updateQuestion, deleteQuestion, bulkInsertQuestions, bulkDeleteQuestions, distributeQuizPoints } from "@/lib/questions.functions";
 import { parseQuestionsFromText, parseQuestionsHeuristic, validateParseInput } from "@/lib/ai-parse.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -34,6 +34,7 @@ function EditQuiz() {
   const bulkDelFn = useServerFn(bulkDeleteQuestions);
   const distributeFn = useServerFn(distributeQuizPoints);
   const uploadBannerFn = useServerFn(uploadQuizBanner);
+  const genKeyFn = useServerFn(generateQuizAccessKey);
   const aiFn = useServerFn(parseQuestionsFromText);
 
   const { data, isLoading } = useQuery({
@@ -97,7 +98,13 @@ function EditQuiz() {
             await uploadBannerFn({ data: { quiz_id: id, filename: file.name, content_type: file.type || "image/jpeg", base64: b64 } });
             toast.success("Banner uploaded");
             qc.invalidateQueries({ queryKey: ["admin-quiz", id] });
-          }} onDistributePoints={(total) => distribute.mutate(total)} />
+          }} onDistributePoints={(total) => distribute.mutate(total)}
+          onGenerateKey={async () => {
+            const r = await genKeyFn({ data: { id } });
+            toast.success("Access key generated");
+            qc.invalidateQueries({ queryKey: ["admin-quiz", id] });
+            return r.access_key;
+          }} />
         </TabsContent>
 
         <TabsContent value="questions" className="space-y-4">
@@ -143,7 +150,7 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints }: { quiz: any; onSave: (p: any) => void; onUploadBanner: (file: File) => Promise<void>; onDistributePoints: (total: number) => void }) {
+function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints, onGenerateKey }: { quiz: any; onSave: (p: any) => void; onUploadBanner: (file: File) => Promise<void>; onDistributePoints: (total: number) => void; onGenerateKey: () => Promise<string> }) {
   const [f, setF] = useState({ ...quiz });
   const [uploading, setUploading] = useState(false);
   const bannerRef = useRef<HTMLInputElement>(null);
@@ -198,11 +205,33 @@ function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints }: { qu
         <Select value={f.visibility ?? "public"} onValueChange={(v) => setF({ ...f, visibility: v })}>
           <SelectTrigger><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="public">Public (guests can take)</SelectItem>
-            <SelectItem value="private">Private (sign-in required)</SelectItem>
+            <SelectItem value="public">Public (anyone can find & take)</SelectItem>
+            <SelectItem value="private">Private (needs access key)</SelectItem>
           </SelectContent>
         </Select>
       </div>
+
+      {f.visibility === "private" && (
+        <div className="grid sm:grid-cols-2 gap-3 rounded-md border bg-secondary/40 p-3">
+          <div>
+            <Label>Access key</Label>
+            <div className="flex gap-2">
+              <Input value={f.access_key ?? ""} onChange={(e) => setF({ ...f, access_key: e.target.value.toUpperCase() })} placeholder="Auto-generate →" className="uppercase tracking-wider" />
+              <Button type="button" variant="outline" onClick={async () => {
+                const k = await onGenerateKey();
+                setF({ ...f, access_key: k });
+              }}>Generate</Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Share this key with students. Only they can open the quiz.</p>
+          </div>
+          <div>
+            <Label>Price (₦, 0 = free)</Label>
+            <Input type="number" min={0} step={50} value={(f.price_kobo ?? 0) / 100} onChange={(e) => setF({ ...f, price_kobo: Math.round(parseFloat(e.target.value || "0") * 100) })} />
+            <p className="text-xs text-muted-foreground mt-1">Students pay this to unlock. A 10% platform fee applies (editable by admin).</p>
+          </div>
+        </div>
+      )}
+
       <div><Label>Instructions</Label><Textarea value={f.instructions ?? ""} onChange={(e) => setF({ ...f, instructions: e.target.value })} /></div>
       <div className="grid sm:grid-cols-2 gap-3">
         {[

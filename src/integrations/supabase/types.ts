@@ -431,6 +431,7 @@ export type Database = {
           creator_access_quiz_cap: number
           feature_locks: Json
           id: string
+          quiz_platform_fee_pct: number
           updated_at: string
           withdrawal_min_kobo: number
           withdrawal_whatsapp: string
@@ -449,6 +450,7 @@ export type Database = {
           creator_access_quiz_cap?: number
           feature_locks?: Json
           id?: string
+          quiz_platform_fee_pct?: number
           updated_at?: string
           withdrawal_min_kobo?: number
           withdrawal_whatsapp?: string
@@ -467,6 +469,7 @@ export type Database = {
           creator_access_quiz_cap?: number
           feature_locks?: Json
           id?: string
+          quiz_platform_fee_pct?: number
           updated_at?: string
           withdrawal_min_kobo?: number
           withdrawal_whatsapp?: string
@@ -655,6 +658,48 @@ export type Database = {
           },
         ]
       }
+      quiz_purchases: {
+        Row: {
+          created_at: string
+          id: string
+          payment_intent_id: string | null
+          price_kobo: number
+          quiz_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          payment_intent_id?: string | null
+          price_kobo?: number
+          quiz_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          payment_intent_id?: string | null
+          price_kobo?: number
+          quiz_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_purchases_payment_intent_id_fkey"
+            columns: ["payment_intent_id"]
+            isOneToOne: false
+            referencedRelation: "payment_intents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiz_purchases_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quiz_shares: {
         Row: {
           channel: string
@@ -717,6 +762,7 @@ export type Database = {
           is_published: boolean
           max_attempts: number | null
           parsing_settings: Json
+          price_kobo: number
           randomize_questions: boolean
           scheduled_at: string | null
           share_image_url: string | null
@@ -754,6 +800,7 @@ export type Database = {
           is_published?: boolean
           max_attempts?: number | null
           parsing_settings?: Json
+          price_kobo?: number
           randomize_questions?: boolean
           scheduled_at?: string | null
           share_image_url?: string | null
@@ -791,6 +838,7 @@ export type Database = {
           is_published?: boolean
           max_attempts?: number | null
           parsing_settings?: Json
+          price_kobo?: number
           randomize_questions?: boolean
           scheduled_at?: string | null
           share_image_url?: string | null

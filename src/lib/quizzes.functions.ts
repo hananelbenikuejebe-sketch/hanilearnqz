@@ -88,7 +88,9 @@ export const getQuizAbout = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const adminDb = supabaseAdmin as any;
-    const { data: quiz, error } = await context.supabase
+    // Use admin client so private and paid quizzes can render their "about" page —
+    // the take flow (getQuizForPlayer) is what enforces key + purchase.
+    const { data: quiz, error } = await adminDb
       .from("quizzes")
       .select("*")
       .eq("id", data.id)
@@ -96,9 +98,35 @@ export const getQuizAbout = createServerFn({ method: "GET" })
       .maybeSingle();
     if (error) throw error;
     if (!quiz) throw new Error("Quiz not found or not published");
-    const { count } = await context.supabase.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
+    const { count } = await adminDb.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
     const counts = await socialCounts(adminDb, [data.id]);
-    return { ...quiz, banner_url: await signBanner(adminDb, (quiz as any).banner_path), share_url: `${requestOrigin()}/share/quiz/${data.id}`, question_count: count ?? 0, social_counts: counts[data.id] };
+    // Creator display fields.
+    let creator: any = null;
+    if ((quiz as any).created_by) {
+      const { data: p } = await adminDb.from("profiles").select("id, full_name, handle, avatar_url").eq("id", (quiz as any).created_by).maybeSingle();
+      creator = p ?? null;
+    }
+    // Access hint (for the About page UI). Purchased status.
+    const isOwner = (quiz as any).created_by === context.userId;
+    const admin = await isSuperAdmin(context.supabase, context.userId);
+    let purchased = false;
+    if ((quiz as any).price_kobo > 0 && !isOwner && !admin) {
+      const { data: pur } = await adminDb.from("quiz_purchases").select("id").eq("user_id", context.userId).eq("quiz_id", data.id).maybeSingle();
+      purchased = !!pur;
+    }
+    return {
+      ...quiz,
+      banner_url: await signBanner(adminDb, (quiz as any).banner_path),
+      share_url: `${requestOrigin()}/share/quiz/${data.id}`,
+      question_count: count ?? 0,
+      social_counts: counts[data.id],
+      creator,
+      is_owner: isOwner,
+      is_admin: admin,
+      purchased,
+      requires_key: (quiz as any).visibility === "private" && !isOwner && !admin,
+      requires_purchase: (quiz as any).price_kobo > 0 && !isOwner && !admin && !purchased,
+    };
   });
 
 export const getQuizSharePreview = createServerFn({ method: "GET" })
@@ -155,19 +183,30 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
     if (error) throw error;
     if (!quiz) throw new Error("Quiz not found or not published");
 
-    // Private quizzes require the correct access key (unless the requester is the creator/admin).
-    if ((quiz as any).visibility === "private") {
-      const isOwner = (quiz as any).created_by === context.userId;
-      const admin = await isSuperAdmin(context.supabase, context.userId);
-      if (!isOwner && !admin) {
-        const expected = ((quiz as any).access_key ?? "").trim();
-        const provided = (data.access_key ?? "").trim();
-        if (!expected) throw new Error("This quiz is private and has no access key set. Ask the creator.");
-        if (!provided || provided !== expected) {
-          const err: any = new Error("Access key required for this private quiz.");
-          err.code = "ACCESS_KEY_REQUIRED";
-          throw err;
-        }
+    const isOwner = (quiz as any).created_by === context.userId;
+    const admin = await isSuperAdmin(context.supabase, context.userId);
+
+    // Private quizzes require the correct access key (unless creator/admin).
+    if ((quiz as any).visibility === "private" && !isOwner && !admin) {
+      const expected = ((quiz as any).access_key ?? "").trim();
+      const provided = (data.access_key ?? "").trim();
+      if (!expected) throw new Error("This quiz is private and has no access key set. Ask the creator.");
+      if (!provided || provided !== expected) {
+        const err: any = new Error("Access key required for this private quiz.");
+        err.code = "ACCESS_KEY_REQUIRED";
+        throw err;
+      }
+    }
+
+    // Paid quiz: require an active purchase (or owner/admin bypass).
+    const price = Number((quiz as any).price_kobo ?? 0);
+    if (price > 0 && !isOwner && !admin) {
+      const { data: purchase } = await adminDb.from("quiz_purchases").select("id").eq("user_id", context.userId).eq("quiz_id", data.id).maybeSingle();
+      if (!purchase) {
+        const err: any = new Error("This quiz requires purchase to take.");
+        err.code = "PURCHASE_REQUIRED";
+        err.price_kobo = price;
+        throw err;
       }
     }
 
@@ -232,6 +271,7 @@ const QuizInput = z.object({
   banner_path: z.string().max(500).optional().nullable(),
   share_image_url: z.string().max(1000).optional().nullable(),
   total_score: z.number().min(0).max(10000).optional().nullable(),
+  price_kobo: z.number().int().min(0).max(10000000).default(0),
 });
 
 export const uploadQuizBanner = createServerFn({ method: "POST" })
@@ -394,4 +434,47 @@ export const listQuizzesByCreator = createServerFn({ method: "GET" })
       .eq("created_by", data.user_id)
       .order("created_at", { ascending: false });
     return quizzes ?? [];
+  });
+
+/** Owner-only: (re)generate an 8-char access key for a private quiz. */
+export const generateQuizAccessKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertCanEditQuiz(context.supabase, context.userId, data.id);
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const key = Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+    const { error } = await context.supabase.from("quizzes").update({ access_key: key }).eq("id", data.id);
+    if (error) throw error;
+    return { access_key: key };
+  });
+
+/** Read-only access check for a quiz — used by the About page to decide what CTA to show. */
+export const checkQuizAccess = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = supabaseAdmin as any;
+    const { data: quiz } = await adminDb.from("quizzes")
+      .select("id, visibility, price_kobo, created_by, is_published, access_key")
+      .eq("id", data.id).maybeSingle();
+    if (!quiz) throw new Error("Quiz not found");
+    const isOwner = quiz.created_by === context.userId;
+    const admin = await isSuperAdmin(context.supabase, context.userId);
+    let purchased = false;
+    if (quiz.price_kobo > 0 && !isOwner && !admin) {
+      const { data: p } = await adminDb.from("quiz_purchases").select("id").eq("user_id", context.userId).eq("quiz_id", data.id).maybeSingle();
+      purchased = !!p;
+    }
+    return {
+      is_published: quiz.is_published,
+      is_owner: isOwner,
+      is_admin: admin,
+      requires_key: quiz.visibility === "private" && !isOwner && !admin,
+      requires_purchase: quiz.price_kobo > 0 && !isOwner && !admin && !purchased,
+      purchased,
+      price_kobo: quiz.price_kobo,
+      access_key: (isOwner || admin) ? quiz.access_key : null, // never leak the key
+    };
   });

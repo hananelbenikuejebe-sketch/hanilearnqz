@@ -104,3 +104,41 @@ export const resolveWithdrawal = createServerFn({ method: "POST" })
     }
     return { ok: true };
   });
+
+/** Super-admin only: grant AI credits or earnings to a user. This is a WRITE-ONLY
+ * privilege — admins may add credit but MAY NOT deduct or modify the user's
+ * balance directly, and this action is always ledgered with the granting admin's id. */
+export const adminGrantCredit = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({
+    user_id: z.string().uuid(),
+    bucket: z.enum(["ai_credit", "earnings"]),
+    amount_kobo: z.number().int().min(1).max(100_000_00),
+    note: z.string().max(200).optional(),
+  }).parse(d))
+  .handler(async ({ context, data }) => {
+    if (!(await isSuperAdmin(context.supabase, context.userId))) throw new Error("Forbidden");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    await db.from("wallets").upsert({ user_id: data.user_id }, { onConflict: "user_id" });
+    if (data.bucket === "ai_credit") {
+      const { data: settings } = await db.from("payment_settings").select("ai_credit_expiry_days").eq("id", "default").single();
+      const { data: w } = await db.from("wallets").select("ai_credit_balance_kobo").eq("user_id", data.user_id).single();
+      const expires = new Date(Date.now() + (settings?.ai_credit_expiry_days ?? 30) * 86_400_000).toISOString();
+      await db.from("wallets").update({
+        ai_credit_balance_kobo: (w?.ai_credit_balance_kobo ?? 0) + data.amount_kobo,
+        ai_credit_expires_at: expires,
+      }).eq("user_id", data.user_id);
+    } else {
+      const { data: w } = await db.from("wallets").select("balance_kobo").eq("user_id", data.user_id).single();
+      await db.from("wallets").update({ balance_kobo: (w?.balance_kobo ?? 0) + data.amount_kobo }).eq("user_id", data.user_id);
+    }
+    await db.from("wallet_transactions").insert({
+      user_id: data.user_id,
+      kind: "admin_grant",
+      amount_kobo: data.amount_kobo,
+      bucket: data.bucket,
+      meta: { granted_by: context.userId, note: data.note ?? null },
+    });
+    return { ok: true };
+  });

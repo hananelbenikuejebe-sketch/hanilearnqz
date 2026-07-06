@@ -42,18 +42,20 @@ function Exams() {
         )}
         <div className="grid gap-4 sm:grid-cols-2">
           {(exams ?? []).map((e: any) => (
-            <Card key={e.id} className="hover:shadow-md transition">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2"><GraduationCap className="h-5 w-5" />{e.title}</CardTitle>
-                {e.description && <CardDescription>{e.description}</CardDescription>}
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                  <Badge variant="secondary">{e.quiz_count} quizzes</Badge>
-                  <span>{new Date(e.created_at).toLocaleDateString()}</span>
-                </div>
-              </CardContent>
-            </Card>
+            <Link key={e.id} to="/exam/$examId" params={{ examId: e.id }} className="block">
+              <Card className="hover:shadow-md transition h-full">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2"><GraduationCap className="h-5 w-5" />{e.title}</CardTitle>
+                  {e.description && <CardDescription>{e.description}</CardDescription>}
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <Badge variant="secondary">{e.quiz_count} quizzes</Badge>
+                    <span>{new Date(e.created_at).toLocaleDateString()}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
           ))}
         </div>
       </div>

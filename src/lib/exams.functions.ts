@@ -31,13 +31,20 @@ export const getExam = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { id: string }) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    const { data: exam, error } = await context.supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = supabaseAdmin as any;
+    const { data: exam, error } = await adminDb
       .from("exams")
-      .select("*, exam_quizzes(position, quizzes(id, title, category, difficulty, duration_min))")
+      .select("*, exam_quizzes(position, quizzes(id, title, category, difficulty, duration_min, description, banner_path, price_kobo, visibility, is_published))")
       .eq("id", data.id)
       .maybeSingle();
     if (error) throw error;
     if (!exam) throw new Error("Exam not found");
+    // Gate unpublished exams to owner/admin only.
+    if (!exam.is_published) {
+      const superA = await isSuperAdmin(context.supabase, context.userId);
+      if (exam.created_by !== context.userId && !superA) throw new Error("Exam not published");
+    }
     return exam;
   });
 
