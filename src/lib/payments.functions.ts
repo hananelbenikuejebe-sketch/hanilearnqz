@@ -178,6 +178,33 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
       max_quizzes: settings.creator_access_quiz_cap,
       notes: `Auto-granted via payment ${intent.payment_reference}`,
     }, { onConflict: "user_id" });
+  } else if (intent.purpose === "quiz_purchase") {
+    const meta = intent.meta ?? {};
+    const quizId = meta.quiz_id;
+    const creatorId = meta.creator_id;
+    if (quizId && creatorId) {
+      const { data: alreadyBought } = await db.from("quiz_purchases").select("id").eq("user_id", intent.user_id).eq("quiz_id", quizId).maybeSingle();
+      if (!alreadyBought) {
+        await db.from("quiz_purchases").insert({
+          user_id: intent.user_id, quiz_id: quizId,
+          payment_intent_id: intent.id, price_kobo: paidAmountKobo,
+        });
+      }
+      // Platform fee, remainder credited to creator's earnings wallet.
+      const feePct = settings.quiz_platform_fee_pct ?? 10;
+      const platformFee = Math.floor((paidAmountKobo * feePct) / 100);
+      const creatorShare = paidAmountKobo - platformFee;
+      if (creatorShare > 0) {
+        await db.from("wallets").upsert({ user_id: creatorId }, { onConflict: "user_id" });
+        const { data: cw } = await db.from("wallets").select("balance_kobo").eq("user_id", creatorId).single();
+        await db.from("wallets").update({ balance_kobo: (cw?.balance_kobo ?? 0) + creatorShare }).eq("user_id", creatorId);
+        await db.from("wallet_transactions").insert({
+          user_id: creatorId, kind: "quiz_sale", amount_kobo: creatorShare, bucket: "earnings",
+          monnify_ref: intent.payment_reference,
+          meta: { quiz_id: quizId, buyer: intent.user_id, gross_kobo: paidAmountKobo, platform_fee_kobo: platformFee, fee_pct: feePct },
+        });
+      }
+    }
   } else {
     // AI credit top-up: extend expiry to X days from now; add to balance.
     const expires = new Date(Date.now() + settings.ai_credit_expiry_days * 24 * 60 * 60 * 1000).toISOString();
@@ -189,7 +216,8 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
   }
 
   // 5) Affiliate commission (only on real purchases, never on wallet top-ups per policy)
-  if (intent.affiliate_user_id && settings.affiliate_pct > 0) {
+  // Quiz purchases exclude affiliate commission — the creator is already paid.
+  if (intent.affiliate_user_id && settings.affiliate_pct > 0 && intent.purpose !== "quiz_purchase") {
     const commission = Math.floor((paidAmountKobo * settings.affiliate_pct) / 100);
     if (commission > 0) {
       await db.from("wallets").upsert({ user_id: intent.affiliate_user_id }, { onConflict: "user_id" });
