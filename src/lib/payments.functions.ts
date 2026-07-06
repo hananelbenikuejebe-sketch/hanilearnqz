@@ -29,6 +29,7 @@ export const updatePaymentSettings = createServerFn({ method: "POST" })
     affiliate_pct: z.number().int().min(0).max(80).optional(),
     withdrawal_min_kobo: z.number().int().min(0).optional(),
     withdrawal_whatsapp: z.string().max(30).optional(),
+    quiz_platform_fee_pct: z.number().int().min(0).max(90).optional(),
   }).parse(d))
   .handler(async ({ context, data }) => {
     if (!(await isSuperAdmin(context.supabase, context.userId))) throw new Error("Forbidden");

@@ -435,3 +435,46 @@ export const listQuizzesByCreator = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false });
     return quizzes ?? [];
   });
+
+/** Owner-only: (re)generate an 8-char access key for a private quiz. */
+export const generateQuizAccessKey = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertCanEditQuiz(context.supabase, context.userId, data.id);
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    const key = Array.from({ length: 8 }, () => alphabet[Math.floor(Math.random() * alphabet.length)]).join("");
+    const { error } = await context.supabase.from("quizzes").update({ access_key: key }).eq("id", data.id);
+    if (error) throw error;
+    return { access_key: key };
+  });
+
+/** Read-only access check for a quiz — used by the About page to decide what CTA to show. */
+export const checkQuizAccess = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const adminDb = supabaseAdmin as any;
+    const { data: quiz } = await adminDb.from("quizzes")
+      .select("id, visibility, price_kobo, created_by, is_published, access_key")
+      .eq("id", data.id).maybeSingle();
+    if (!quiz) throw new Error("Quiz not found");
+    const isOwner = quiz.created_by === context.userId;
+    const admin = await isSuperAdmin(context.supabase, context.userId);
+    let purchased = false;
+    if (quiz.price_kobo > 0 && !isOwner && !admin) {
+      const { data: p } = await adminDb.from("quiz_purchases").select("id").eq("user_id", context.userId).eq("quiz_id", data.id).maybeSingle();
+      purchased = !!p;
+    }
+    return {
+      is_published: quiz.is_published,
+      is_owner: isOwner,
+      is_admin: admin,
+      requires_key: quiz.visibility === "private" && !isOwner && !admin,
+      requires_purchase: quiz.price_kobo > 0 && !isOwner && !admin && !purchased,
+      purchased,
+      price_kobo: quiz.price_kobo,
+      access_key: (isOwner || admin) ? quiz.access_key : null, // never leak the key
+    };
+  });
