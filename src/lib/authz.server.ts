@@ -27,13 +27,14 @@ export async function canCreate(supabase: any, userId: string): Promise<{ ok: bo
   return { ok: false, reason: "You need creator access. Ask an admin to grant it.", roles };
 }
 
-/** Owner-or-admin gate for editing a specific quiz. */
-export async function assertCanEditQuiz(supabase: any, userId: string, quizId: string) {
-  const roles = await getActorRoles(supabase, userId);
-  if (roles.includes("admin") || roles.includes("super_admin")) return { admin: true, ownerId: null };
-  const { data: quiz } = await supabase.from("quizzes").select("created_by").eq("id", quizId).maybeSingle();
+/** Ownership gate for editing a specific quiz. Even super_admins may NOT edit
+ * another creator's quiz — this guards writes only. Read/review paths use
+ * `isSuperAdmin` separately. */
+export async function assertCanEditQuiz(_supabase: any, userId: string, quizId: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: quiz } = await (supabaseAdmin as any).from("quizzes").select("created_by").eq("id", quizId).maybeSingle();
   if (!quiz) throw new Error("Quiz not found");
-  if (quiz.created_by !== userId) throw new Error("Forbidden: this quiz belongs to another creator");
+  if (quiz.created_by !== userId) throw new Error("Forbidden: only the quiz owner can edit this quiz.");
   return { admin: false, ownerId: quiz.created_by };
 }
 
