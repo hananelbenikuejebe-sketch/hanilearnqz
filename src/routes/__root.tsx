@@ -46,8 +46,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:title", content: "HaniLearn-QZ — Modern quiz platform" },
       { name: "twitter:description", content: "Create, manage and take quizzes. Built for JAMB, WAEC, NECO and custom assessments." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6832fd9e-3b1f-40f6-a4a7-c24bfc8b7f72/id-preview-ac8d8e76--758b6d1b-d120-4f5b-ad40-12f29def2e3b.lovable.app-1780964991915.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6832fd9e-3b1f-40f6-a4a7-c24bfc8b7f72/id-preview-ac8d8e76--758b6d1b-d120-4f5b-ad40-12f29def2e3b.lovable.app-1780964991915.png" },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/6bbcfd86-2dba-43bf-a7dd-cca6f9dc5161" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/6bbcfd86-2dba-43bf-a7dd-cca6f9dc5161" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
