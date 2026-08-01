@@ -55,11 +55,9 @@ function WalletPage() {
     }
   }, [search.ref, verifyFn, qc]);
 
-  const buy = useMutation({
-    mutationFn: (v: { purpose: "creator_access" | "ai_credit"; amount_kobo?: number }) => initFn({ data: v }),
-    onSuccess: (r: any) => { window.location.href = r.checkoutUrl; },
-    onError: (e: any) => toast.error(e.message),
-  });
+  const [aiAmountRaw, setAiAmountRaw] = useState(30000);
+  void aiAmountRaw;
+
 
   const [aiAmount, setAiAmount] = useState(30000);
 
