@@ -315,6 +315,27 @@ export type Database = {
         }
         Relationships: []
       }
+      free_credit_grants: {
+        Row: {
+          amount_kobo: number
+          created_at: string
+          period: string
+          user_id: string
+        }
+        Insert: {
+          amount_kobo: number
+          created_at?: string
+          period: string
+          user_id: string
+        }
+        Update: {
+          amount_kobo?: number
+          created_at?: string
+          period?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       monnify_webhook_events: {
         Row: {
           event_type: string | null
@@ -416,22 +437,117 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_proofs: {
+        Row: {
+          admin_note: string | null
+          amount_kobo: number
+          auto_confidence: number
+          auto_reason: string | null
+          created_at: string
+          extracted: Json
+          file_path: string
+          granted: boolean
+          id: string
+          payment_intent_id: string | null
+          purpose: string
+          quiz_id: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+          used_ai: boolean
+          user_id: string
+        }
+        Insert: {
+          admin_note?: string | null
+          amount_kobo: number
+          auto_confidence?: number
+          auto_reason?: string | null
+          created_at?: string
+          extracted?: Json
+          file_path: string
+          granted?: boolean
+          id?: string
+          payment_intent_id?: string | null
+          purpose: string
+          quiz_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          used_ai?: boolean
+          user_id: string
+        }
+        Update: {
+          admin_note?: string | null
+          amount_kobo?: number
+          auto_confidence?: number
+          auto_reason?: string | null
+          created_at?: string
+          extracted?: Json
+          file_path?: string
+          granted?: boolean
+          id?: string
+          payment_intent_id?: string | null
+          purpose?: string
+          quiz_id?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+          used_ai?: boolean
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_proofs_payment_intent_id_fkey"
+            columns: ["payment_intent_id"]
+            isOneToOne: false
+            referencedRelation: "payment_intents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_proofs_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payment_settings: {
         Row: {
           affiliate_pct: number
           ai_credit_expiry_days: number
           ai_credit_min_topup_kobo: number
           ai_essay_price_kobo: number
+          ai_generate_price_kobo: number
           ai_parser_rate_per_1k_input_kobo: number
           ai_parser_rate_per_1k_output_kobo: number
           ai_result_price_kobo: number
+          ai_review_price_kobo: number
           creator_access_duration_days: number
           creator_access_includes_ai: boolean
           creator_access_price_kobo: number
           creator_access_quiz_cap: number
           feature_locks: Json
+          free_ai_parse: boolean
+          free_max_questions_per_quiz: number
+          free_max_quizzes_per_month: number
+          free_monthly_ai_credit_kobo: number
+          free_offline_parse_limit: number
+          free_tier_enabled: boolean
           id: string
+          pay_account_name: string
+          pay_account_number: string
+          pay_bank_name: string
+          proof_auto_approve: boolean
+          proof_laxity: string
+          proof_max_age_days: number
+          proof_min_confidence: number
+          proof_use_ai: boolean
           quiz_platform_fee_pct: number
+          support_whatsapp: string
           updated_at: string
           withdrawal_min_kobo: number
           withdrawal_whatsapp: string
@@ -441,16 +557,33 @@ export type Database = {
           ai_credit_expiry_days?: number
           ai_credit_min_topup_kobo?: number
           ai_essay_price_kobo?: number
+          ai_generate_price_kobo?: number
           ai_parser_rate_per_1k_input_kobo?: number
           ai_parser_rate_per_1k_output_kobo?: number
           ai_result_price_kobo?: number
+          ai_review_price_kobo?: number
           creator_access_duration_days?: number
           creator_access_includes_ai?: boolean
           creator_access_price_kobo?: number
           creator_access_quiz_cap?: number
           feature_locks?: Json
+          free_ai_parse?: boolean
+          free_max_questions_per_quiz?: number
+          free_max_quizzes_per_month?: number
+          free_monthly_ai_credit_kobo?: number
+          free_offline_parse_limit?: number
+          free_tier_enabled?: boolean
           id?: string
+          pay_account_name?: string
+          pay_account_number?: string
+          pay_bank_name?: string
+          proof_auto_approve?: boolean
+          proof_laxity?: string
+          proof_max_age_days?: number
+          proof_min_confidence?: number
+          proof_use_ai?: boolean
           quiz_platform_fee_pct?: number
+          support_whatsapp?: string
           updated_at?: string
           withdrawal_min_kobo?: number
           withdrawal_whatsapp?: string
@@ -460,16 +593,33 @@ export type Database = {
           ai_credit_expiry_days?: number
           ai_credit_min_topup_kobo?: number
           ai_essay_price_kobo?: number
+          ai_generate_price_kobo?: number
           ai_parser_rate_per_1k_input_kobo?: number
           ai_parser_rate_per_1k_output_kobo?: number
           ai_result_price_kobo?: number
+          ai_review_price_kobo?: number
           creator_access_duration_days?: number
           creator_access_includes_ai?: boolean
           creator_access_price_kobo?: number
           creator_access_quiz_cap?: number
           feature_locks?: Json
+          free_ai_parse?: boolean
+          free_max_questions_per_quiz?: number
+          free_max_quizzes_per_month?: number
+          free_monthly_ai_credit_kobo?: number
+          free_offline_parse_limit?: number
+          free_tier_enabled?: boolean
           id?: string
+          pay_account_name?: string
+          pay_account_number?: string
+          pay_bank_name?: string
+          proof_auto_approve?: boolean
+          proof_laxity?: string
+          proof_max_age_days?: number
+          proof_min_confidence?: number
+          proof_use_ai?: boolean
           quiz_platform_fee_pct?: number
+          support_whatsapp?: string
           updated_at?: string
           withdrawal_min_kobo?: number
           withdrawal_whatsapp?: string

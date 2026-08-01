@@ -16,6 +16,7 @@ import { getMyWallet, saveBankAccount, requestWithdrawal } from "@/lib/wallet.fu
 import { getPaymentSettings, initiatePayment, verifyAndSettle } from "@/lib/payments.functions";
 import { getOrCreateMyAffiliate } from "@/lib/affiliate.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
+import { PayDialog } from "@/components/pay-dialog";
 import { z } from "zod";
 
 export const Route = createFileRoute("/_authenticated/wallet")({
@@ -55,11 +56,9 @@ function WalletPage() {
     }
   }, [search.ref, verifyFn, qc]);
 
-  const buy = useMutation({
-    mutationFn: (v: { purpose: "creator_access" | "ai_credit"; amount_kobo?: number }) => initFn({ data: v }),
-    onSuccess: (r: any) => { window.location.href = r.checkoutUrl; },
-    onError: (e: any) => toast.error(e.message),
-  });
+  const [aiAmountRaw, setAiAmountRaw] = useState(30000);
+  void aiAmountRaw;
+
 
   const [aiAmount, setAiAmount] = useState(30000);
 
@@ -86,7 +85,7 @@ function WalletPage() {
             <CardContent>
               <div className="flex gap-2">
                 <Input type="number" min={settings?.ai_credit_min_topup_kobo ? settings.ai_credit_min_topup_kobo / 100 : 300} value={aiAmount / 100} onChange={(e) => setAiAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} className="w-28" />
-                <Button size="sm" disabled={buy.isPending} onClick={() => buy.mutate({ purpose: "ai_credit", amount_kobo: aiAmount })}>Top up</Button>
+                <PayDialog purpose="ai_credit" amountKobo={aiAmount} label="Top up" size="sm" />
                 <ContactAdmin purpose="AI credit" amount={aiAmount} />
               </div>
               <p className="text-xs text-muted-foreground mt-1">Min ₦{((settings?.ai_credit_min_topup_kobo ?? 30000)/100).toFixed(0)} · expires {settings?.ai_credit_expiry_days ?? 30}d</p>
@@ -101,7 +100,7 @@ function WalletPage() {
               <CardDescription>{settings ? `₦${(settings.creator_access_price_kobo/100).toFixed(0)} for ${settings.creator_access_duration_days} days · ${settings.creator_access_quiz_cap} quiz cap${settings.creator_access_includes_ai ? " · includes AI" : " · AI billed separately"}` : "…"}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              <Button disabled={buy.isPending} onClick={() => buy.mutate({ purpose: "creator_access" })}>{buy.isPending ? "Redirecting…" : "Pay & unlock creator"}</Button>
+              <PayDialog purpose="creator_access" amountKobo={settings?.creator_access_price_kobo} label="Pay & unlock creator" />
               <ContactAdmin purpose="creator access" amount={settings?.creator_access_price_kobo} />
             </CardContent>
           </Card>
@@ -153,6 +152,7 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
   const bank = wallet?.bank_account;
   const [form, setForm] = useState({ bank_name: bank?.bank_name ?? "", account_number: bank?.account_number ?? "", account_name: bank?.account_name ?? "" });
   const [amount, setAmount] = useState(0);
+  const [link, setLink] = useState<string | null>(null);
   const balance = wallet?.wallet?.balance_kobo ?? 0;
   const min = settings?.withdrawal_min_kobo ?? 100000;
 
@@ -162,29 +162,37 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
     try {
       await onSave({ data: form });
       const r: any = await onWithdraw({ data: { amount_kobo: amount } });
-      window.open(r.whatsappUrl, "_blank");
-      toast.success("Request logged — WhatsApp opened to notify admin.");
+      setLink(r.whatsappUrl);
+      toast.success("Request logged — tap the WhatsApp link to notify the admin.");
       qc.invalidateQueries({ queryKey: ["my-wallet"] });
-      setOpen(false);
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) { toast.error(e?.message ?? "Withdrawal request failed"); }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setLink(null); }}>
       <DialogTrigger asChild><Button size="sm" variant="outline" disabled={balance <= 0}>Withdraw</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Withdraw earnings</DialogTitle>
-          <DialogDescription>Min {`₦${(min/100).toFixed(0)}`}. Available {`₦${(balance/100).toFixed(2)}`}. On submit, a WhatsApp message is opened to notify the admin who processes payouts manually.</DialogDescription>
+          <DialogDescription>Min {`₦${(min/100).toFixed(0)}`}. Available {`₦${(balance/100).toFixed(2)}`}. After submitting, send the WhatsApp message so the admin can process your payout.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <div><Label>Amount (₦)</Label><Input type="number" min={min/100} max={balance/100} value={amount / 100 || ""} onChange={(e) => setAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} /></div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label>Bank</Label><Input value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} /></div>
-            <div><Label>Account #</Label><Input value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} /></div>
+        {link ? (
+          <div className="space-y-3 text-sm">
+            <p>Your request was logged and the funds are on hold. Send this message to complete it:</p>
+            <Button asChild className="w-full"><a href={link} target="_blank" rel="noopener noreferrer">Open WhatsApp to notify admin</a></Button>
           </div>
-          <div><Label>Account name</Label><Input value={form.account_name} onChange={(e) => setForm({ ...form, account_name: e.target.value })} /></div>
-        </div>
-        <DialogFooter><Button onClick={submit} disabled={!amount || !form.bank_name || !form.account_number}>Send request</Button></DialogFooter>
+        ) : (
+          <>
+            <div className="space-y-3">
+              <div><Label>Amount (₦)</Label><Input type="number" min={min/100} max={balance/100} value={amount / 100 || ""} onChange={(e) => setAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label>Bank</Label><Input value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} /></div>
+                <div><Label>Account #</Label><Input value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} /></div>
+              </div>
+              <div><Label>Account name</Label><Input value={form.account_name} onChange={(e) => setForm({ ...form, account_name: e.target.value })} /></div>
+            </div>
+            <DialogFooter><Button onClick={submit} disabled={!amount || !form.bank_name || !form.account_number}>Send request</Button></DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

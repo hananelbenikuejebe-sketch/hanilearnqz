@@ -36,6 +36,7 @@ function AdminLayout() {
     { to: "/admin/exams", icon: ListChecks, label: "Exams", adminOnly: false },
     { to: "/admin/students", icon: Users, label: "Students", adminOnly: true },
     { to: "/admin/payments", icon: Wallet, label: "Payments", adminOnly: true },
+    { to: "/admin/proofs", icon: Wallet, label: "Receipts", adminOnly: true },
     { to: "/admin/settings", icon: SettingsIcon, label: "Settings", adminOnly: true },
   ].filter((it) => isAdmin || !it.adminOnly);
 

@@ -30,6 +30,25 @@ export const updatePaymentSettings = createServerFn({ method: "POST" })
     withdrawal_min_kobo: z.number().int().min(0).optional(),
     withdrawal_whatsapp: z.string().max(30).optional(),
     quiz_platform_fee_pct: z.number().int().min(0).max(90).optional(),
+    // free tier
+    free_tier_enabled: z.boolean().optional(),
+    free_max_questions_per_quiz: z.number().int().min(1).max(500).optional(),
+    free_max_quizzes_per_month: z.number().int().min(0).max(1000).optional(),
+    free_offline_parse_limit: z.number().int().min(1).max(500).optional(),
+    free_ai_parse: z.boolean().optional(),
+    free_monthly_ai_credit_kobo: z.number().int().min(0).max(1_000_000).optional(),
+    // manual payment + receipt verification
+    proof_auto_approve: z.boolean().optional(),
+    proof_min_confidence: z.number().int().min(0).max(100).optional(),
+    proof_laxity: z.enum(["lax", "normal", "strict"]).optional(),
+    proof_max_age_days: z.number().int().min(1).max(60).optional(),
+    proof_use_ai: z.boolean().optional(),
+    pay_bank_name: z.string().max(80).optional(),
+    pay_account_number: z.string().max(30).optional(),
+    pay_account_name: z.string().max(120).optional(),
+    support_whatsapp: z.string().max(30).optional(),
+    ai_generate_price_kobo: z.number().int().min(0).optional(),
+    ai_review_price_kobo: z.number().int().min(0).optional(),
   }).parse(d))
   .handler(async ({ context, data }) => {
     if (!(await isSuperAdmin(context.supabase, context.userId))) throw new Error("Forbidden");
