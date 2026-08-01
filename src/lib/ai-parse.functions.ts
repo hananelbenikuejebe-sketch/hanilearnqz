@@ -68,57 +68,131 @@ const ParseInput = z.object({
 
 type ParseSettings = NonNullable<z.infer<typeof ParseInput>["settings"]>;
 
+/**
+ * Offline-first import. The deterministic engine does the bulk of the work and
+ * the AI is only asked to repair the questions the engine was unsure about.
+ * This is where the credit savings come from.
+ */
 export const parseQuestionsFromText = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ParseInput.parse(d))
   .handler(async ({ data, context }) => {
     await checkAiAccess(context.supabase, context.userId, "ai_parser");
     const started = Date.now();
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("AI is not configured yet.");
-    const gateway = createLovableAiGatewayProvider(key);
     const settings = data.settings ?? defaultSettings();
-    const prompt = buildPrompt(data.text, settings, data.format_hint);
+    const { advancedParse } = await import("./parse-engine");
+    const offline = advancedParse(data.text, {
+      defaultType: settings.default_question_type,
+      threshold: settings.confidence_threshold,
+    });
 
+    const key = process.env['LOVABLE_API_KEY'];
+    if (!key) {
+      if (!offline.questions.length) throw new Error("AI is not configured yet and the offline parser found no questions.");
+      return { ...normalizeParsed(offline as any, data.text, settings.confidence_threshold, Date.now() - started, "Parsed offline — review before publishing."), offline: true };
+    }
+    const gateway = createLovableAiGatewayProvider(key);
+    const model = "google/gemini-3-flash-preview";
+
+    // Nothing offline? Fall back to a full AI extraction.
+    if (!offline.questions.length) {
+      const prompt = buildPrompt(data.text, settings, data.format_hint);
+      try {
+        const full = await generateText({
+          model: gateway(model), system: SYSTEM_PROMPT, prompt, temperature: 0, maxOutputTokens: 16000,
+        });
+        await billAiUsage(context.userId, "ai_parser", {
+          model,
+          input_tokens: (full as any).usage?.inputTokens ?? 0,
+          output_tokens: (full as any).usage?.outputTokens ?? 0,
+        });
+        return normalizeParsed(safeParseAiJson(full.text), data.text, settings.confidence_threshold, Date.now() - started);
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        if (isBillingOrRateError(msg)) throw mapAiError(msg);
+        throw new Error("Could not read this text. Add clearer numbering, options (A., B.) or 'Answer:' lines and try again.");
+      }
+    }
+
+    // Only the weak ones go to AI.
+    const weak = offline.questions
+      .map((q, i) => ({ q, i }))
+      .filter(({ q }) => q.needs_review || !q.explanation);
+
+    if (!weak.length) {
+      return {
+        ...normalizeParsed(offline as any, data.text, settings.confidence_threshold, Date.now() - started),
+        offline: true,
+        ai_reviewed: 0,
+      };
+    }
+
+    const payload = weak.slice(0, 60).map(({ q, i }) => ({
+      id: i,
+      text: q.text.slice(0, 1500),
+      type: q.type,
+      options: q.options,
+      issue: q.review_reason,
+      raw: (q.raw_import_text ?? "").slice(0, 1200),
+    }));
 
     try {
-      const first = await generateText({
-        model: gateway("google/gemini-3-flash-preview"),
-        system: SYSTEM_PROMPT,
-        prompt,
+      const review = await generateText({
+        model: gateway(model),
+        system: `You repair questions that an offline parser was unsure about. For each item: fix the question text, ensure the option list is right, mark exactly one correct option (or the accepted answer for short, [] for essay), and ALWAYS write a 1-3 sentence "explanation" teaching why the answer is right. Never invent an answer that contradicts the raw text; if the answer truly is not present, keep needs_review true and say why.
+Return ONLY JSON: {"questions":[{"id":0,"text":"...","type":"mcq|tf|short|essay","options":[{"text":"...","is_correct":true}],"explanation":"...","sample_answer":"...","difficulty":"easy|medium|hard","ai_confidence":0,"needs_review":false,"review_reason":""}]}`,
+        prompt: JSON.stringify({ strictness: settings.strictness, items: payload }),
         temperature: 0,
-        maxOutputTokens: 16000,
+        maxOutputTokens: 8000,
       });
       await billAiUsage(context.userId, "ai_parser", {
-        model: "google/gemini-3-flash-preview",
-        input_tokens: (first as any).usage?.inputTokens ?? 0,
-        output_tokens: (first as any).usage?.outputTokens ?? 0,
+        model,
+        input_tokens: (review as any).usage?.inputTokens ?? 0,
+        output_tokens: (review as any).usage?.outputTokens ?? 0,
+        meta: { mode: "review", reviewed: payload.length },
       });
-      const parsed = safeParseAiJson(first.text);
 
-      return normalizeParsed(parsed, data.text, settings.confidence_threshold, Date.now() - started);
-    } catch (firstError: any) {
-      const firstMsg = String(firstError?.message ?? firstError);
-      if (isBillingOrRateError(firstMsg)) throw mapAiError(firstMsg);
-      try {
-        const repaired = await generateText({
-          model: gateway("google/gemini-3-flash-preview"),
-          system: "Repair the following quiz extraction into valid JSON matching the requested schema. Return only JSON. If extraction is impossible, return {\"questions\":[],\"needs_review_count\":0,\"failed_count\":0,\"overall_confidence\":0}.",
-          prompt: `${prompt}\n\nPrevious parser error: ${firstMsg}`,
-          temperature: 0,
-          maxOutputTokens: 16000,
-        });
-        const parsed = safeParseAiJson(repaired.text);
-        return normalizeParsed(parsed, data.text, settings.confidence_threshold, Date.now() - started);
-      } catch (secondError: any) {
-        const msg = String(secondError?.message ?? firstMsg);
-        if (isBillingOrRateError(msg)) throw mapAiError(msg);
-        const heuristic = heuristicParse(data.text, settings.default_question_type);
-        if (heuristic.questions.length) {
-          return normalizeParsed(heuristic, data.text, settings.confidence_threshold, Date.now() - started, "Recovered without full AI structure; please review imported questions.");
-        }
-        throw new Error("AI parser could not read this text. Try a smaller paste or add clearer numbering/answer labels.");
-      }
+      const repaired = safeParseAiJson(review.text);
+      const byId = new Map<number, any>();
+      (repaired.questions ?? []).forEach((r: any, idx: number) => {
+        const id = typeof r.id === "number" ? r.id : payload[idx]?.id;
+        if (typeof id === "number") byId.set(id, r);
+      });
+
+      const merged = offline.questions.map((q, i) => {
+        const fix = byId.get(i);
+        if (!fix) return q;
+        const options = Array.isArray(fix.options) && fix.options.length ? fix.options : q.options;
+        const hasCorrect = options.some((o: any) => o.is_correct);
+        return {
+          ...q,
+          text: fix.text?.trim() ? fix.text : q.text,
+          type: fix.type ?? q.type,
+          options,
+          explanation: fix.explanation ?? q.explanation,
+          sample_answer: fix.sample_answer ?? q.sample_answer,
+          difficulty: fix.difficulty ?? q.difficulty,
+          needs_review: fix.needs_review ?? !hasCorrect,
+          review_reason: fix.needs_review ? (fix.review_reason ?? q.review_reason) : null,
+          ai_confidence: typeof fix.ai_confidence === "number" && fix.ai_confidence > 0
+            ? (fix.ai_confidence <= 1 ? fix.ai_confidence * 100 : fix.ai_confidence)
+            : Math.max(q.ai_confidence, hasCorrect ? 80 : q.ai_confidence),
+        };
+      });
+
+      return {
+        ...normalizeParsed({ questions: merged } as any, data.text, settings.confidence_threshold, Date.now() - started),
+        offline: false,
+        ai_reviewed: payload.length,
+      };
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (isBillingOrRateError(msg)) throw mapAiError(msg);
+      return {
+        ...normalizeParsed(offline as any, data.text, settings.confidence_threshold, Date.now() - started, "AI review unavailable — offline results shown, please check each question."),
+        offline: true,
+        ai_reviewed: 0,
+      };
     }
   });
 
@@ -128,23 +202,45 @@ export const validateParseInput = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ text: z.string().max(60000) }).parse(d))
   .handler(async ({ data }) => validateInputText(data.text));
 
-// Deterministic non-AI parser. Free (no credits), rule-based.
+// Deterministic non-AI parser. Free (no credits), rule-based, free-tier limited.
 export const parseQuestionsHeuristic = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => ParseInput.parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
     const started = Date.now();
     const settings = data.settings ?? defaultSettings();
     const validation = validateInputText(data.text);
-    const heuristic = heuristicParse(data.text, settings.default_question_type);
+    const { advancedParse } = await import("./parse-engine");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const [{ data: platform }, { data: perms }] = await Promise.all([
+      db.from("payment_settings").select("free_tier_enabled, free_offline_parse_limit").eq("id", "default").maybeSingle(),
+      db.from("creator_permissions").select("max_quizzes, can_publish").eq("user_id", context.userId).maybeSingle(),
+    ]);
+    const isPaid = !!perms?.can_publish;
+    const limit = !isPaid && platform?.free_tier_enabled !== false
+      ? Number(platform?.free_offline_parse_limit ?? 20)
+      : undefined;
+
+    const engine = advancedParse(data.text, {
+      defaultType: settings.default_question_type,
+      threshold: settings.confidence_threshold,
+      maxQuestions: limit,
+    });
     const normalized = normalizeParsed(
-      heuristic,
+      engine as any,
       data.text,
       settings.confidence_threshold,
       Date.now() - started,
-      "Parsed offline without AI — please review each question.",
     );
-    return { ...normalized, offline: true, validation };
+    return {
+      ...normalized,
+      offline: true,
+      validation,
+      limited: limit !== undefined && engine.questions.length >= limit
+        ? `Free tier: only the first ${limit} questions were imported. Upgrade to creator access for unlimited imports.`
+        : null,
+    };
   });
 
 function validateInputText(text: string) {
