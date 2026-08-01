@@ -161,10 +161,10 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
     try {
       await onSave({ data: form });
       const r: any = await onWithdraw({ data: { amount_kobo: amount } });
-      window.open(r.whatsappUrl, "_blank");
-      toast.success("Request logged — WhatsApp opened to notify admin.");
+      setLink(r.whatsappUrl);
+      toast.success("Request logged — tap the WhatsApp link to notify the admin.");
       qc.invalidateQueries({ queryKey: ["my-wallet"] });
-      setOpen(false);
+
     } catch (e: any) { toast.error(e.message); }
   }
 
