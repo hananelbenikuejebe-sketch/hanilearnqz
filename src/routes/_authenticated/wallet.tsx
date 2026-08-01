@@ -16,6 +16,7 @@ import { getMyWallet, saveBankAccount, requestWithdrawal } from "@/lib/wallet.fu
 import { getPaymentSettings, initiatePayment, verifyAndSettle } from "@/lib/payments.functions";
 import { getOrCreateMyAffiliate } from "@/lib/affiliate.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
+import { PayDialog } from "@/components/pay-dialog";
 import { z } from "zod";
 
 export const Route = createFileRoute("/_authenticated/wallet")({
@@ -84,7 +85,7 @@ function WalletPage() {
             <CardContent>
               <div className="flex gap-2">
                 <Input type="number" min={settings?.ai_credit_min_topup_kobo ? settings.ai_credit_min_topup_kobo / 100 : 300} value={aiAmount / 100} onChange={(e) => setAiAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} className="w-28" />
-                <Button size="sm" disabled={buy.isPending} onClick={() => buy.mutate({ purpose: "ai_credit", amount_kobo: aiAmount })}>Top up</Button>
+                <PayDialog purpose="ai_credit" amountKobo={aiAmount} label="Top up" size="sm" />
                 <ContactAdmin purpose="AI credit" amount={aiAmount} />
               </div>
               <p className="text-xs text-muted-foreground mt-1">Min ₦{((settings?.ai_credit_min_topup_kobo ?? 30000)/100).toFixed(0)} · expires {settings?.ai_credit_expiry_days ?? 30}d</p>
@@ -99,7 +100,7 @@ function WalletPage() {
               <CardDescription>{settings ? `₦${(settings.creator_access_price_kobo/100).toFixed(0)} for ${settings.creator_access_duration_days} days · ${settings.creator_access_quiz_cap} quiz cap${settings.creator_access_includes_ai ? " · includes AI" : " · AI billed separately"}` : "…"}</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              <Button disabled={buy.isPending} onClick={() => buy.mutate({ purpose: "creator_access" })}>{buy.isPending ? "Redirecting…" : "Pay & unlock creator"}</Button>
+              <PayDialog purpose="creator_access" amountKobo={settings?.creator_access_price_kobo} label="Pay & unlock creator" />
               <ContactAdmin purpose="creator access" amount={settings?.creator_access_price_kobo} />
             </CardContent>
           </Card>
