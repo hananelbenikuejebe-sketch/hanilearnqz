@@ -152,6 +152,7 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
   const bank = wallet?.bank_account;
   const [form, setForm] = useState({ bank_name: bank?.bank_name ?? "", account_number: bank?.account_number ?? "", account_name: bank?.account_name ?? "" });
   const [amount, setAmount] = useState(0);
+  const [link, setLink] = useState<string | null>(null);
   const balance = wallet?.wallet?.balance_kobo ?? 0;
   const min = settings?.withdrawal_min_kobo ?? 100000;
 
@@ -164,26 +165,34 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
       setLink(r.whatsappUrl);
       toast.success("Request logged — tap the WhatsApp link to notify the admin.");
       qc.invalidateQueries({ queryKey: ["my-wallet"] });
-
-    } catch (e: any) { toast.error(e.message); }
+    } catch (e: any) { toast.error(e?.message ?? "Withdrawal request failed"); }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) setLink(null); }}>
       <DialogTrigger asChild><Button size="sm" variant="outline" disabled={balance <= 0}>Withdraw</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader><DialogTitle>Withdraw earnings</DialogTitle>
-          <DialogDescription>Min {`₦${(min/100).toFixed(0)}`}. Available {`₦${(balance/100).toFixed(2)}`}. On submit, a WhatsApp message is opened to notify the admin who processes payouts manually.</DialogDescription>
+          <DialogDescription>Min {`₦${(min/100).toFixed(0)}`}. Available {`₦${(balance/100).toFixed(2)}`}. After submitting, send the WhatsApp message so the admin can process your payout.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
-          <div><Label>Amount (₦)</Label><Input type="number" min={min/100} max={balance/100} value={amount / 100 || ""} onChange={(e) => setAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} /></div>
-          <div className="grid grid-cols-2 gap-2">
-            <div><Label>Bank</Label><Input value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} /></div>
-            <div><Label>Account #</Label><Input value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} /></div>
+        {link ? (
+          <div className="space-y-3 text-sm">
+            <p>Your request was logged and the funds are on hold. Send this message to complete it:</p>
+            <Button asChild className="w-full"><a href={link} target="_blank" rel="noopener noreferrer">Open WhatsApp to notify admin</a></Button>
           </div>
-          <div><Label>Account name</Label><Input value={form.account_name} onChange={(e) => setForm({ ...form, account_name: e.target.value })} /></div>
-        </div>
-        <DialogFooter><Button onClick={submit} disabled={!amount || !form.bank_name || !form.account_number}>Send request</Button></DialogFooter>
+        ) : (
+          <>
+            <div className="space-y-3">
+              <div><Label>Amount (₦)</Label><Input type="number" min={min/100} max={balance/100} value={amount / 100 || ""} onChange={(e) => setAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} /></div>
+              <div className="grid grid-cols-2 gap-2">
+                <div><Label>Bank</Label><Input value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} /></div>
+                <div><Label>Account #</Label><Input value={form.account_number} onChange={(e) => setForm({ ...form, account_number: e.target.value })} /></div>
+              </div>
+              <div><Label>Account name</Label><Input value={form.account_name} onChange={(e) => setForm({ ...form, account_name: e.target.value })} /></div>
+            </div>
+            <DialogFooter><Button onClick={submit} disabled={!amount || !form.bank_name || !form.account_number}>Send request</Button></DialogFooter>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
