@@ -19,6 +19,10 @@ const ParsedQuestionSchema = z.object({
   review_reason: z.string().optional().nullable(),
   raw_import_text: z.string().optional().nullable(),
   sample_answer: z.string().optional().nullable(),
+  points: z.coerce.number().optional().nullable(),
+  generated: z.boolean().optional(),
+  change_note: z.string().max(200).optional().nullable(),
+  id: z.coerce.number().optional(),
 });
 
 const ParsedSchema = z.object({
