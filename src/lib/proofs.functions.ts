@@ -215,7 +215,7 @@ export const getMyPaymentProofs = createServerFn({ method: "GET" })
 export const listPaymentProofs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({
-    status: z.enum(["all", "pending", "auto_approved", "confirmed", "declined"]).default("all"),
+    status: z.enum(["all", "needs_review", "pending", "auto_approved", "confirmed", "declined"]).default("needs_review"),
     q: z.string().max(120).optional(),
   }).parse(d))
   .handler(async ({ context, data }) => {
@@ -225,7 +225,8 @@ export const listPaymentProofs = createServerFn({ method: "POST" })
     let query = db.from("payment_proofs")
       .select("*, profiles:user_id(full_name, email, handle)")
       .order("created_at", { ascending: false }).limit(200);
-    if (data.status !== "all") query = query.eq("status", data.status);
+    if (data.status === "needs_review") query = query.in("status", ["pending", "auto_approved"]);
+    else if (data.status !== "all") query = query.eq("status", data.status);
     const { data: rows } = await query;
     let list = rows ?? [];
     if (data.q?.trim()) {
