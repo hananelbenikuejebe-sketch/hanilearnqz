@@ -26,16 +26,48 @@ export type EngineQuestion = {
 
 const TICK = /[\u2713\u2714\u2705\u2611\u2612\u2716\u274C]/; // ✓ ✔ ✅ ☑ ☒ ✖ ❌
 const GOOD_TICK = /[\u2713\u2714\u2705\u2611]/;
-const ANSWER_LABEL = /^(?:answer|ans|correct(?:\s*(?:answer|option))?|key|solution)\s*[:\-–=]\s*/i;
-const EXPL_LABEL = /^(?:explanation|reason|rationale|because|why|note|hint)\s*[:\-–=]\s*/i;
-const SCHEME_LABEL = /^(?:marking\s*scheme|model\s*answer|sample\s*answer|expected\s*answer|rubric|guide)\s*[:\-–=]\s*/i;
+
+/** Inline label vocabulary. These may appear at the start of a line OR mid-line
+ * ("Answer: B. Reason: water expands when it freezes."). */
+const ANSWER_WORDS = "answer|answers|ans|correct\\s*answer|correct\\s*option|correct|key|solution|soln";
+const EXPL_WORDS = "explanation|explanations|explain|reason|reasoning|rationale|rational|justification|why|because|note|notes|hint|remark|remarks|comment";
+const SCHEME_WORDS = "marking\\s*scheme|mark\\s*scheme|model\\s*answer|sample\\s*answer|expected\\s*answer|suggested\\s*answer|rubric|answer\\s*guide";
+const LABEL_SRC = `(?:^|[\\s.;:)\\]}"'\u2013\u2014-])((?:${SCHEME_WORDS}|${ANSWER_WORDS}|${EXPL_WORDS}))\\s*(?:[:\\-\u2013\u2014=]|\\bis\\b)\\s+`;
+
+const ANSWER_LABEL = new RegExp(`^(?:${ANSWER_WORDS})\\s*[:\\-\u2013=]\\s*`, "i");
+const EXPL_LABEL = new RegExp(`^(?:${EXPL_WORDS})\\s*[:\\-\u2013=]\\s*`, "i");
+const SCHEME_LABEL = new RegExp(`^(?:${SCHEME_WORDS})\\s*[:\\-\u2013=]\\s*`, "i");
 const PASSAGE_LABEL = /^(?:passage|extract|comprehension|read\s+the\s+following[^\n]*)\s*[:\-–]?\s*/i;
 const SECTION_LABEL = /^(?:section|part|paper|topic|subject|chapter|unit|module)\b[^\n]{0,60}$/i;
 const QUESTION_START = /^\s*(?:(?:q(?:uestion)?\s*)?(\d{1,3})[.)\-:\]]|\((\d{1,3})\)|(?:q|Q)(\d{1,3})\b)\s+/;
-const OPTION_START = /^\s*(?:\(([A-Ha-h])\)|([A-Ha-h])[.)\-:]|\(([ivxIVX]{1,4})\)|([ivx]{1,4})[.)]|([•*\u2022\u25CF\-])\s)\s*/;
+const OPTION_START = /^\s*(?:\(([A-Ha-h])\)|([A-Ha-h])\s*[.)\-:=]|\(([ivxIVX]{1,4})\)|([ivx]{1,4})[.)]|([•*\u2022\u25CF\u25AA\u2043\-])\s)\s*/;
 const INLINE_OPTIONS = /(?:^|\s)(?:\(?([A-Ha-h])\)|([A-Ha-h])[.)])\s+/g;
 const MARKS = /[\[(]\s*(\d{1,3})\s*(?:marks?|mks?|pts?|points?)\s*[\])]/i;
 const DIFF_HINT = /[\[(]\s*(easy|medium|moderate|hard|difficult)\s*[\])]/i;
+
+type LabelKind = "text" | "answer" | "explanation" | "scheme";
+
+function classifyLabel(word: string): LabelKind {
+  const w = word.toLowerCase().replace(/\s+/g, " ");
+  if (new RegExp(`^(?:${SCHEME_WORDS})$`, "i").test(w)) return "scheme";
+  if (new RegExp(`^(?:${ANSWER_WORDS})$`, "i").test(w)) return "answer";
+  return "explanation";
+}
+
+/** Split a single line into labelled pieces, honouring mid-line labels. */
+function splitLabeled(line: string): { kind: LabelKind; value: string }[] {
+  const parts = line.split(new RegExp(LABEL_SRC, "gi"));
+  const out: { kind: LabelKind; value: string }[] = [];
+  if (parts[0] && parts[0].trim()) out.push({ kind: "text", value: parts[0].trim() });
+  for (let i = 1; i < parts.length; i += 2) {
+    const word = parts[i];
+    if (!word) continue;
+    out.push({ kind: classifyLabel(word), value: (parts[i + 1] ?? "").trim() });
+  }
+  if (!out.length && line.trim()) out.push({ kind: "text", value: line.trim() });
+  return out;
+}
+
 
 export type EngineOptions = {
   defaultType?: "mcq" | "tf" | "short" | "essay";
