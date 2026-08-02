@@ -222,7 +222,8 @@ function segmentDocument(body: string) {
   push();
 
   // If the doc had no numbering at all, fall back to blank-line blocks.
-  if (segments.length <= 1 && body.includes("\n\n")) {
+  const hasNumbering = segments.some((s) => s.number !== null);
+  if (!hasNumbering && body.includes("\n\n")) {
     const blocks = body.split(/\n\s*\n/).map((b) => b.trim()).filter((b) => b.length > 12);
     if (blocks.length > 1) {
       return blocks.map((b) => ({ number: null, lines: b.split("\n"), subsection: null, passage: null }));
