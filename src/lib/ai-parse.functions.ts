@@ -120,6 +120,16 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
       }
     }
 
+    // Oversight is opt-in — when it's off, the offline result is the result.
+    if (!data.ai_oversight) {
+      return {
+        ...normalizeParsed(offline as any, data.text, settings.confidence_threshold, Date.now() - started),
+        offline: true,
+        ai_reviewed: 0,
+        ai_fixed: 0,
+      };
+    }
+
     // Only the weak ones go to AI.
     const weak = offline.questions
       .map((q, i) => ({ q, i }))
@@ -130,77 +140,131 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
         ...normalizeParsed(offline as any, data.text, settings.confidence_threshold, Date.now() - started),
         offline: true,
         ai_reviewed: 0,
+        ai_fixed: 0,
       };
     }
 
-    const payload = weak.slice(0, 60).map(({ q, i }) => ({
-      id: i,
-      text: q.text.slice(0, 1500),
-      type: q.type,
-      options: q.options,
-      issue: q.review_reason,
-      raw: (q.raw_import_text ?? "").slice(0, 1200),
-    }));
+    // Batch in small groups so one long response can never truncate the whole run.
+    const BATCH = 12;
+    const batches: { q: any; i: number }[][] = [];
+    for (let i = 0; i < weak.length && batches.length * BATCH < 120; i += BATCH) {
+      batches.push(weak.slice(i, i + BATCH));
+    }
 
-    try {
-      const review = await generateText({
-        model: gateway(model),
-        system: `You repair questions that an offline parser was unsure about. For each item: fix the question text, ensure the option list is right, mark exactly one correct option (or the accepted answer for short, [] for essay), and ALWAYS write a 1-3 sentence "explanation" teaching why the answer is right. Never invent an answer that contradicts the raw text; if the answer truly is not present, keep needs_review true and say why.
-Return ONLY JSON: {"questions":[{"id":0,"text":"...","type":"mcq|tf|short|essay","options":[{"text":"...","is_correct":true}],"explanation":"...","sample_answer":"...","difficulty":"easy|medium|hard","ai_confidence":0,"needs_review":false,"review_reason":""}]}`,
-        prompt: JSON.stringify({ strictness: settings.strictness, items: payload }),
-        temperature: 0,
-        maxOutputTokens: 8000,
-      });
-      await billAiUsage(context.userId, "ai_parser", {
-        model,
-        input_tokens: (review as any).usage?.inputTokens ?? 0,
-        output_tokens: (review as any).usage?.outputTokens ?? 0,
-        meta: { mode: "review", reviewed: payload.length },
-      });
+    const system = data.ai_generative
+      ? `You are a question-repair and completion engine for an exam app. Each item was extracted by a rule-based parser that was unsure about it.
+For every item:
+- Rebuild "text" as a clean, self-contained question from "raw" (keep the original wording and any passage).
+- Build the full option list for mcq (2-6 options) and mark exactly ONE correct option.
+- If the source does not state the answer, you MAY determine the correct answer yourself from subject knowledge, and set "generated":true.
+- If you had to write or complete options or an answer, set "generated":true and explain what you changed in "change_note" (max 90 chars).
+- ALWAYS write "explanation": 1-3 sentences teaching why the answer is right.
+- type: mcq | tf | short | essay. tf → exactly True and False options. short → the accepted answer as the single correct option. essay → options: [] and a "sample_answer".
+- Only set needs_review true if the item is genuinely unusable.`
+      : `You are a question-repair engine for an exam app. Each item was extracted by a rule-based parser that was unsure about it.
+For every item:
+- Rebuild "text" as a clean, self-contained question from "raw" (keep the original wording and any passage).
+- Fix the option list and mark the correct option ONLY when "raw" states or clearly implies it. NEVER invent an answer that is not in the source — if it is absent, keep needs_review true and say so in review_reason.
+- ALWAYS write "explanation": 1-3 sentences teaching why the answer is right.
+- type: mcq | tf | short | essay. tf → exactly True and False options. short → the accepted answer as the single correct option. essay → options: [] and a "sample_answer".`;
 
-      const repaired = safeParseAiJson(review.text);
-      const byId = new Map<number, any>();
-      (repaired.questions ?? []).forEach((r: any, idx: number) => {
-        const id = typeof r.id === "number" ? r.id : payload[idx]?.id;
-        if (typeof id === "number") byId.set(id, r);
-      });
+    const schemaLine = `Return ONLY minified JSON, no markdown: {"questions":[{"id":0,"text":"...","type":"mcq","options":[{"text":"...","is_correct":true}],"explanation":"...","sample_answer":"","difficulty":"medium","ai_confidence":0,"needs_review":false,"review_reason":"","generated":false,"change_note":""}]}`;
 
-      const merged = offline.questions.map((q, i) => {
-        const fix = byId.get(i);
-        if (!fix) return q;
-        const options = Array.isArray(fix.options) && fix.options.length ? fix.options : q.options;
-        const hasCorrect = options.some((o: any) => o.is_correct);
-        return {
-          ...q,
-          text: fix.text?.trim() ? fix.text : q.text,
-          type: fix.type ?? q.type,
-          options,
-          explanation: fix.explanation ?? q.explanation,
-          sample_answer: fix.sample_answer ?? q.sample_answer,
-          difficulty: fix.difficulty ?? q.difficulty,
-          needs_review: fix.needs_review ?? !hasCorrect,
-          review_reason: fix.needs_review ? (fix.review_reason ?? q.review_reason) : null,
-          ai_confidence: typeof fix.ai_confidence === "number" && fix.ai_confidence > 0
-            ? (fix.ai_confidence <= 1 ? fix.ai_confidence * 100 : fix.ai_confidence)
-            : Math.max(q.ai_confidence, hasCorrect ? 80 : q.ai_confidence),
-        };
-      });
+    const byId = new Map<number, any>();
+    let reviewed = 0;
+    let batchFailures = 0;
 
+    for (const batch of batches) {
+      const payload = batch.map(({ q, i }) => ({
+        id: i,
+        text: q.text.slice(0, 1500),
+        type: q.type,
+        options: q.options,
+        issue: q.review_reason,
+        raw: (q.raw_import_text ?? "").slice(0, 1800),
+      }));
+      try {
+        const review = await generateText({
+          model: gateway(model),
+          system: `${system}\n${schemaLine}`,
+          prompt: JSON.stringify({ strictness: settings.strictness, items: payload }),
+          temperature: 0,
+          maxOutputTokens: 6000,
+        });
+        await billAiUsage(context.userId, data.ai_generative ? "ai_review" : "ai_parser", {
+          model,
+          input_tokens: (review as any).usage?.inputTokens ?? 0,
+          output_tokens: (review as any).usage?.outputTokens ?? 0,
+          meta: { mode: data.ai_generative ? "generative-review" : "review", reviewed: payload.length },
+        });
+        const repaired = safeParseAiJson(review.text);
+        (repaired.questions ?? []).forEach((r: any, idx: number) => {
+          const id = typeof r.id === "number" ? r.id : payload[idx]?.id;
+          if (typeof id === "number" && String(r.text ?? "").trim().length > 3) byId.set(id, r);
+        });
+        reviewed += payload.length;
+      } catch (e: any) {
+        const msg = String(e?.message ?? e);
+        if (isBillingOrRateError(msg)) throw mapAiError(msg);
+        batchFailures++;
+      }
+    }
+
+    if (!byId.size) {
       return {
-        ...normalizeParsed({ questions: merged } as any, data.text, settings.confidence_threshold, Date.now() - started),
-        offline: false,
-        ai_reviewed: payload.length,
-      };
-    } catch (e: any) {
-      const msg = String(e?.message ?? e);
-      if (isBillingOrRateError(msg)) throw mapAiError(msg);
-      return {
-        ...normalizeParsed(offline as any, data.text, settings.confidence_threshold, Date.now() - started, "AI review unavailable — offline results shown, please check each question."),
+        ...normalizeParsed(offline as any, data.text, settings.confidence_threshold, Date.now() - started,
+          "AI oversight could not be applied — offline results shown, please check each question."),
         offline: true,
         ai_reviewed: 0,
+        ai_fixed: 0,
       };
     }
+
+    let fixedCount = 0;
+    const merged = offline.questions.map((q, i) => {
+      const fix = byId.get(i);
+      if (!fix) return q;
+      const rawOptions = Array.isArray(fix.options) ? fix.options.filter((o: any) => String(o?.text ?? "").trim()) : [];
+      const options = rawOptions.length ? rawOptions : q.options;
+      const hasCorrect = options.some((o: any) => o.is_correct);
+      const wasGenerated = fix.generated === true;
+      // In non-generative mode, never let AI assert an answer the source lacks.
+      const keepOptions = !data.ai_generative && wasGenerated ? q.options : options;
+      const changed = fix.text?.trim() !== q.text || rawOptions.length > 0 || !!fix.explanation;
+      if (changed) fixedCount++;
+      const notes = [
+        wasGenerated && data.ai_generative ? `AI completed this question${fix.change_note ? `: ${fix.change_note}` : ""}` : null,
+        fix.needs_review ? (fix.review_reason ?? q.review_reason) : null,
+      ].filter(Boolean).join("; ") || null;
+      return {
+        ...q,
+        text: fix.text?.trim() ? fix.text : q.text,
+        type: fix.type ?? q.type,
+        options: keepOptions,
+        explanation: fix.explanation ?? q.explanation,
+        sample_answer: fix.sample_answer || q.sample_answer,
+        difficulty: fix.difficulty ?? q.difficulty,
+        ai_generated: wasGenerated && data.ai_generative,
+        needs_review: fix.needs_review === true || !keepOptions.some((o: any) => o.is_correct) && q.type === "mcq"
+          ? true
+          : wasGenerated && data.ai_generative,
+        review_reason: notes,
+        ai_confidence: typeof fix.ai_confidence === "number" && fix.ai_confidence > 0
+          ? (fix.ai_confidence <= 1 ? fix.ai_confidence * 100 : fix.ai_confidence)
+          : Math.max(q.ai_confidence, hasCorrect ? 80 : q.ai_confidence),
+      };
+    });
+
+    return {
+      ...normalizeParsed({ questions: merged } as any, data.text, settings.confidence_threshold, Date.now() - started,
+        batchFailures ? "Some batches could not be reviewed by AI — check the flagged questions." : undefined),
+      offline: false,
+      ai_reviewed: reviewed,
+      ai_fixed: fixedCount,
+      ai_generative: data.ai_generative,
+    };
   });
+
 
 // Lightweight pre-parse validator — runs before any AI or heuristic parse.
 export const validateParseInput = createServerFn({ method: "POST" })
