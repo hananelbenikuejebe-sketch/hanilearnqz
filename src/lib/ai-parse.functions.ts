@@ -64,7 +64,13 @@ const ParseInput = z.object({
     ask_confirmation: z.boolean().default(true),
   }).optional(),
   format_hint: z.string().max(40).optional(),
+  /** Opt-in: let AI repair questions the offline engine flagged. Burns credit. */
+  ai_oversight: z.boolean().default(true),
+  /** Opt-in: let AI *rewrite/complete* broken questions and supply missing
+   * answers it can derive. Reported back per question so the creator sees it. */
+  ai_generative: z.boolean().default(false),
 });
+
 
 type ParseSettings = NonNullable<z.infer<typeof ParseInput>["settings"]>;
 
