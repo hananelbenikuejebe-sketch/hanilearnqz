@@ -122,27 +122,38 @@ function normalize(input: string) {
   return { body: text };
 }
 
-/** Trailing answer keys: "ANSWERS" / "ANSWER KEY" blocks, or "1-A, 2-B" lines. */
+/** Trailing answer keys: "ANSWERS" / "ANSWER KEY" blocks, or "1-A, 2-B" lines.
+ *
+ * The block form must be a header on its OWN line ("ANSWERS:" then the pairs
+ * below) and must actually contain numbered pairs — otherwise an ordinary
+ * per-question "Answer: B" line would be mistaken for the key block and the
+ * rest of the paper would be discarded. */
 function extractAnswerKey(raw: { body: string }) {
   const map = new Map<number, string>();
-  const keyBlock = raw.body.match(/\n\s*(?:answers?|answer\s*key|solutions?)\s*[:\-]?\s*\n?([\s\S]{0,4000})$/i);
+  const keyBlock = raw.body.match(
+    /\n[ \t]*(?:answers?|answer\s*key|solutions?|marking\s*scheme)[ \t]*[:\-]?[ \t]*\n([\s\S]{0,4000})$/i,
+  );
+  const pairRe = /(\d{1,3})\s*[.)\-:]?\s*([A-Ha-h]|true|false|t|f)\b/gi;
   const scanTargets: string[] = [];
-  if (keyBlock) scanTargets.push(keyBlock[1]);
+  const blockBody = keyBlock?.[1] ?? "";
+  const blockLooksLikeKey = !!blockBody && (blockBody.match(pairRe)?.length ?? 0) >= 3;
+  if (blockLooksLikeKey) scanTargets.push(blockBody);
   // Also scan compact one-liners anywhere: "1. A  2. B  3. D"
   const compact = raw.body.match(/(?:^|\n)\s*(?:\d{1,3}\s*[.)\-]\s*[A-Ha-h]\b[\s,;]*){3,}/g);
   if (compact) scanTargets.push(compact.join("\n"));
 
   for (const chunk of scanTargets) {
-    const re = /(\d{1,3})\s*[.)\-:]?\s*([A-Ha-h]|true|false|t|f)\b/gi;
+    const re = new RegExp(pairRe.source, "gi");
     let m: RegExpExecArray | null;
     while ((m = re.exec(chunk))) {
       const n = Number(m[1]);
       if (!map.has(n)) map.set(n, m[2]);
     }
   }
-  if (keyBlock) raw.body = raw.body.slice(0, raw.body.length - keyBlock[0].length);
+  if (keyBlock && blockLooksLikeKey) raw.body = raw.body.slice(0, raw.body.length - keyBlock[0].length);
   return map;
 }
+
 
 type Segment = {
   number: number | null;
