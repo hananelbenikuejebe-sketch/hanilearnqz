@@ -44,14 +44,17 @@ export function algorithmicVerify(input: {
 }): AlgoResult {
   const { claim, expected_kobo, settings } = input;
   const reasons: string[] = [];
-  let score = 35;
+  // Everything below is SELF-REPORTED by the payer, so it can only ever build a
+  // weak case. The offline pass exists to reject obvious junk, never to approve
+  // on its own — approval requires the receipt image to be read (AI) or a human.
+  let score = 10;
   let hard_fail = false;
 
   // Amount
   const diff = claim.amount_kobo - expected_kobo;
-  if (diff === 0) { score += 30; reasons.push("Amount matches exactly"); }
-  else if (diff > 0) { score += 25; reasons.push("Overpaid slightly"); }
-  else if (Math.abs(diff) <= Math.max(100, expected_kobo * 0.01)) { score += 15; reasons.push("Amount within tolerance"); }
+  if (diff === 0) { score += 12; reasons.push("Claimed amount matches exactly"); }
+  else if (diff > 0) { score += 10; reasons.push("Claimed an overpayment"); }
+  else if (Math.abs(diff) <= Math.max(100, expected_kobo * 0.01)) { score += 6; reasons.push("Claimed amount within tolerance"); }
   else { score -= 45; hard_fail = true; reasons.push("Claimed amount is less than the required amount"); }
 
   // Date window
@@ -59,38 +62,41 @@ export function algorithmicVerify(input: {
   if (!Number.isFinite(paid)) { score -= 15; reasons.push("Unreadable payment date"); }
   else {
     const ageDays = (Date.now() - paid) / 86_400_000;
-    if (ageDays < -1) { score -= 30; reasons.push("Payment date is in the future"); }
-    else if (ageDays <= settings.proof_max_age_days) { score += 20; reasons.push("Payment date is recent"); }
-    else { score -= 10; reasons.push(`Receipt is older than ${settings.proof_max_age_days} days`); }
+    if (ageDays < -1) { score -= 30; hard_fail = true; reasons.push("Payment date is in the future"); }
+    else if (ageDays <= settings.proof_max_age_days) { score += 8; reasons.push("Payment date is recent"); }
+    else { score -= 15; reasons.push(`Receipt is older than ${settings.proof_max_age_days} days`); }
   }
 
   // Reference
   if (input.duplicate_ref) { score -= 60; hard_fail = true; reasons.push("This transaction reference was already used"); }
-  else if (claim.bank_ref && claim.bank_ref.trim().length >= 4) { score += 15; reasons.push("Transaction reference supplied"); }
+  else if (claim.bank_ref && claim.bank_ref.trim().length >= 4) { score += 6; reasons.push("Transaction reference supplied"); }
   else { score -= 5; reasons.push("No transaction reference supplied"); }
 
   // Sender name
   if (claim.sender_name.trim().length >= 3) {
-    score += 8;
+    score += 4;
     const sim = similarity(claim.sender_name, input.profile_name ?? "");
-    if (sim >= 0.5) { score += 10; reasons.push("Sender name matches the account holder"); }
+    if (sim >= 0.5) { score += 6; reasons.push("Sender name matches the account holder"); }
   } else { score -= 10; reasons.push("Sender name missing"); }
 
   // File sanity
   const mime = (input.file.mime ?? "").toLowerCase();
-  if (/^image\/|pdf/.test(mime)) score += 8; else { score -= 10; reasons.push("Unexpected file type"); }
+  if (/^image\/|pdf/.test(mime)) score += 4;
+  else { score -= 20; hard_fail = true; reasons.push("Attachment is not an image or PDF"); }
   const size = Number(input.file.size ?? 0);
-  if (size > 15_000) score += 6;
-  else if (size > 0 && size < 4_000) { score -= 20; reasons.push("Receipt file is suspiciously small"); }
+  if (size > 15_000) score += 4;
+  else if (size > 0 && size < 4_000) { score -= 25; hard_fail = true; reasons.push("Receipt file is suspiciously small"); }
 
-  // Laxity
-  if (settings.proof_laxity === "lax") score += 12;
-  else if (settings.proof_laxity === "strict") score -= 12;
+  // Laxity nudges the offline pass only slightly.
+  if (settings.proof_laxity === "lax") score += 6;
+  else if (settings.proof_laxity === "strict") score -= 8;
 
-  score = Math.max(0, Math.min(100, Math.round(score)));
-  const conclusive = hard_fail || score >= settings.proof_min_confidence + 15;
-  return { score, reasons, hard_fail, conclusive };
+  // Hard ceiling: self-reported evidence alone tops out well below any sane
+  // approval threshold. Only aiVerifyReceipt or an admin can lift it.
+  score = Math.max(0, Math.min(45, Math.round(score)));
+  return { score, reasons, hard_fail, conclusive: hard_fail };
 }
+
 
 /** AI vision read of the receipt. Returns null when AI is unavailable. */
 export async function aiVerifyReceipt(args: {
