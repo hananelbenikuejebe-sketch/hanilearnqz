@@ -17,13 +17,15 @@ function Dashboard() {
   const isAdmin = !!role?.isAdmin;
   const adminFn = useServerFn(getAdminAnalytics);
   const creatorFn = useServerFn(getMyCreatorAnalytics);
-  const { data, isLoading } = useQuery({
+  const { data: raw, isLoading } = useQuery({
     queryKey: ["dash-analytics", isAdmin ? "admin" : "creator"],
-    queryFn: () => (isAdmin ? adminFn() : creatorFn()),
+    queryFn: async () => (isAdmin ? await adminFn() : await creatorFn()) as any,
     enabled: !!role,
   });
+  const data: any = raw;
 
   const summary: any = data?.summary ?? {};
+
 
   return (
     <div className="space-y-6">
