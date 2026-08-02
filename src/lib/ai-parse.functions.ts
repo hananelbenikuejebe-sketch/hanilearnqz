@@ -287,14 +287,10 @@ export const parseQuestionsHeuristic = createServerFn({ method: "POST" })
     const { advancedParse } = await import("./parse-engine");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
-    const [{ data: platform }, { data: perms }] = await Promise.all([
-      db.from("payment_settings").select("free_tier_enabled, free_offline_parse_limit").eq("id", "default").maybeSingle(),
-      db.from("creator_permissions").select("max_quizzes, can_publish").eq("user_id", context.userId).maybeSingle(),
-    ]);
-    const isPaid = !!perms?.can_publish;
-    const limit = !isPaid && platform?.free_tier_enabled !== false
-      ? Number(platform?.free_offline_parse_limit ?? 20)
-      : undefined;
+    const { getEffectivePerms } = await import("./authz.server");
+    const eff = await getEffectivePerms(context.supabase, context.userId);
+    void db;
+    const limit = eff.offline_parse_limit && eff.offline_parse_limit > 0 ? eff.offline_parse_limit : undefined;
 
     const engine = advancedParse(data.text, {
       defaultType: settings.default_question_type,
@@ -546,3 +542,90 @@ function mapAiError(msg: string) {
   if (msg.includes("402")) return new Error("AI credits exhausted. Add credits to continue.");
   return new Error(msg);
 }
+
+/* ------------------------- AI question generator -------------------------- */
+
+const GenerateInput = z.object({
+  topic: z.string().trim().min(3).max(300),
+  source: z.string().max(20000).optional(),
+  count: z.number().int().min(1).max(40).default(10),
+  type: z.enum(["mcq", "tf", "short", "essay", "mixed"]).default("mcq"),
+  difficulty: z.enum(["easy", "medium", "hard", "mixed"]).default("medium"),
+  subject: z.string().max(80).optional(),
+  exam: z.string().max(80).optional(),
+  with_explanations: z.boolean().default(true),
+});
+
+/**
+ * In-app question generator. The model writes questions in the app's plain
+ * import format, then the deterministic engine parses them exactly like a
+ * pasted document — so generated and imported questions behave identically.
+ */
+export const generateQuestionsAi = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => GenerateInput.parse(d))
+  .handler(async ({ data, context }) => {
+    await checkAiAccess(context.supabase, context.userId, "ai_generate");
+    const key = process.env['LOVABLE_API_KEY'];
+    if (!key) throw new Error("AI is not configured yet.");
+    const gateway = createLovableAiGatewayProvider(key);
+    const model = "google/gemini-3-flash-preview";
+    const started = Date.now();
+
+    const system = `You write exam questions for a Nigerian study app. Output PLAIN TEXT in exactly this import format, nothing else — no markdown, no preamble, no numbering gaps:
+
+1. <question text>
+A) <option>
+B) <option>
+C) <option>
+D) <option>
+Answer: <letter>
+Explanation: <1-2 sentences on why it is right>
+
+Rules:
+- True/False items: write the statement, then "A) True" and "B) False".
+- Short answer items: write the question then "Answer: <the accepted answer>".
+- Essay/theory items: write the prompt, then "Marking scheme: <what a full-mark answer must contain>".
+- Never repeat a question. Never leave an Answer line out. Keep each option on its own line.
+- Group items under headers like "Section A: <topic>" when you cover more than one topic.`;
+
+    const prompt = [
+      `Write ${data.count} ${data.type === "mixed" ? "mixed-type" : data.type} question(s).`,
+      `Topic: ${data.topic}`,
+      data.subject ? `Subject: ${data.subject}` : null,
+      data.exam ? `Exam style: ${data.exam}` : null,
+      `Difficulty: ${data.difficulty}`,
+      data.with_explanations ? "Include an Explanation line for every question." : "Explanations optional.",
+      data.source ? `Base the questions ONLY on this source material:\n${data.source.slice(0, 16000)}` : null,
+    ].filter(Boolean).join("\n");
+
+    let text = "";
+    try {
+      const res = await generateText({
+        model: gateway(model), system, prompt, temperature: 0.4, maxOutputTokens: 8000,
+      });
+      text = res.text ?? "";
+      await billAiUsage(context.userId, "ai_generate", {
+        model,
+        input_tokens: (res as any).usage?.inputTokens ?? 0,
+        output_tokens: (res as any).usage?.outputTokens ?? 0,
+        meta: { count: data.count, topic: data.topic.slice(0, 80) },
+      });
+    } catch (e: any) {
+      const msg = String(e?.message ?? e);
+      if (isBillingOrRateError(msg)) throw mapAiError(msg);
+      throw new Error("The generator could not produce questions. Try a narrower topic or fewer questions.");
+    }
+
+    if (!text.trim()) throw new Error("The generator returned nothing. Try again.");
+
+    const { advancedParse } = await import("./parse-engine");
+    const engine = advancedParse(text, { defaultType: data.type === "mixed" ? "mcq" : data.type });
+    const normalized = normalizeParsed(engine as any, text, 70, Date.now() - started);
+    return {
+      ...normalized,
+      questions: normalized.questions.map((q: any) => ({ ...q, ai_generated: true })),
+      generated_text: text,
+      requested: data.count,
+    };
+  });
