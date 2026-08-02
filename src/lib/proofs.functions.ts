@@ -118,32 +118,46 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
     let finalScore = algo.score;
     const reasons = [...algo.reasons];
     let usedAi = false;
+    let imageRead = false;
     let extractedAi: any = null;
 
-    if (!algo.hard_fail && !algo.conclusive && settings.proof_use_ai) {
+    // The offline pass can only reject. Anything that isn't an outright fail goes
+    // to the image reader; if the image can't be read, a human decides.
+    if (!algo.hard_fail && settings.proof_use_ai) {
       try {
         const { data: signed } = await db.storage.from("payment-proofs").createSignedUrl(data.file_path, 600);
-        if (signed?.signedUrl) {
-          const ai = await aiVerifyReceipt({ signedUrl: signed.signedUrl, expected_kobo: expected, claim, settings });
-          if (ai) {
-            usedAi = true;
-            extractedAi = ai.extracted;
-            reasons.push(...ai.reasons);
-            if (typeof ai.score === "number") finalScore = Math.round((algo.score + ai.score * 2) / 3);
-            await billAiUsage(context.userId, "ai_proof", {
-              model: ai.model,
-              input_tokens: (ai.usage as any)?.inputTokens ?? 0,
-              output_tokens: (ai.usage as any)?.outputTokens ?? 0,
-              meta: { proof_reference: reference },
-            });
+        if (!signed?.signedUrl) throw new Error("no signed url");
+        const ai = await aiVerifyReceipt({ signedUrl: signed.signedUrl, expected_kobo: expected, claim, settings });
+        if (ai) {
+          usedAi = true;
+          extractedAi = ai.extracted;
+          reasons.push(...ai.reasons);
+          if (typeof ai.score === "number" && ai.extracted) {
+            imageRead = true;
+            // The image read dominates; the self-reported claim only nudges.
+            finalScore = Math.round(ai.score * 0.85 + algo.score * 0.15);
+          } else {
+            reasons.push("Receipt image could not be read — queued for manual review");
           }
+          await billAiUsage(context.userId, "ai_proof", {
+            model: ai.model,
+            input_tokens: (ai.usage as any)?.inputTokens ?? 0,
+            output_tokens: (ai.usage as any)?.outputTokens ?? 0,
+            meta: { proof_reference: reference },
+          });
         }
-      } catch (e) {
-        reasons.push("Automatic image check unavailable — sent for manual review");
+      } catch {
+        reasons.push("Automatic image check unavailable — queued for manual review");
       }
+    } else if (!settings.proof_use_ai) {
+      reasons.push("Automatic image check is switched off — manual review required");
     }
 
-    const approve = !algo.hard_fail && settings.proof_auto_approve && finalScore >= Number(settings.proof_min_confidence ?? 55);
+    // Auto-approval REQUIRES a successful image read that scores above the bar.
+    const approve = !algo.hard_fail
+      && !!settings.proof_auto_approve
+      && imageRead
+      && finalScore >= Number(settings.proof_min_confidence ?? 55);
 
     const { data: proof, error: proofError } = await db.from("payment_proofs").insert({
       user_id: context.userId,
@@ -152,12 +166,20 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
       amount_kobo: claim.amount_kobo,
       quiz_id: quizId,
       file_path: data.file_path,
-      status: approve ? "auto_approved" : "pending",
+      status: algo.hard_fail ? "pending" : approve ? "auto_approved" : "pending",
       auto_confidence: finalScore,
       auto_reason: reasons.join("; ").slice(0, 1000),
       granted: approve,
       used_ai: usedAi,
-      extracted: { claim, bank_ref: claim.bank_ref, ai: extractedAi },
+      extracted: {
+        claim,
+        bank_ref: claim.bank_ref,
+        ai: extractedAi,
+        expected_kobo: expected,
+        image_read: imageRead,
+        offline_score: algo.score,
+        offline_hard_fail: algo.hard_fail,
+      },
     }).select().single();
     if (proofError) throw proofError;
 
@@ -178,6 +200,7 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
     };
   });
 
+
 export const getMyPaymentProofs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -192,7 +215,7 @@ export const getMyPaymentProofs = createServerFn({ method: "GET" })
 export const listPaymentProofs = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({
-    status: z.enum(["all", "pending", "auto_approved", "confirmed", "declined"]).default("all"),
+    status: z.enum(["all", "needs_review", "pending", "auto_approved", "confirmed", "declined"]).default("needs_review"),
     q: z.string().max(120).optional(),
   }).parse(d))
   .handler(async ({ context, data }) => {
@@ -202,7 +225,8 @@ export const listPaymentProofs = createServerFn({ method: "POST" })
     let query = db.from("payment_proofs")
       .select("*, profiles:user_id(full_name, email, handle)")
       .order("created_at", { ascending: false }).limit(200);
-    if (data.status !== "all") query = query.eq("status", data.status);
+    if (data.status === "needs_review") query = query.in("status", ["pending", "auto_approved"]);
+    else if (data.status !== "all") query = query.eq("status", data.status);
     const { data: rows } = await query;
     let list = rows ?? [];
     if (data.q?.trim()) {

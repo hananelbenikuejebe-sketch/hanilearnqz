@@ -26,16 +26,45 @@ export type EngineQuestion = {
 
 const TICK = /[\u2713\u2714\u2705\u2611\u2612\u2716\u274C]/; // ✓ ✔ ✅ ☑ ☒ ✖ ❌
 const GOOD_TICK = /[\u2713\u2714\u2705\u2611]/;
-const ANSWER_LABEL = /^(?:answer|ans|correct(?:\s*(?:answer|option))?|key|solution)\s*[:\-–=]\s*/i;
-const EXPL_LABEL = /^(?:explanation|reason|rationale|because|why|note|hint)\s*[:\-–=]\s*/i;
-const SCHEME_LABEL = /^(?:marking\s*scheme|model\s*answer|sample\s*answer|expected\s*answer|rubric|guide)\s*[:\-–=]\s*/i;
+
+/** Inline label vocabulary. These may appear at the start of a line OR mid-line
+ * ("Answer: B. Reason: water expands when it freezes."). */
+const ANSWER_WORDS = "answer|answers|ans|correct\\s*answer|correct\\s*option|correct|key|solution|soln";
+const EXPL_WORDS = "explanation|explanations|explain|reason|reasoning|rationale|rational|justification|why|because|note|notes|hint|remark|remarks|comment";
+const SCHEME_WORDS = "marking\\s*scheme|mark\\s*scheme|model\\s*answer|sample\\s*answer|expected\\s*answer|suggested\\s*answer|rubric|answer\\s*guide";
+const LABEL_SRC = `(?:^|[\\s.;:)\\]}"'\u2013\u2014-])((?:${SCHEME_WORDS}|${ANSWER_WORDS}|${EXPL_WORDS}))\\s*(?:[:\\-\u2013\u2014=]|\\bis\\b)\\s+`;
+
 const PASSAGE_LABEL = /^(?:passage|extract|comprehension|read\s+the\s+following[^\n]*)\s*[:\-–]?\s*/i;
 const SECTION_LABEL = /^(?:section|part|paper|topic|subject|chapter|unit|module)\b[^\n]{0,60}$/i;
 const QUESTION_START = /^\s*(?:(?:q(?:uestion)?\s*)?(\d{1,3})[.)\-:\]]|\((\d{1,3})\)|(?:q|Q)(\d{1,3})\b)\s+/;
-const OPTION_START = /^\s*(?:\(([A-Ha-h])\)|([A-Ha-h])[.)\-:]|\(([ivxIVX]{1,4})\)|([ivx]{1,4})[.)]|([•*\u2022\u25CF\-])\s)\s*/;
+const OPTION_START = /^\s*(?:\(([A-Ha-h])\)|([A-Ha-h])\s*[.)\-:=]|\(([ivxIVX]{1,4})\)|([ivx]{1,4})[.)]|([•*\u2022\u25CF\u25AA\u2043\-])\s)\s*/;
 const INLINE_OPTIONS = /(?:^|\s)(?:\(?([A-Ha-h])\)|([A-Ha-h])[.)])\s+/g;
 const MARKS = /[\[(]\s*(\d{1,3})\s*(?:marks?|mks?|pts?|points?)\s*[\])]/i;
 const DIFF_HINT = /[\[(]\s*(easy|medium|moderate|hard|difficult)\s*[\])]/i;
+
+type LabelKind = "text" | "answer" | "explanation" | "scheme";
+
+function classifyLabel(word: string): LabelKind {
+  const w = word.toLowerCase().replace(/\s+/g, " ");
+  if (new RegExp(`^(?:${SCHEME_WORDS})$`, "i").test(w)) return "scheme";
+  if (new RegExp(`^(?:${ANSWER_WORDS})$`, "i").test(w)) return "answer";
+  return "explanation";
+}
+
+/** Split a single line into labelled pieces, honouring mid-line labels. */
+function splitLabeled(line: string): { kind: LabelKind; value: string }[] {
+  const parts = line.split(new RegExp(LABEL_SRC, "gi"));
+  const out: { kind: LabelKind; value: string }[] = [];
+  if (parts[0] && parts[0].trim()) out.push({ kind: "text", value: parts[0].trim() });
+  for (let i = 1; i < parts.length; i += 2) {
+    const word = parts[i];
+    if (!word) continue;
+    out.push({ kind: classifyLabel(word), value: (parts[i + 1] ?? "").trim() });
+  }
+  if (!out.length && line.trim()) out.push({ kind: "text", value: line.trim() });
+  return out;
+}
+
 
 export type EngineOptions = {
   defaultType?: "mcq" | "tf" | "short" | "essay";
@@ -93,27 +122,38 @@ function normalize(input: string) {
   return { body: text };
 }
 
-/** Trailing answer keys: "ANSWERS" / "ANSWER KEY" blocks, or "1-A, 2-B" lines. */
+/** Trailing answer keys: "ANSWERS" / "ANSWER KEY" blocks, or "1-A, 2-B" lines.
+ *
+ * The block form must be a header on its OWN line ("ANSWERS:" then the pairs
+ * below) and must actually contain numbered pairs — otherwise an ordinary
+ * per-question "Answer: B" line would be mistaken for the key block and the
+ * rest of the paper would be discarded. */
 function extractAnswerKey(raw: { body: string }) {
   const map = new Map<number, string>();
-  const keyBlock = raw.body.match(/\n\s*(?:answers?|answer\s*key|solutions?)\s*[:\-]?\s*\n?([\s\S]{0,4000})$/i);
+  const keyBlock = raw.body.match(
+    /\n[ \t]*(?:answers?|answer\s*key|solutions?|marking\s*scheme)[ \t]*[:\-]?[ \t]*\n([\s\S]{0,4000})$/i,
+  );
+  const pairRe = /(\d{1,3})\s*[.)\-:]?\s*([A-Ha-h]|true|false|t|f)\b/gi;
   const scanTargets: string[] = [];
-  if (keyBlock) scanTargets.push(keyBlock[1]);
+  const blockBody = keyBlock?.[1] ?? "";
+  const blockLooksLikeKey = !!blockBody && (blockBody.match(pairRe)?.length ?? 0) >= 3;
+  if (blockLooksLikeKey) scanTargets.push(blockBody);
   // Also scan compact one-liners anywhere: "1. A  2. B  3. D"
   const compact = raw.body.match(/(?:^|\n)\s*(?:\d{1,3}\s*[.)\-]\s*[A-Ha-h]\b[\s,;]*){3,}/g);
   if (compact) scanTargets.push(compact.join("\n"));
 
   for (const chunk of scanTargets) {
-    const re = /(\d{1,3})\s*[.)\-:]?\s*([A-Ha-h]|true|false|t|f)\b/gi;
+    const re = new RegExp(pairRe.source, "gi");
     let m: RegExpExecArray | null;
     while ((m = re.exec(chunk))) {
       const n = Number(m[1]);
       if (!map.has(n)) map.set(n, m[2]);
     }
   }
-  if (keyBlock) raw.body = raw.body.slice(0, raw.body.length - keyBlock[0].length);
+  if (keyBlock && blockLooksLikeKey) raw.body = raw.body.slice(0, raw.body.length - keyBlock[0].length);
   return map;
 }
+
 
 type Segment = {
   number: number | null;
@@ -182,7 +222,8 @@ function segmentDocument(body: string) {
   push();
 
   // If the doc had no numbering at all, fall back to blank-line blocks.
-  if (segments.length <= 1 && body.includes("\n\n")) {
+  const hasNumbering = segments.some((s) => s.number !== null);
+  if (!hasNumbering && body.includes("\n\n")) {
     const blocks = body.split(/\n\s*\n/).map((b) => b.trim()).filter((b) => b.length > 12);
     if (blocks.length > 1) {
       return blocks.map((b) => ({ number: null, lines: b.split("\n"), subsection: null, passage: null }));
@@ -212,38 +253,69 @@ function buildQuestion(seg: Segment, fallbackType: EngineQuestion["type"]): Engi
   if (!rawBlock) return null;
 
   let answerToken: string | null = null;
-  let explanation: string | null = null;
-  let sampleAnswer: string | null = null;
+  const explParts: string[] = [];
+  const schemeParts: string[] = [];
   let points: number | null = null;
   let difficulty: EngineQuestion["difficulty"] = "medium";
   const optionLines: string[] = [];
   const textLines: string[] = [];
   let forcedEssay = false;
+  // Continuation tracking: an unlabelled line right after "Explanation:" belongs
+  // to the explanation, not to the question stem.
+  let flow: LabelKind = "text";
 
   const lines = seg.lines.map((l) => l.trim());
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line) continue;
+  for (const line of lines) {
+    if (!line) { flow = "text"; continue; }
 
-    if (ANSWER_LABEL.test(line)) {
-      answerToken = line.replace(ANSWER_LABEL, "").trim();
-      continue;
-    }
-    if (SCHEME_LABEL.test(line)) {
-      sampleAnswer = [line.replace(SCHEME_LABEL, "").trim(), ...lines.slice(i + 1)].join("\n").trim();
-      forcedEssay = true;
-      break;
-    }
-    if (EXPL_LABEL.test(line)) {
-      explanation = line.replace(EXPL_LABEL, "").trim();
-      continue;
-    }
-    if (OPTION_START.test(line) && line.replace(OPTION_START, "").trim().length > 0) {
+    const isOption = OPTION_START.test(line) && line.replace(OPTION_START, "").trim().length > 0;
+    const pieces = splitLabeled(line);
+    const hasLabel = pieces.some((p) => p.kind !== "text");
+
+    // A real option line ("C) Paris ✓") wins over label detection.
+    if (isOption && !hasLabel) {
       optionLines.push(line);
+      flow = "text";
       continue;
     }
-    textLines.push(line);
+    // "C) Paris — Reason: it is the capital" → option plus explanation.
+    if (isOption && hasLabel) {
+      const head = pieces[0]?.kind === "text" ? pieces[0].value : "";
+      if (head) optionLines.push(head);
+    }
+
+    if (!hasLabel) {
+      const value = pieces[0]?.value ?? line;
+      if (flow === "explanation") explParts.push(value);
+      else if (flow === "scheme") schemeParts.push(value);
+      else if (flow === "answer" && !answerToken) answerToken = value;
+      else textLines.push(value);
+      continue;
+    }
+
+    for (const piece of pieces) {
+      if (piece.kind === "text") {
+        if (!isOption && piece.value) textLines.push(piece.value);
+        continue;
+      }
+      if (piece.kind === "answer") {
+        // "Answer: B. Because it freezes" → keep only the token before punctuation.
+        if (!answerToken && piece.value) answerToken = piece.value;
+        flow = "answer";
+      } else if (piece.kind === "scheme") {
+        if (piece.value) schemeParts.push(piece.value);
+        forcedEssay = true;
+        flow = "scheme";
+      } else {
+        if (piece.value) explParts.push(piece.value);
+        flow = "explanation";
+      }
+    }
   }
+
+  const explanation = explParts.join(" ").replace(/\s{2,}/g, " ").trim() || null;
+  const sampleAnswer = schemeParts.join("\n").trim() || null;
+
 
   let questionText = textLines.join("\n").replace(QUESTION_START, "").trim();
 

@@ -205,18 +205,22 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
   });
 
 
-/** Analytics scoped to a creator's own quizzes. */
+/** Analytics scoped to a creator's own quizzes. Uses an elevated client but is
+ * strictly filtered to quizzes the caller owns, because attempt rows belong to
+ * students and are not readable by the creator under RLS. */
 export const getMyCreatorAnalytics = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAnalyticsAllowed(context.supabase, context.userId);
-    const { data: quizzes } = await context.supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: quizzes } = await db
       .from("quizzes").select("id, title, category, subject, is_published, created_at")
       .eq("created_by", context.userId);
     const ids = (quizzes ?? []).map((q: any) => q.id);
     let attempts: any[] = [];
     if (ids.length) {
-      const { data } = await context.supabase
+      const { data } = await db
         .from("attempts")
         .select("id, quiz_id, student_id, score_pct, correct_count, total, time_taken_sec, submitted_at")
         .in("quiz_id", ids);
@@ -232,21 +236,83 @@ export const getMyCreatorAnalytics = createServerFn({ method: "GET" })
       e.attempts++; e.sum += Number(a.score_pct);
       perQuiz.set(a.quiz_id, e);
     }
-    const topQuizzes = [...perQuiz.entries()]
-      .map(([id, v]) => ({ id, title: (qById.get(id) as any)?.title ?? "Untitled", attempts: v.attempts, avg: Math.round((v.sum / v.attempts) * 10) / 10 }))
-      .sort((a, b) => b.attempts - a.attempts).slice(0, 10);
+    const topQuizzes = (quizzes ?? []).map((q: any) => {
+      const v = perQuiz.get(q.id) ?? { attempts: 0, sum: 0 };
+      return {
+        id: q.id, title: q.title ?? "Untitled", published: q.is_published,
+        attempts: v.attempts, avg: v.attempts ? Math.round((v.sum / v.attempts) * 10) / 10 : 0,
+      };
+    }).sort((a: any, b: any) => b.attempts - a.attempts);
+    void qById;
     return {
       summary: {
         quizzes: quizzes?.length ?? 0,
         published: (quizzes ?? []).filter((q: any) => q.is_published).length,
         attempts: total,
+        unique_students: new Set(attempts.map((a) => a.student_id)).size,
         avg_score: Math.round(avg * 10) / 10,
         pass_rate: total ? Math.round((passing / total) * 100) : 0,
       },
-      top_quizzes: topQuizzes,
+      top_quizzes: topQuizzes.slice(0, 25),
       trend: bucketByDay(attempts as any, 30),
     };
   });
+
+/** Per-quiz analytics for the quiz owner (or an admin). */
+export const getQuizAnalytics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertAnalyticsAllowed(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: quiz } = await db.from("quizzes")
+      .select("id, title, created_by, total_score, is_published").eq("id", data.quiz_id).maybeSingle();
+    if (!quiz) throw new Error("Quiz not found");
+    const { data: roleRows } = await db.from("user_roles").select("role").eq("user_id", context.userId);
+    const isAdmin = (roleRows ?? []).some((r: any) => r.role === "admin" || r.role === "super_admin");
+    if (quiz.created_by !== context.userId && !isAdmin) throw new Error("Forbidden");
+
+    const [{ data: attempts }, { data: questions }] = await Promise.all([
+      db.from("attempts").select("id, student_id, score_pct, correct_count, total, time_taken_sec, submitted_at, answers")
+        .eq("quiz_id", data.quiz_id).order("submitted_at", { ascending: false }),
+      db.from("questions").select("id, position, text, type, points").eq("quiz_id", data.quiz_id).order("position"),
+    ]);
+    const arr = attempts ?? [];
+    const total = arr.length;
+    const avg = total ? arr.reduce((s: number, a: any) => s + Number(a.score_pct), 0) / total : 0;
+
+    // Per-question difficulty from stored answers.
+    const perQuestion = (questions ?? []).map((q: any) => {
+      let seen = 0, right = 0;
+      for (const a of arr as any[]) {
+        const ans = a.answers?.[q.id] ?? a.answers?.[String(q.id)];
+        if (ans === undefined || ans === null) continue;
+        seen++;
+        if (ans?.correct === true || ans?.is_correct === true) right++;
+      }
+      return {
+        id: q.id, position: q.position, type: q.type,
+        text: String(q.text ?? "").slice(0, 140),
+        seen, correct: right, accuracy: seen ? Math.round((right / seen) * 100) : null,
+      };
+    });
+
+    return {
+      quiz: { id: quiz.id, title: quiz.title, is_published: quiz.is_published },
+      summary: {
+        attempts: total,
+        unique_students: new Set(arr.map((a: any) => a.student_id)).size,
+        avg_score: Math.round(avg * 10) / 10,
+        best: total ? Math.max(...arr.map((a: any) => Number(a.score_pct))) : 0,
+        pass_rate: total ? Math.round((arr.filter((a: any) => Number(a.score_pct) >= 50).length / total) * 100) : 0,
+        avg_time_sec: total ? Math.round(arr.reduce((s: number, a: any) => s + (a.time_taken_sec ?? 0), 0) / total) : 0,
+      },
+      trend: bucketByDay(arr as any, 30),
+      questions: perQuestion,
+    };
+  });
+
 
 /** Aggregated AI usage — self only unless admin. */
 export const getAiUsageSummary = createServerFn({ method: "GET" })
