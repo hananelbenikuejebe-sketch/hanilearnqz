@@ -7,13 +7,20 @@ export const getMyCreatorStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const gate = await canCreate(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { count } = await (supabaseAdmin as any)
+      .from("quizzes").select("id", { count: "exact", head: true }).eq("created_by", context.userId);
     return {
       can_create: gate.ok,
+      reason: gate.reason ?? null,
       roles: gate.roles,
       permissions: gate.perms ?? null,
+      effective: gate.effective ?? null,
+      quizzes_created: count ?? 0,
       is_super_admin: gate.roles.includes("super_admin") || gate.roles.includes("admin"),
     };
   });
+
 
 export const listCreators = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
