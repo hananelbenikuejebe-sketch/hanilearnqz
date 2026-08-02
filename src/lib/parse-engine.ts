@@ -244,38 +244,69 @@ function buildQuestion(seg: Segment, fallbackType: EngineQuestion["type"]): Engi
   if (!rawBlock) return null;
 
   let answerToken: string | null = null;
-  let explanation: string | null = null;
-  let sampleAnswer: string | null = null;
+  const explParts: string[] = [];
+  const schemeParts: string[] = [];
   let points: number | null = null;
   let difficulty: EngineQuestion["difficulty"] = "medium";
   const optionLines: string[] = [];
   const textLines: string[] = [];
   let forcedEssay = false;
+  // Continuation tracking: an unlabelled line right after "Explanation:" belongs
+  // to the explanation, not to the question stem.
+  let flow: LabelKind = "text";
 
   const lines = seg.lines.map((l) => l.trim());
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    if (!line) continue;
+  for (const line of lines) {
+    if (!line) { flow = "text"; continue; }
 
-    if (ANSWER_LABEL.test(line)) {
-      answerToken = line.replace(ANSWER_LABEL, "").trim();
-      continue;
-    }
-    if (SCHEME_LABEL.test(line)) {
-      sampleAnswer = [line.replace(SCHEME_LABEL, "").trim(), ...lines.slice(i + 1)].join("\n").trim();
-      forcedEssay = true;
-      break;
-    }
-    if (EXPL_LABEL.test(line)) {
-      explanation = line.replace(EXPL_LABEL, "").trim();
-      continue;
-    }
-    if (OPTION_START.test(line) && line.replace(OPTION_START, "").trim().length > 0) {
+    const isOption = OPTION_START.test(line) && line.replace(OPTION_START, "").trim().length > 0;
+    const pieces = splitLabeled(line);
+    const hasLabel = pieces.some((p) => p.kind !== "text");
+
+    // A real option line ("C) Paris ✓") wins over label detection.
+    if (isOption && !hasLabel) {
       optionLines.push(line);
+      flow = "text";
       continue;
     }
-    textLines.push(line);
+    // "C) Paris — Reason: it is the capital" → option plus explanation.
+    if (isOption && hasLabel) {
+      const head = pieces[0]?.kind === "text" ? pieces[0].value : "";
+      if (head) optionLines.push(head);
+    }
+
+    if (!hasLabel) {
+      const value = pieces[0]?.value ?? line;
+      if (flow === "explanation") explParts.push(value);
+      else if (flow === "scheme") schemeParts.push(value);
+      else if (flow === "answer" && !answerToken) answerToken = value;
+      else textLines.push(value);
+      continue;
+    }
+
+    for (const piece of pieces) {
+      if (piece.kind === "text") {
+        if (!isOption && piece.value) textLines.push(piece.value);
+        continue;
+      }
+      if (piece.kind === "answer") {
+        // "Answer: B. Because it freezes" → keep only the token before punctuation.
+        if (!answerToken && piece.value) answerToken = piece.value;
+        flow = "answer";
+      } else if (piece.kind === "scheme") {
+        if (piece.value) schemeParts.push(piece.value);
+        forcedEssay = true;
+        flow = "scheme";
+      } else {
+        if (piece.value) explParts.push(piece.value);
+        flow = "explanation";
+      }
+    }
   }
+
+  let explanation = explParts.join(" ").replace(/\s{2,}/g, " ").trim() || null;
+  const sampleAnswer = schemeParts.join("\n").trim() || null;
+
 
   let questionText = textLines.join("\n").replace(QUESTION_START, "").trim();
 
