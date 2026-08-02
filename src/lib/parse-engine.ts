@@ -34,9 +34,6 @@ const EXPL_WORDS = "explanation|explanations|explain|reason|reasoning|rationale|
 const SCHEME_WORDS = "marking\\s*scheme|mark\\s*scheme|model\\s*answer|sample\\s*answer|expected\\s*answer|suggested\\s*answer|rubric|answer\\s*guide";
 const LABEL_SRC = `(?:^|[\\s.;:)\\]}"'\u2013\u2014-])((?:${SCHEME_WORDS}|${ANSWER_WORDS}|${EXPL_WORDS}))\\s*(?:[:\\-\u2013\u2014=]|\\bis\\b)\\s+`;
 
-const ANSWER_LABEL = new RegExp(`^(?:${ANSWER_WORDS})\\s*[:\\-\u2013=]\\s*`, "i");
-const EXPL_LABEL = new RegExp(`^(?:${EXPL_WORDS})\\s*[:\\-\u2013=]\\s*`, "i");
-const SCHEME_LABEL = new RegExp(`^(?:${SCHEME_WORDS})\\s*[:\\-\u2013=]\\s*`, "i");
 const PASSAGE_LABEL = /^(?:passage|extract|comprehension|read\s+the\s+following[^\n]*)\s*[:\-–]?\s*/i;
 const SECTION_LABEL = /^(?:section|part|paper|topic|subject|chapter|unit|module)\b[^\n]{0,60}$/i;
 const QUESTION_START = /^\s*(?:(?:q(?:uestion)?\s*)?(\d{1,3})[.)\-:\]]|\((\d{1,3})\)|(?:q|Q)(\d{1,3})\b)\s+/;
@@ -304,7 +301,7 @@ function buildQuestion(seg: Segment, fallbackType: EngineQuestion["type"]): Engi
     }
   }
 
-  let explanation = explParts.join(" ").replace(/\s{2,}/g, " ").trim() || null;
+  const explanation = explParts.join(" ").replace(/\s{2,}/g, " ").trim() || null;
   const sampleAnswer = schemeParts.join("\n").trim() || null;
 
 
