@@ -36,8 +36,9 @@ function ProofsPage() {
   const settingsFn = useServerFn(getPaymentSettings);
   const saveFn = useServerFn(updatePaymentSettings);
 
-  const [status, setStatus] = useState<"pending" | "auto_approved" | "all">("pending");
+  const [status, setStatus] = useState<"needs_review" | "pending" | "auto_approved" | "confirmed" | "declined" | "all">("needs_review");
   const [q, setQ] = useState("");
+  const [notes, setNotes] = useState<Record<string, string>>({});
 
   const { data: proofs } = useQuery({ queryKey: ["admin-proofs", status, q], queryFn: () => listFn({ data: { status, q } }) });
   const { data: settings } = useQuery({ queryKey: ["payment-settings"], queryFn: () => settingsFn() });
@@ -56,11 +57,20 @@ function ProofsPage() {
 
   const s: any = settings ?? {};
 
+  const TABS: { v: typeof status; label: string }[] = [
+    { v: "needs_review", label: "Needs review" },
+    { v: "pending", label: "Held" },
+    { v: "auto_approved", label: "Auto-granted" },
+    { v: "confirmed", label: "Confirmed" },
+    { v: "declined", label: "Declined" },
+    { v: "all", label: "All" },
+  ];
+
   return (
     <div className="p-4 md:p-8 space-y-6 max-w-5xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Payments & receipts</h1>
-        <p className="text-muted-foreground text-sm">Automatic checks run first; you confirm or reverse here.</p>
+        <p className="text-muted-foreground text-sm">Every receipt lands here. Nothing is final until you confirm or decline it.</p>
       </div>
 
       <Tabs defaultValue="queue">
@@ -72,50 +82,88 @@ function ProofsPage() {
 
         <TabsContent value="queue" className="space-y-4">
           <div className="flex flex-wrap gap-2 items-center">
-            {(["pending", "auto_approved", "all"] as const).map((v) => (
-              <Button key={v} size="sm" variant={status === v ? "default" : "outline"} onClick={() => setStatus(v)}>
-                {v === "auto_approved" ? "Auto-approved" : v === "all" ? "All" : "Pending"}
+            {TABS.map((t) => (
+              <Button key={t.v} size="sm" variant={status === t.v ? "default" : "outline"} onClick={() => setStatus(t.v)}>
+                {t.label}
               </Button>
             ))}
             <Input placeholder="Search name, email, reference…" value={q} onChange={(e) => setQ(e.target.value)} className="max-w-xs" />
           </div>
 
           {(proofs ?? []).length === 0 && <p className="text-sm text-muted-foreground">Nothing here.</p>}
-          {(proofs ?? []).map((p: any) => (
-            <Card key={p.id}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex flex-wrap items-center gap-2">
-                  {p.profiles?.full_name ?? p.profiles?.email ?? "User"}
-                  <Badge variant="secondary">{p.purpose.replace(/_/g, " ")}</Badge>
-                  <Badge>{naira(p.amount_kobo)}</Badge>
-                  <Badge variant={p.status === "declined" ? "destructive" : "outline"}>{p.status}</Badge>
-                  <Badge variant="outline">score {p.auto_confidence}{p.used_ai ? " · AI" : " · offline"}</Badge>
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  {new Date(p.created_at).toLocaleString()} · paid by {p.extracted?.claim?.sender_name ?? "—"} · ref {p.extracted?.bank_ref ?? "—"}
-                  <br />{p.auto_reason}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap items-center gap-2">
-                {p.file_url && (
-                  <Button size="sm" variant="outline" asChild>
-                    <a href={p.file_url} target="_blank" rel="noopener noreferrer">View receipt</a>
-                  </Button>
-                )}
-                {p.status !== "confirmed" && p.status !== "declined" && (
-                  <>
-                    <Button size="sm" disabled={review.isPending} onClick={() => review.mutate({ id: p.id, action: "confirm" })}>Confirm</Button>
-                    <Button size="sm" variant="destructive" disabled={review.isPending}
-                      onClick={() => review.mutate({ id: p.id, action: "decline", note: "Receipt could not be verified" })}>
-                      Decline & reverse
-                    </Button>
-                  </>
-                )}
-                {p.admin_note && <span className="text-xs text-muted-foreground">{p.admin_note}</span>}
-              </CardContent>
-            </Card>
-          ))}
+          {(proofs ?? []).map((p: any) => {
+            const ai = p.extracted?.ai;
+            const claim = p.extracted?.claim ?? {};
+            const expected = p.extracted?.expected_kobo;
+            const open = p.status !== "confirmed" && p.status !== "declined";
+            return (
+              <Card key={p.id} className={p.status === "auto_approved" ? "border-amber-500/60" : undefined}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex flex-wrap items-center gap-2">
+                    {p.profiles?.full_name ?? p.profiles?.email ?? "User"}
+                    <Badge variant="secondary">{p.purpose.replace(/_/g, " ")}</Badge>
+                    <Badge>{naira(p.amount_kobo)}</Badge>
+                    {expected != null && Number(expected) !== Number(p.amount_kobo) && (
+                      <Badge variant="destructive">expected {naira(Number(expected))}</Badge>
+                    )}
+                    <Badge variant={p.status === "declined" ? "destructive" : p.status === "auto_approved" ? "default" : "outline"}>
+                      {p.status === "auto_approved" ? "auto-granted · confirm me" : p.status}
+                    </Badge>
+                    <Badge variant="outline">
+                      score {p.auto_confidence} · {p.extracted?.image_read ? "image read" : "image NOT read"}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="text-xs space-y-1">
+                    <span className="block">
+                      {new Date(p.created_at).toLocaleString()} · claimed by {claim.sender_name ?? "—"} ({claim.bank_name ?? "—"})
+                      {" · "}paid {claim.paid_at ?? "—"} · ref {p.extracted?.bank_ref ?? "—"}
+                    </span>
+                    {ai && (
+                      <span className="block">
+                        <strong>Read from image:</strong> ₦{Number(ai.amount_naira ?? 0).toLocaleString()} · {ai.date ?? "no date"} ·
+                        from {ai.sender_name || "—"} → {ai.recipient_name || "—"} / {ai.recipient_account || "—"} ·
+                        ref {ai.reference || "—"} · tamper risk {ai.tampering_risk ?? "—"}
+                      </span>
+                    )}
+                    <span className="block text-muted-foreground">{p.auto_reason}</span>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {p.file_url && (
+                    <a href={p.file_url} target="_blank" rel="noopener noreferrer" className="block">
+                      <img src={p.file_url} alt="Payment receipt" loading="lazy"
+                        className="max-h-64 rounded-md border object-contain bg-muted"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                    </a>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {p.file_url && (
+                      <Button size="sm" variant="outline" asChild>
+                        <a href={p.file_url} target="_blank" rel="noopener noreferrer">Open receipt</a>
+                      </Button>
+                    )}
+                    {open && (
+                      <>
+                        <Input className="max-w-xs" placeholder="Note (optional)"
+                          value={notes[p.id] ?? ""} onChange={(e) => setNotes({ ...notes, [p.id]: e.target.value })} />
+                        <Button size="sm" disabled={review.isPending}
+                          onClick={() => review.mutate({ id: p.id, action: "confirm", note: notes[p.id] || undefined })}>
+                          Confirm payment
+                        </Button>
+                        <Button size="sm" variant="destructive" disabled={review.isPending}
+                          onClick={() => review.mutate({ id: p.id, action: "decline", note: notes[p.id] || "Receipt could not be verified" })}>
+                          Decline & reverse
+                        </Button>
+                      </>
+                    )}
+                    {p.admin_note && <span className="text-xs text-muted-foreground">{p.admin_note}</span>}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
         </TabsContent>
+
 
         <TabsContent value="verify">
           <Card>
