@@ -19,13 +19,75 @@ export async function getCreatorPerms(supabase: any, userId: string) {
   return data;
 }
 
-export async function canCreate(supabase: any, userId: string): Promise<{ ok: boolean; reason?: string; roles: string[]; perms?: any }> {
-  const roles = await getActorRoles(supabase, userId);
-  if (roles.includes("admin") || roles.includes("super_admin")) return { ok: true, roles };
-  const perms = await getCreatorPerms(supabase, userId);
-  if (roles.includes("creator") || perms) return { ok: true, roles, perms };
-  return { ok: false, reason: "You need creator access. Ask an admin to grant it.", roles };
+/** Platform-wide free-tier configuration (admin editable). */
+export async function getPlatformSettings() {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await (supabaseAdmin as any).from("payment_settings").select("*").eq("id", "default").maybeSingle();
+  return data ?? {};
 }
+
+export type EffectivePerms = {
+  tier: "admin" | "paid" | "free";
+  ai_enabled: boolean;
+  ai_oversight_allowed: boolean;
+  analytics_enabled: boolean;
+  can_publish: boolean;
+  max_quizzes: number | null;
+  max_questions_per_quiz: number | null;
+  offline_parse_limit: number | null;
+};
+
+/**
+ * Everyone can create. Paid creators get a `creator_permissions` row; everyone
+ * else falls back to the admin-configured free tier so nothing is hard-locked.
+ */
+export async function getEffectivePerms(supabase: any, userId: string): Promise<EffectivePerms> {
+  const roles = await getActorRoles(supabase, userId);
+  if (roles.includes("admin") || roles.includes("super_admin")) {
+    return {
+      tier: "admin", ai_enabled: true, ai_oversight_allowed: true, analytics_enabled: true,
+      can_publish: true, max_quizzes: null, max_questions_per_quiz: null, offline_parse_limit: null,
+    };
+  }
+  const [perms, settings] = await Promise.all([getCreatorPerms(supabase, userId), getPlatformSettings()]);
+  if (perms) {
+    return {
+      tier: "paid",
+      ai_enabled: perms.ai_enabled !== false,
+      ai_oversight_allowed: perms.ai_enabled !== false,
+      analytics_enabled: perms.analytics_enabled !== false,
+      can_publish: perms.can_publish !== false,
+      max_quizzes: perms.max_quizzes ?? null,
+      max_questions_per_quiz: null,
+      offline_parse_limit: null,
+    };
+  }
+  return {
+    tier: "free",
+    ai_enabled: settings.free_ai_parse === true,
+    ai_oversight_allowed: settings.free_ai_parse === true,
+    analytics_enabled: true,
+    can_publish: settings.free_tier_enabled !== false,
+    max_quizzes: Number(settings.free_max_quizzes_per_month ?? 3),
+    max_questions_per_quiz: Number(settings.free_max_questions_per_quiz ?? 20),
+    offline_parse_limit: Number(settings.free_offline_parse_limit ?? 20),
+  };
+}
+
+export async function canCreate(supabase: any, userId: string): Promise<{ ok: boolean; reason?: string; roles: string[]; perms?: any; effective?: EffectivePerms }> {
+  const roles = await getActorRoles(supabase, userId);
+  const effective = await getEffectivePerms(supabase, userId);
+  if (effective.tier === "admin") return { ok: true, roles, effective };
+  const perms = await getCreatorPerms(supabase, userId);
+  if (perms) return { ok: true, roles, perms, effective };
+  const settings = await getPlatformSettings();
+  if (settings.free_tier_enabled === false) {
+    return { ok: false, reason: "Creating is temporarily invite-only. Contact support for access.", roles, effective };
+  }
+  // Free tier: open to everyone.
+  return { ok: true, roles, perms: null, effective };
+}
+
 
 /** Ownership gate for editing a specific quiz. Even super_admins may NOT edit
  * another creator's quiz — this guards writes only. Read/review paths use
