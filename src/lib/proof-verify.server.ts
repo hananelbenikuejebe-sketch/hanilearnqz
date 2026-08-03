@@ -159,7 +159,10 @@ Check the attached receipt image and report what you can actually read.`;
   else if (risk <= 25) { score += 8; }
   const acct = String(args.settings.pay_account_number ?? "").replace(/\D/g, "");
   const readAcct = String(parsed.recipient_account ?? "").replace(/\D/g, "");
-  if (acct && readAcct && readAcct.endsWith(acct.slice(-4))) { score += 12; reasons.push("Recipient account matches"); }
+  if (acct && readAcct) {
+    if (readAcct.endsWith(acct.slice(-4))) { score += 12; reasons.push("Recipient account matches"); }
+    else { score -= 50; reasons.push("Recipient account does not match the platform account"); }
+  }
   if (args.settings.proof_laxity === "lax") score += 8;
   if (args.settings.proof_laxity === "strict") score -= 8;
 

@@ -242,8 +242,8 @@ export const listPaymentProofs = createServerFn({ method: "POST" })
     }
     // Signed URLs so the admin can view each receipt.
     const withUrls = await Promise.all(list.map(async (r: any) => {
-      const { data: signed } = await db.storage.from("payment-proofs").createSignedUrl(r.file_path, 3600);
-      return { ...r, file_url: signed?.signedUrl ?? null };
+      const { data: signed, error: signedError } = await db.storage.from("payment-proofs").createSignedUrl(r.file_path, 3600);
+      return { ...r, file_url: signed?.signedUrl ?? null, file_error: signedError?.message ?? null };
     }));
     return withUrls;
   });
