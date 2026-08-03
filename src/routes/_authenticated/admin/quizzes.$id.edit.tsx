@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
 import { getQuizAdmin, updateQuiz, uploadQuizBanner, generateQuizAccessKey } from "@/lib/quizzes.functions";
 import { createQuestion, updateQuestion, deleteQuestion, bulkInsertQuestions, bulkDeleteQuestions, distributeQuizPoints } from "@/lib/questions.functions";
-import { parseQuestionsFromText, parseQuestionsHeuristic, validateParseInput } from "@/lib/ai-parse.functions";
+import { parseQuestionsFromText, parseQuestionsHeuristic, validateParseInput, generateQuestionsAi } from "@/lib/ai-parse.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Trash2, Plus, Sparkles, ArrowLeft, Upload, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Trash2, Plus, Sparkles, ArrowLeft, Upload, AlertTriangle, CheckCircle2, BookOpen, WandSparkles } from "lucide-react";
 
 
 export const Route = createFileRoute("/_authenticated/admin/quizzes/$id/edit")({
@@ -89,7 +89,7 @@ function EditQuiz() {
         <TabsList>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
-          <TabsTrigger value="ai">AI Import</TabsTrigger>
+          <TabsTrigger value="ai">Import & generate</TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings">
@@ -333,6 +333,7 @@ function AIPanel({ quizId, onDone }: any) {
   const aiFn = useServerFn(parseQuestionsFromText);
   const heuristicFn = useServerFn(parseQuestionsHeuristic);
   const validateFn = useServerFn(validateParseInput);
+  const generateFn = useServerFn(generateQuestionsAi);
   const bulkFn = useServerFn(bulkInsertQuestions);
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState<any[] | null>(null);
@@ -341,6 +342,9 @@ function AIPanel({ quizId, onDone }: any) {
   const [editing, setEditing] = useState<Record<number, boolean>>({});
   const [validation, setValidation] = useState<{ ok: boolean; issues: { level: string; message: string }[]; estimated_questions: number } | null>(null);
   const [mode, setMode] = useState<"ai" | "offline" | null>(null);
+  const [oversight, setOversight] = useState(true);
+  const [generativeRepair, setGenerativeRepair] = useState(false);
+  const [generator, setGenerator] = useState({ topic: "", source: "", count: 10, type: "mcq", difficulty: "medium", with_explanations: true });
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -399,7 +403,7 @@ function AIPanel({ quizId, onDone }: any) {
           r = await heuristicFn({ data: { text: chunks[i] } });
         } else {
           try {
-            r = await aiFn({ data: { text: chunks[i] } });
+            r = await aiFn({ data: { text: chunks[i], ai_oversight: oversight, ai_generative: generativeRepair } });
           } catch (err: any) {
             const msg = String(err?.message ?? err);
             if (/credit|quota|rate|billing|429|402/i.test(msg)) {
@@ -421,6 +425,21 @@ function AIPanel({ quizId, onDone }: any) {
     } finally {
       setRunning(false);
     }
+  }
+
+  async function runGenerator() {
+    if (generator.topic.trim().length < 3) { toast.error("Enter a topic first."); return; }
+    setRunning(true); setMode("ai"); setParsed(null);
+    try {
+      const result: any = await generateFn({ data: {
+        topic: generator.topic, source: generator.source || undefined, count: generator.count,
+        type: generator.type as any, difficulty: generator.difficulty as any,
+        subject: undefined, exam: undefined, with_explanations: generator.with_explanations,
+      } });
+      setText(result.generated_text ?? ""); setParsed(result.questions ?? []);
+      toast.success(`Generated ${result.questions?.length ?? 0} questions. Review before saving.`);
+    } catch (e: any) { toast.error(e.message ?? "Generation failed"); }
+    finally { setRunning(false); }
   }
 
 
@@ -448,7 +467,26 @@ function AIPanel({ quizId, onDone }: any) {
   const needsReviewCount = parsed?.filter((q) => q.needs_review).length ?? 0;
 
   return (
-    <Card><CardContent className="pt-6 space-y-4">
+    <Card><CardContent className="pt-6 space-y-5">
+      <Tabs defaultValue="paste">
+        <TabsList><TabsTrigger value="paste">Paste / upload</TabsTrigger><TabsTrigger value="generate"><WandSparkles className="mr-1 h-4 w-4"/>AI question maker</TabsTrigger><TabsTrigger value="guide"><BookOpen className="mr-1 h-4 w-4"/>Format guide</TabsTrigger></TabsList>
+        <TabsContent value="generate" className="space-y-4 pt-3">
+          <div><Label>What should the questions cover?</Label><Input value={generator.topic} onChange={(e) => setGenerator({ ...generator, topic: e.target.value })} placeholder="e.g. WAEC Biology: genetics and variation"/></div>
+          <div><Label>Source material (optional)</Label><Textarea rows={5} value={generator.source} onChange={(e) => setGenerator({ ...generator, source: e.target.value })} placeholder="Paste class notes or a passage. Generated questions will stay within this source."/></div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div><Label>Count</Label><Input type="number" min={1} max={40} value={generator.count} onChange={(e) => setGenerator({ ...generator, count: Math.min(40, Math.max(1, Number(e.target.value) || 1)) })}/></div>
+            <div><Label>Type</Label><Select value={generator.type} onValueChange={(v) => setGenerator({ ...generator, type: v })}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="mcq">MCQ</SelectItem><SelectItem value="tf">True / False</SelectItem><SelectItem value="short">Short answer</SelectItem><SelectItem value="essay">Essay</SelectItem><SelectItem value="mixed">Mixed</SelectItem></SelectContent></Select></div>
+            <div><Label>Difficulty</Label><Select value={generator.difficulty} onValueChange={(v) => setGenerator({ ...generator, difficulty: v })}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="easy">Easy</SelectItem><SelectItem value="medium">Medium</SelectItem><SelectItem value="hard">Hard</SelectItem><SelectItem value="mixed">Mixed</SelectItem></SelectContent></Select></div>
+            <label className="flex items-end gap-2 pb-2 text-sm"><Switch checked={generator.with_explanations} onCheckedChange={(v) => setGenerator({ ...generator, with_explanations: v })}/>Explanations</label>
+          </div>
+          <Button onClick={runGenerator} disabled={running || generator.topic.trim().length < 3}><Sparkles className="mr-2 h-4 w-4"/>{running ? "Generating…" : "Generate questions"}</Button>
+          <p className="text-xs text-muted-foreground">This uses AI credit. Nothing is added until you review the generated questions and confirm.</p>
+        </TabsContent>
+        <TabsContent value="guide" className="space-y-4 pt-3 text-sm">
+          <div><h3 className="font-semibold">Supported format</h3><pre className="mt-2 overflow-x-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap">{`Passage: Read this once for the questions below.\nSection A: Biology\n1. Which organ pumps blood?\nA) Lung\nB) Heart ✅\nC) Kidney\nD) Liver\nAnswer: B\nReason: The heart pumps blood around the body.\n\n2. Explain photosynthesis.\nMarking scheme: Must mention light, chlorophyll, carbon dioxide and glucose.`}</pre></div>
+          <ul className="list-disc space-y-1 pl-5 text-muted-foreground"><li>Options may use A), A., (A), or inline A: text.</li><li>✓, ✅ or ☑ after an option marks it correct.</li><li>Answer, Ans, Explanation, Reason, Rationale, Solution and Marking scheme labels are recognised.</li><li>Passage and Section headers apply to following questions.</li><li>Offline parse costs no AI credit. AI oversight repairs uncertain structure; generative repair may rewrite incomplete questions and clearly flags changes.</li><li>Set a quiz price and visibility in Settings. Private quizzes require the generated access key.</li></ul>
+        </TabsContent>
+        <TabsContent value="paste" className="space-y-4 pt-3">
       <div className="space-y-2">
         <Label>Source content</Label>
         <p className="text-xs text-muted-foreground">
@@ -465,6 +503,11 @@ function AIPanel({ quizId, onDone }: any) {
         <Textarea rows={10} value={text} onChange={(e) => setText(e.target.value)} disabled={running}
           placeholder={`Passage: The water cycle ...\n\n1. What stage follows evaporation?\nA) Precipitation\nB) Condensation\nC) Runoff\nD) Infiltration\nAnswer: B\n\n2. The sun powers the water cycle. (True/False)\nAnswer: True\n\n3. Discuss the role of transpiration in the water cycle.`} />
         <div className="text-xs text-muted-foreground">{text.length.toLocaleString()} characters · ~{Math.max(1, Math.ceil(text.length / 6000))} chunk(s)</div>
+      </div>
+
+      <div className="grid gap-3 rounded-md border p-3 sm:grid-cols-2">
+        <label className="flex items-center justify-between gap-3 text-sm"><span><b>AI oversight</b><small className="block text-muted-foreground">Review ambiguous parsed questions</small></span><Switch checked={oversight} onCheckedChange={setOversight}/></label>
+        <label className="flex items-center justify-between gap-3 text-sm"><span><b>Generative repair</b><small className="block text-muted-foreground">Rewrite or complete broken items; costs more</small></span><Switch checked={generativeRepair} onCheckedChange={setGenerativeRepair}/></label>
       </div>
 
       {validation && validation.issues.length > 0 && (
@@ -527,6 +570,8 @@ function AIPanel({ quizId, onDone }: any) {
           </div>
         </div>
       )}
+        </TabsContent>
+      </Tabs>
     </CardContent></Card>
   );
 }
@@ -568,6 +613,8 @@ function ParsedCard({ q, i, editing, onToggle, onChange, onRemove }: any) {
           </div>
         )}
         {q.review_reason && <div className="text-xs text-amber-600 dark:text-amber-400">{q.review_reason}</div>}
+        {q.change_note && <div className="rounded bg-primary/10 p-2 text-xs text-primary">AI change: {q.change_note}</div>}
+        {q.explanation && <div className="text-xs text-muted-foreground"><b className="text-foreground">Explanation:</b> {q.explanation}</div>}
         {q.sample_answer && !editing && <div className="text-xs text-muted-foreground italic">Model answer: {q.sample_answer}</div>}
       </CardContent>
     </Card>

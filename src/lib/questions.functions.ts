@@ -143,11 +143,6 @@ export const distributeQuizPoints = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid(), total: z.number().min(0).max(10000) }).parse(d))
   .handler(async ({ context, data }) => {
     await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
-    const effective = await getEffectivePerms(context.supabase, context.userId);
-    if (effective.max_questions_per_quiz != null) {
-      const { count } = await context.supabase.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.quiz_id);
-      if ((count ?? 0) + data.questions.length > effective.max_questions_per_quiz) throw new Error(`Free tier allows ${effective.max_questions_per_quiz} questions per quiz. Import fewer or upgrade.`);
-    }
     const { data: qs } = await context.supabase.from("questions").select("id").eq("quiz_id", data.quiz_id);
     const n = qs?.length ?? 0;
     if (n === 0) return { ok: true, per_question: 0 };

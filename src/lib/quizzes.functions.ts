@@ -72,6 +72,11 @@ export const listPublishedQuizzes = createServerFn({ method: "GET" })
       (qs ?? []).forEach((r: any) => { counts[r.quiz_id]++; });
     }
     const socials = await socialCounts(adminDb, ids);
+    const creatorIds = Array.from(new Set((quizzes ?? []).map((q: any) => q.created_by).filter(Boolean)));
+    const { data: creators } = creatorIds.length
+      ? await adminDb.from("profiles").select("id, full_name, handle, avatar_url").in("id", creatorIds)
+      : { data: [] };
+    const creatorMap = new Map((creators ?? []).map((p: any) => [p.id, p]));
     const origin = requestOrigin();
     return Promise.all((quizzes ?? []).map(async (q: any) => ({
       ...q,
@@ -79,6 +84,7 @@ export const listPublishedQuizzes = createServerFn({ method: "GET" })
       banner_url: await signBanner(adminDb, q.banner_path),
       share_url: `${origin}/share/quiz/${q.id}`,
       social_counts: socials[q.id] ?? { likes: 0, comments: 0, shares: 0 },
+      creator: creatorMap.get(q.created_by) ?? null,
     })));
   });
 

@@ -9,7 +9,7 @@ export const getPublicProfile = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
-    const [{ data: profile }, { data: quizzes }, { data: attempts }, { data: followers }, { data: following }, { data: iFollow }] = await Promise.all([
+    const [{ data: profile }, { data: quizzes }, { data: attempts }, { count: followers }, { count: following }, { data: iFollow }, { data: roles }, { data: permissions }] = await Promise.all([
       db.from("profiles").select("id, full_name, handle, avatar_url, bio, is_guest, created_at").eq("id", data.user_id).maybeSingle(),
       db.from("quizzes")
         .select("id, title, category, difficulty, is_published, visibility, created_at, banner_path")
@@ -19,6 +19,8 @@ export const getPublicProfile = createServerFn({ method: "GET" })
       db.from("user_follows").select("follower_id", { count: "exact", head: true }).eq("following_id", data.user_id),
       db.from("user_follows").select("following_id", { count: "exact", head: true }).eq("follower_id", data.user_id),
       db.from("user_follows").select("follower_id").eq("follower_id", context.userId).eq("following_id", data.user_id).maybeSingle(),
+      db.from("user_roles").select("role").eq("user_id", data.user_id),
+      db.from("creator_permissions").select("user_id").eq("user_id", data.user_id).maybeSingle(),
     ]);
     if (!profile) throw new Error("Profile not found");
     return {
@@ -26,11 +28,27 @@ export const getPublicProfile = createServerFn({ method: "GET" })
       quizzes: quizzes ?? [],
       attempts_count: (attempts ?? []).length,
       unique_quizzes_taken: new Set((attempts ?? []).map((a: any) => a.quiz_id)).size,
-      followers: (followers as any)?.count ?? 0,
-      following: (following as any)?.count ?? 0,
+      followers: followers ?? 0,
+      following: following ?? 0,
       i_follow: !!iFollow,
       is_self: context.userId === data.user_id,
+      badges: [
+        permissions ? "Pro creator" : null,
+        (roles ?? []).some((r: any) => r.role === "admin" || r.role === "super_admin") ? "Platform admin" : null,
+        (quizzes ?? []).length > 0 ? "Quiz creator" : null,
+        (quizzes ?? []).length >= 10 ? "10 quiz milestone" : null,
+        (attempts ?? []).length > 0 ? "Quiz learner" : null,
+        new Set((attempts ?? []).map((a: any) => a.quiz_id)).size >= 10 ? "10 quizzes taken" : null,
+      ].filter(Boolean),
     };
+  });
+
+export const getFollowingIds = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { data, error } = await context.supabase.from("user_follows").select("following_id").eq("follower_id", context.userId);
+    if (error) throw error;
+    return (data ?? []).map((r: any) => r.following_id);
   });
 
 export const searchProfiles = createServerFn({ method: "GET" })
