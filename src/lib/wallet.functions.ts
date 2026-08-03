@@ -8,6 +8,8 @@ export const getMyWallet = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
+    const { ensureFreeMonthlyCredit } = await import("./authz.server");
+    await ensureFreeMonthlyCredit(db, context.userId);
     await db.from("wallets").upsert({ user_id: context.userId }, { onConflict: "user_id" });
     const [{ data: wallet }, { data: txs }, { data: bank }, { data: pending }] = await Promise.all([
       db.from("wallets").select("*").eq("user_id", context.userId).single(),

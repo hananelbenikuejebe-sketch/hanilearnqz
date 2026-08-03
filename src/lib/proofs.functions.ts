@@ -153,11 +153,9 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
       reasons.push("Automatic image check is switched off — manual review required");
     }
 
-    // Auto-approval REQUIRES a successful image read that scores above the bar.
-    const approve = !algo.hard_fail
-      && !!settings.proof_auto_approve
-      && imageRead
-      && finalScore >= Number(settings.proof_min_confidence ?? 55);
+    // Human confirmation is authoritative. Automatic checks rank and explain
+    // receipts, but never unlock paid access before the receipt reaches admin.
+    const approve = false;
 
     const { data: proof, error: proofError } = await db.from("payment_proofs").insert({
       user_id: context.userId,
@@ -223,12 +221,19 @@ export const listPaymentProofs = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
     let query = db.from("payment_proofs")
-      .select("*, profiles:user_id(full_name, email, handle)")
+      .select("*")
       .order("created_at", { ascending: false }).limit(200);
     if (data.status === "needs_review") query = query.in("status", ["pending", "auto_approved"]);
     else if (data.status !== "all") query = query.eq("status", data.status);
-    const { data: rows } = await query;
+    const { data: rows, error } = await query;
+    if (error) throw error;
     let list = rows ?? [];
+    const userIds = Array.from(new Set(list.map((r: any) => r.user_id)));
+    const { data: profiles } = userIds.length
+      ? await db.from("profiles").select("id, full_name, email, handle").in("id", userIds)
+      : { data: [] };
+    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+    list = list.map((r: any) => ({ ...r, profiles: profileMap.get(r.user_id) ?? null }));
     if (data.q?.trim()) {
       const needle = data.q.trim().toLowerCase();
       list = list.filter((r: any) =>

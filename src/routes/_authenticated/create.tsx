@@ -6,7 +6,7 @@ import { AppShell } from "@/components/app-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Plus, Lock, GraduationCap, BarChart3 } from "lucide-react";
+import { Sparkles, Plus, Lock, GraduationCap, BarChart3, Crown } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/create")({
   head: () => ({ meta: [
@@ -34,9 +34,9 @@ function Create() {
           <Card className="border-dashed">
             <CardHeader>
               <div className="flex items-center gap-2"><Lock className="h-5 w-5" /><CardTitle>Creator access</CardTitle></div>
-              <CardDescription>Creators can publish quizzes, exams, and access analytics. Request access from a super admin to get started.</CardDescription>
+              <CardDescription>{status.reason || "Creator access is temporarily unavailable."}</CardDescription>
             </CardHeader>
-            <CardContent><Button asChild><Link to="/wallet">Request creator access</Link></Button></CardContent>
+            <CardContent><Button asChild><Link to="/wallet">View access options</Link></Button></CardContent>
           </Card>
         )}
 
@@ -69,12 +69,13 @@ function Create() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
-                <Perm on={status.permissions?.ai_enabled ?? status.is_super_admin} label="AI parsing" icon={Sparkles} />
-                <Perm on={status.permissions?.analytics_enabled ?? true} label="Analytics" icon={BarChart3} />
-                <Perm on={status.permissions?.can_publish ?? status.is_super_admin} label="Can publish" icon={Plus} />
-                {status.permissions?.max_quizzes != null && (
-                  <div className="text-xs text-muted-foreground">Quiz cap: <span className="font-medium text-foreground">{status.permissions.max_quizzes}</span></div>
+                <Perm on={status.effective?.ai_enabled ?? status.is_super_admin} label="AI tools" icon={Sparkles} />
+                <Perm on={status.effective?.analytics_enabled ?? true} label="Analytics" icon={BarChart3} />
+                <Perm on={status.effective?.can_publish ?? status.is_super_admin} label="Can publish" icon={Plus} />
+                {status.effective?.max_quizzes != null && (
+                  <div className="text-xs text-muted-foreground">Monthly quiz limit: <span className="font-medium text-foreground">{status.effective.max_quizzes}</span> · Questions per quiz: <span className="font-medium text-foreground">{status.effective.max_questions_per_quiz ?? "Unlimited"}</span></div>
                 )}
+                {status.effective?.tier === "free" && <Button asChild variant="outline" className="mt-3 w-full"><Link to="/wallet"><Crown className="mr-2 h-4 w-4"/>Upgrade to Pro Creator</Link></Button>}
               </CardContent>
             </Card>
 

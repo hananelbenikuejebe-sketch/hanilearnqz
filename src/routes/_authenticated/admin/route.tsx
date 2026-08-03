@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, Link, redirect, useNavigate } from "@tanstack/
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getMyRole } from "@/lib/role.functions";
+import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LayoutDashboard, ListChecks, Users, Settings as SettingsIcon, Home as HomeIcon, Wallet } from "lucide-react";
@@ -12,18 +13,20 @@ export const Route = createFileRoute("/_authenticated/admin")({
 
 function AdminLayout() {
   const fetchRole = useServerFn(getMyRole);
+  const fetchCreatorStatus = useServerFn(getMyCreatorStatus);
   const navigate = useNavigate();
   const { data, isLoading } = useQuery({ queryKey: ["role"], queryFn: () => fetchRole() });
+  const { data: creatorStatus, isLoading: creatorLoading } = useQuery({ queryKey: ["creator-status"], queryFn: () => fetchCreatorStatus() });
 
-  if (isLoading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
-  const isCreator = !!data?.isCreator;
+  if (isLoading || creatorLoading) return <div className="min-h-screen flex items-center justify-center">Loading…</div>;
+  const isCreator = !!data?.isCreator || !!creatorStatus?.can_create;
   const isAdmin = !!data?.isAdmin;
   if (!isCreator && !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center p-4">
         <div className="text-center max-w-md">
           <h1 className="text-2xl font-bold mb-2">Creators only</h1>
-          <p className="text-muted-foreground mb-4">Ask an admin to grant you creator access.</p>
+          <p className="text-muted-foreground mb-4">Creator access is currently unavailable. Check the free-tier setting or contact support.</p>
           <Button onClick={() => navigate({ to: "/" })}>Go home</Button>
         </div>
       </div>

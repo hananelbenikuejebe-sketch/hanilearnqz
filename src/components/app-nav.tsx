@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Compass, GraduationCap, Plus, User, Shield, Wallet } from "lucide-react";
+import { Compass, GraduationCap, Plus, User, Shield, Wallet, MessageCircle } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -7,6 +8,7 @@ const items = [
   { to: "/exams", icon: GraduationCap, label: "Exams" },
   { to: "/create", icon: Plus, label: "Create" },
   { to: "/wallet", icon: Wallet, label: "Wallet" },
+  { to: "/messages", icon: MessageCircle, label: "Messages" },
   { to: "/profile", icon: User, label: "Profile" },
 ];
 
@@ -18,6 +20,7 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
       <div className="hidden md:flex items-center gap-2 p-4 border-b">
         <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center text-primary-foreground font-bold text-xs">HQ</div>
         <span className="font-bold text-sm">HaniLearn-QZ</span>
+        <ThemeToggle />
       </div>
       <div className="flex md:flex-col md:p-2 flex-1 justify-around md:justify-start overflow-x-auto">
         {full.map((it) => {
