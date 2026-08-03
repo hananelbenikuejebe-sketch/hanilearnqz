@@ -30,15 +30,15 @@ function Explore() {
   const fetchStatus = useServerFn(getMyCreatorStatus);
   const searchPeople = useServerFn(searchProfiles);
   const followingFn = useServerFn(getFollowingIds);
-  const { data: quizzes, isLoading } = useQuery({ queryKey: ["published-quizzes"], queryFn: () => fetchQuizzes() });
-  const { data: status } = useQuery({ queryKey: ["creator-status"], queryFn: () => fetchStatus() });
-  const { data: followingIds } = useQuery({ queryKey: ["following-ids"], queryFn: () => followingFn() });
-  const { data: people } = useQuery({ queryKey: ["profile-search", q], queryFn: () => searchPeople({ data: { q } }), enabled: q.trim().length > 1 });
   const [q, setQ] = useState("");
   const [sort, setSort] = useState("recent");
   const [cat, setCat] = useState("all");
   const [feed, setFeed] = useState<"all" | "following">("all");
   const [view, setView] = useState<"grid" | "list" | "compact">("grid");
+  const { data: quizzes, isLoading } = useQuery({ queryKey: ["published-quizzes"], queryFn: () => fetchQuizzes() });
+  const { data: status } = useQuery({ queryKey: ["creator-status"], queryFn: () => fetchStatus() });
+  const { data: followingIds } = useQuery({ queryKey: ["following-ids"], queryFn: () => followingFn() });
+  const { data: people } = useQuery({ queryKey: ["profile-search", q], queryFn: () => searchPeople({ data: { q } }), enabled: q.trim().length > 1 });
 
   const cats = useMemo(() => {
     const s = new Set<string>();

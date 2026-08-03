@@ -69,7 +69,7 @@ function PublicProfile() {
           </CardContent>
         </Card>
 
-        <div><h2 className="mb-3 flex items-center gap-2 font-semibold"><Award className="h-4 w-4"/>Achievements</h2><div className="flex flex-wrap gap-2">{(data.badges ?? []).map((b: string) => <Badge key={b} variant={b.startsWith("Pro") ? "default" : "secondary"}>{b}</Badge>)}{!(data.badges ?? []).length && <span className="text-sm text-muted-foreground">Milestones will appear here.</span>}</div></div>
+        <div><h2 className="mb-3 flex items-center gap-2 font-semibold"><Award className="h-4 w-4"/>Achievements</h2><div className="flex flex-wrap gap-2">{(data.badges ?? []).filter((b: string | null): b is string => Boolean(b)).map((b: string) => <Badge key={b} variant={b.startsWith("Pro") ? "default" : "secondary"}>{b}</Badge>)}{!(data.badges ?? []).length && <span className="text-sm text-muted-foreground">Milestones will appear here.</span>}</div></div>
 
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><ListChecks className="h-4 w-4" />Published quizzes</CardTitle></CardHeader>

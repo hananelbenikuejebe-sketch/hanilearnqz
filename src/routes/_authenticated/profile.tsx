@@ -14,7 +14,14 @@ import { Sparkles, TrendingUp, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/profile")({
-  head: () => ({ meta: [{ title: "Profile — HaniLearn-QZ" }] }),
+  head: () => ({ meta: [
+    { title: "My profile — HaniLearn-QZ" },
+    { name: "description", content: "View your learning activity, quiz history and creator status." },
+    { property: "og:title", content: "My profile — HaniLearn-QZ" },
+    { property: "og:description", content: "View your learning activity, quiz history and creator status." },
+    { property: "og:type", content: "profile" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: Profile,
 });
 
@@ -54,6 +61,7 @@ function Profile() {
                 {status?.can_create && !status?.is_super_admin && <Badge variant="secondary">Creator</Badge>}
               </div>
               <p className="text-sm text-muted-foreground truncate">{me?.email}</p>
+              {status?.effective?.tier === "free" && <p className="mt-1 text-xs text-muted-foreground">Free creator · {status.effective.max_quizzes} quizzes/month · {status.effective.max_questions_per_quiz} questions/quiz</p>}
             </div>
             <div className="flex gap-2">
               {me?.guest && <Button size="sm" onClick={() => navigate({ to: "/auth" })}>Sign up</Button>}
