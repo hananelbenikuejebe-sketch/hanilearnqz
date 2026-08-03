@@ -110,8 +110,8 @@ export async function assertAdmin(supabase: any, userId: string) {
 export async function assertAiAllowed(supabase: any, userId: string) {
   const roles = await getActorRoles(supabase, userId);
   if (roles.includes("admin") || roles.includes("super_admin")) return;
-  const perms = await getCreatorPerms(supabase, userId);
-  if (!perms?.ai_enabled) throw new Error("AI features are disabled for your account. Ask an admin to enable them.");
+  const effective = await getEffectivePerms(supabase, userId);
+  if (!effective.ai_enabled) throw new Error("AI tools are a Pro Creator feature on your account. Upgrade or ask an admin to enable them.");
 }
 
 /** Assert analytics allowed. */
@@ -190,9 +190,9 @@ export async function checkAiAccess(supabase: any, userId: string, feature: AiFe
   const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
   if (settings?.feature_locks?.[feature]) throw new Error("This AI feature is currently disabled by the platform admin.");
 
-  const perms = await getCreatorPerms(supabase, userId);
-  if (perms && perms.ai_enabled === false) {
-    const err: any = new Error("AI features are turned off for your account. Contact support to enable them.");
+  const effective = await getEffectivePerms(supabase, userId);
+  if (!effective.ai_enabled) {
+    const err: any = new Error("AI tools are locked on your current tier. Upgrade to Pro Creator or ask an admin to enable them.");
     err.code = "AI_DISABLED";
     throw err;
   }

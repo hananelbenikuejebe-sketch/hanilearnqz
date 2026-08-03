@@ -8,6 +8,8 @@ export const getMyWallet = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
+    const { ensureFreeMonthlyCredit } = await import("./authz.server");
+    await ensureFreeMonthlyCredit(db, context.userId);
     await db.from("wallets").upsert({ user_id: context.userId }, { onConflict: "user_id" });
     const [{ data: wallet }, { data: txs }, { data: bank }, { data: pending }] = await Promise.all([
       db.from("wallets").select("*").eq("user_id", context.userId).single(),
@@ -15,7 +17,10 @@ export const getMyWallet = createServerFn({ method: "GET" })
       db.from("bank_accounts").select("*").eq("user_id", context.userId).maybeSingle(),
       db.from("withdrawal_requests").select("*").eq("user_id", context.userId).order("created_at", { ascending: false }).limit(10),
     ]);
-    return { wallet, transactions: txs ?? [], bank_account: bank ?? null, withdrawals: pending ?? [] };
+    const visibleWallet = wallet && wallet.ai_credit_expires_at && new Date(wallet.ai_credit_expires_at).getTime() < Date.now()
+      ? { ...wallet, ai_credit_balance_kobo: 0 }
+      : wallet;
+    return { wallet: visibleWallet, transactions: txs ?? [], bank_account: bank ?? null, withdrawals: pending ?? [] };
   });
 
 export const saveBankAccount = createServerFn({ method: "POST" })

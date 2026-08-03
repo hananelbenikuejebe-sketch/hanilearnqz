@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertCanEditQuiz } from "./authz.server";
+import { assertCanEditQuiz, getEffectivePerms } from "./authz.server";
 
 async function assertCanEditQuestion(supabase: any, userId: string, questionId: string) {
   const { data: q } = await supabase.from("questions").select("quiz_id").eq("id", questionId).maybeSingle();
@@ -36,6 +36,11 @@ export const createQuestion = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => QuestionInput.parse(d))
   .handler(async ({ context, data }) => {
     await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
+    const effective = await getEffectivePerms(context.supabase, context.userId);
+    if (effective.max_questions_per_quiz != null) {
+      const { count } = await context.supabase.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.quiz_id);
+      if ((count ?? 0) >= effective.max_questions_per_quiz) throw new Error(`Free tier allows ${effective.max_questions_per_quiz} questions per quiz. Upgrade to add more.`);
+    }
     const { data: maxRow } = await context.supabase
       .from("questions")
       .select("position")

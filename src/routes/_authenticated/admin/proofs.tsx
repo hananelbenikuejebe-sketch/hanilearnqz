@@ -70,7 +70,7 @@ function ProofsPage() {
     <div className="p-4 md:p-8 space-y-6 max-w-5xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Payments & receipts</h1>
-        <p className="text-muted-foreground text-sm">Every receipt lands here. Nothing is final until you confirm or decline it.</p>
+        <p className="text-muted-foreground text-sm">Every upload lands here. Access and wallet credit remain locked until you confirm it.</p>
       </div>
 
       <Tabs defaultValue="queue">
@@ -106,8 +106,8 @@ function ProofsPage() {
                     {expected != null && Number(expected) !== Number(p.amount_kobo) && (
                       <Badge variant="destructive">expected {naira(Number(expected))}</Badge>
                     )}
-                    <Badge variant={p.status === "declined" ? "destructive" : p.status === "auto_approved" ? "default" : "outline"}>
-                      {p.status === "auto_approved" ? "auto-granted · confirm me" : p.status}
+                    <Badge variant={p.status === "declined" ? "destructive" : "outline"}>
+                      {p.status === "auto_approved" ? "legacy auto-grant · review" : p.status}
                     </Badge>
                     <Badge variant="outline">
                       score {p.auto_confidence} · {p.extracted?.image_read ? "image read" : "image NOT read"}
@@ -185,8 +185,8 @@ function ProofsPage() {
                 </div>
               </div>
               <div className="flex items-center justify-between border rounded-md p-3">
-                <div><Label>Auto-approve</Label><p className="text-xs text-muted-foreground">Grant access before your review</p></div>
-                <Switch checked={s.proof_auto_approve ?? true} onCheckedChange={(v) => save.mutate({ proof_auto_approve: v })} />
+                <div><Label>Automatic verification</Label><p className="text-xs text-muted-foreground">Scores receipts for your queue; human confirmation still unlocks access</p></div>
+                <Switch checked={false} disabled />
               </div>
               <div className="flex items-center justify-between border rounded-md p-3">
                 <div><Label>Use AI image check</Label><p className="text-xs text-muted-foreground">Only when the offline check is unsure</p></div>

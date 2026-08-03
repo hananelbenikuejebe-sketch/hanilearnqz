@@ -83,7 +83,7 @@ export function PayDialog({ purpose, amountKobo, quizId, label, variant = "defau
       <DialogContent className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Pay {naira(expected)}</DialogTitle>
-          <DialogDescription>Transfer the exact amount to the account below, then upload your receipt. Access is granted as soon as your payment checks out.</DialogDescription>
+          <DialogDescription>Transfer the exact amount, then upload a clear receipt. Your purchase and wallet update after admin confirmation.</DialogDescription>
         </DialogHeader>
 
         {done ? (

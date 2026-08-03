@@ -20,7 +20,14 @@ import { PayDialog } from "@/components/pay-dialog";
 import { z } from "zod";
 
 export const Route = createFileRoute("/_authenticated/wallet")({
-  head: () => ({ meta: [{ title: "Wallet — HaniLearn-QZ" }] }),
+  head: () => ({ meta: [
+    { title: "Wallet — HaniLearn-QZ" },
+    { name: "description", content: "Manage AI credit, creator access, earnings and payment history." },
+    { property: "og:title", content: "Wallet — HaniLearn-QZ" },
+    { property: "og:description", content: "Manage AI credit, creator access, earnings and payments." },
+    { property: "og:type", content: "website" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   validateSearch: (s: any) => z.object({ ref: z.string().optional() }).parse(s),
   component: WalletPage,
 });

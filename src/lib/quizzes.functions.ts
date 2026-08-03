@@ -72,6 +72,11 @@ export const listPublishedQuizzes = createServerFn({ method: "GET" })
       (qs ?? []).forEach((r: any) => { counts[r.quiz_id]++; });
     }
     const socials = await socialCounts(adminDb, ids);
+    const creatorIds = Array.from(new Set((quizzes ?? []).map((q: any) => q.created_by).filter(Boolean)));
+    const { data: creators } = creatorIds.length
+      ? await adminDb.from("profiles").select("id, full_name, handle, avatar_url").in("id", creatorIds)
+      : { data: [] };
+    const creatorMap = new Map((creators ?? []).map((p: any) => [p.id, p]));
     const origin = requestOrigin();
     return Promise.all((quizzes ?? []).map(async (q: any) => ({
       ...q,
@@ -79,6 +84,7 @@ export const listPublishedQuizzes = createServerFn({ method: "GET" })
       banner_url: await signBanner(adminDb, q.banner_path),
       share_url: `${origin}/share/quiz/${q.id}`,
       social_counts: socials[q.id] ?? { likes: 0, comments: 0, shares: 0 },
+      creator: creatorMap.get(q.created_by) ?? null,
     })));
   });
 
@@ -308,13 +314,15 @@ export const createQuiz = createServerFn({ method: "POST" })
     if (!gate.ok) throw new Error(gate.reason ?? "Not allowed to create quizzes.");
     // Enforce publish + quota rules for non-admin creators.
     const isAdmin = gate.roles.includes("admin") || gate.roles.includes("super_admin");
-    if (!isAdmin && gate.perms) {
-      const { count } = await context.supabase
-        .from("quizzes").select("id", { count: "exact", head: true }).eq("created_by", context.userId);
-      if ((count ?? 0) >= gate.perms.max_quizzes) {
-        throw new Error(`Quiz cap reached (${gate.perms.max_quizzes}). Ask an admin to raise your limit.`);
+    if (!isAdmin) {
+      const effective = gate.effective;
+      const start = new Date(); start.setUTCDate(1); start.setUTCHours(0, 0, 0, 0);
+      const { count } = await context.supabase.from("quizzes").select("id", { count: "exact", head: true })
+        .eq("created_by", context.userId).gte("created_at", start.toISOString());
+      if (effective?.max_quizzes != null && (count ?? 0) >= effective.max_quizzes) {
+        throw new Error(`Monthly quiz limit reached (${effective.max_quizzes}). Upgrade to Pro Creator for a higher limit.`);
       }
-      if (data.is_published && gate.perms.can_publish === false) {
+      if (data.is_published && effective?.can_publish === false) {
         data = { ...data, is_published: false };
       }
     }
@@ -336,8 +344,9 @@ export const updateQuiz = createServerFn({ method: "POST" })
     const gate = await assertCanEditQuiz(context.supabase, context.userId, data.id);
     // Non-admin creators cannot flip publish on if their perms forbid it.
     if (!gate.admin && data.patch.is_published === true) {
-      const perms = await getCreatorPerms(context.supabase, context.userId);
-      if (perms && perms.can_publish === false) {
+      const { getEffectivePerms } = await import("./authz.server");
+      const perms = await getEffectivePerms(context.supabase, context.userId);
+      if (perms.can_publish === false) {
         data.patch = { ...data.patch, is_published: false };
       }
     }

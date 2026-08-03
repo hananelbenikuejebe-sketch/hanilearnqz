@@ -9,10 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { UserPlus, UserCheck, ListChecks } from "lucide-react";
+import { UserPlus, UserCheck, ListChecks, MessageCircle, Award } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/profile/$userId")({
-  head: () => ({ meta: [{ title: "Profile — HaniLearn-QZ" }] }),
+  head: () => ({ meta: [
+    { title: "Community profile — HaniLearn-QZ" },
+    { name: "description", content: "View a HaniLearn-QZ creator profile, achievements and published quizzes." },
+    { property: "og:title", content: "Community profile — HaniLearn-QZ" },
+    { property: "og:description", content: "View a creator's achievements and published quizzes." },
+    { property: "og:type", content: "profile" },
+    { name: "twitter:card", content: "summary" },
+  ] }),
   component: PublicProfile,
 });
 
@@ -55,12 +62,14 @@ function PublicProfile() {
               </div>
             </div>
             {!data.is_self && (
-              <Button size="sm" variant={data.i_follow ? "outline" : "default"} onClick={() => follow.mutate()} disabled={follow.isPending}>
+              <div className="flex gap-2"><Button size="sm" variant={data.i_follow ? "outline" : "default"} onClick={() => follow.mutate()} disabled={follow.isPending}>
                 {data.i_follow ? <><UserCheck className="h-4 w-4 mr-1" />Following</> : <><UserPlus className="h-4 w-4 mr-1" />Follow</>}
-              </Button>
+              </Button><Button asChild size="sm" variant="outline"><Link to="/messages/$userId" params={{ userId }}><MessageCircle className="mr-1 h-4 w-4"/>Message</Link></Button></div>
             )}
           </CardContent>
         </Card>
+
+        <div><h2 className="mb-3 flex items-center gap-2 font-semibold"><Award className="h-4 w-4"/>Achievements</h2><div className="flex flex-wrap gap-2">{(data.badges ?? []).filter((b: string | null): b is string => Boolean(b)).map((b: string) => <Badge key={b} variant={b.startsWith("Pro") ? "default" : "secondary"}>{b}</Badge>)}{!(data.badges ?? []).length && <span className="text-sm text-muted-foreground">Milestones will appear here.</span>}</div></div>
 
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><ListChecks className="h-4 w-4" />Published quizzes</CardTitle></CardHeader>
