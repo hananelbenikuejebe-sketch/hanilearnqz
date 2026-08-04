@@ -557,6 +557,7 @@ export type Database = {
           creator_access_includes_ai: boolean
           creator_access_price_kobo: number
           creator_access_quiz_cap: number
+          creator_plan_prices: Json
           feature_locks: Json
           free_ai_parse: boolean
           free_max_questions_per_quiz: number
@@ -593,6 +594,7 @@ export type Database = {
           creator_access_includes_ai?: boolean
           creator_access_price_kobo?: number
           creator_access_quiz_cap?: number
+          creator_plan_prices?: Json
           feature_locks?: Json
           free_ai_parse?: boolean
           free_max_questions_per_quiz?: number
@@ -629,6 +631,7 @@ export type Database = {
           creator_access_includes_ai?: boolean
           creator_access_price_kobo?: number
           creator_access_quiz_cap?: number
+          creator_plan_prices?: Json
           feature_locks?: Json
           free_ai_parse?: boolean
           free_max_questions_per_quiz?: number
@@ -1073,6 +1076,42 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      support_guides: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          is_published: boolean
+          link_label: string | null
+          link_url: string | null
+          position: number
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          link_label?: string | null
+          link_url?: string | null
+          position?: number
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          is_published?: boolean
+          link_label?: string | null
+          link_url?: string | null
+          position?: number
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_follows: {
         Row: {
