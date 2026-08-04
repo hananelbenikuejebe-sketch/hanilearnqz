@@ -1,5 +1,5 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Compass, GraduationCap, Plus, User, Shield, Wallet, MessageCircle } from "lucide-react";
+import { Compass, GraduationCap, Plus, User, Shield, Wallet, MessageCircle, LifeBuoy } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -10,6 +10,7 @@ const items = [
   { to: "/wallet", icon: Wallet, label: "Wallet" },
   { to: "/messages", icon: MessageCircle, label: "Messages" },
   { to: "/profile", icon: User, label: "Profile" },
+  { to: "/support", icon: LifeBuoy, label: "Help" },
 ];
 
 export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
