@@ -100,18 +100,7 @@ function WalletPage() {
           </Card>
         </div>
 
-        {!status?.can_create && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4" />Become a creator</CardTitle>
-              <CardDescription>{settings ? `₦${(settings.creator_access_price_kobo/100).toFixed(0)} for ${settings.creator_access_duration_days} days · ${settings.creator_access_quiz_cap} quiz cap${settings.creator_access_includes_ai ? " · includes AI" : " · AI billed separately"}` : "…"}</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-wrap gap-2">
-              <PayDialog purpose="creator_access" amountKobo={settings?.creator_access_price_kobo} label="Pay & unlock creator" />
-              <ContactAdmin purpose="creator access" amount={settings?.creator_access_price_kobo} />
-            </CardContent>
-          </Card>
-        )}
+        <ProPlans settings={settings} status={status} />
 
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Link2 className="h-4 w-4" />Your affiliate link</CardTitle>
