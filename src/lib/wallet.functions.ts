@@ -31,7 +31,8 @@ export const saveBankAccount = createServerFn({ method: "POST" })
     account_name: z.string().trim().min(2).max(120),
   }).parse(d))
   .handler(async ({ context, data }) => {
-    const { error } = await context.supabase.from("bank_accounts").upsert(
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await (supabaseAdmin as any).from("bank_accounts").upsert(
       { user_id: context.userId, ...data }, { onConflict: "user_id" },
     );
     if (error) throw error;

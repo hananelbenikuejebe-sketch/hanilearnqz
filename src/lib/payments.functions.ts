@@ -19,6 +19,7 @@ export const updatePaymentSettings = createServerFn({ method: "POST" })
     creator_access_duration_days: z.number().int().min(1).max(365).optional(),
     creator_access_quiz_cap: z.number().int().min(1).max(10000).optional(),
     creator_access_includes_ai: z.boolean().optional(),
+    creator_plan_prices: z.record(z.string(), z.number().int().min(0)).optional(),
     ai_result_price_kobo: z.number().int().min(0).optional(),
     ai_essay_price_kobo: z.number().int().min(0).optional(),
     ai_parser_rate_per_1k_input_kobo: z.number().int().min(0).optional(),
