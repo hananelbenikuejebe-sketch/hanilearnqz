@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { MessageCircle } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/messages")({
+export const Route = createFileRoute("/_authenticated/messages/")({
   head: () => ({ meta: [
     { title: "Messages — HaniLearn-QZ" },
     { name: "description", content: "Private conversations with learners and quiz creators." },
