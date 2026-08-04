@@ -182,7 +182,7 @@ export const listAttemptsForQuiz = createServerFn({ method: "GET" })
       ? await db.from("profiles").select("id, full_name, email").in("id", studentIds)
       : { data: [] as any[] };
     const profMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
-    return (attempts ?? []).map((a) => ({ ...a, student: profMap.get(a.student_id) ?? null }));
+    return (attempts ?? []).map((a: any) => ({ ...a, student: profMap.get(a.student_id) ?? null }));
   });
 
 export const listMyAttempts = createServerFn({ method: "GET" })
