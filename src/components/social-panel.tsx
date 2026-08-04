@@ -91,7 +91,7 @@ export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; q
                 <span className="w-6 text-center font-bold text-muted-foreground">
                   {row.rank === 1 ? <Crown className="h-4 w-4 text-amber-500 inline" /> : row.rank <= 3 ? <Medal className="h-4 w-4 text-amber-600 inline" /> : row.rank}
                 </span>
-                <span className="flex-1 truncate">{row.name}{row.is_me && " (you)"}</span>
+                <Link to="/profile/$userId" params={{ userId: row.student_id }} className="flex-1 truncate hover:underline">{row.name}{row.is_me && " (you)"}</Link>
                 <span className="tabular-nums font-medium">{row.score_pct.toFixed(0)}%</span>
                 <span className="tabular-nums text-xs text-muted-foreground w-12 text-right">{Math.floor(row.time_taken_sec / 60)}m{row.time_taken_sec % 60}s</span>
               </div>
