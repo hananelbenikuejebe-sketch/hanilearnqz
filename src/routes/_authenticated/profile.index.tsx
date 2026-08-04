@@ -13,7 +13,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sparkles, TrendingUp, LogOut, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/_authenticated/profile")({
+export const Route = createFileRoute("/_authenticated/profile/")({
   head: () => ({ meta: [
     { title: "My profile — HaniLearn-QZ" },
     { name: "description", content: "View your learning activity, quiz history and creator status." },

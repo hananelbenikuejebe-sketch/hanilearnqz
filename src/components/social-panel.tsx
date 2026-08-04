@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Heart, MessageCircle, Share2, Trophy, EyeOff, Eye, Trash2, Crown, Medal } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
 export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; quizTitle?: string; shareUrl?: string }) {
@@ -90,7 +91,7 @@ export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; q
                 <span className="w-6 text-center font-bold text-muted-foreground">
                   {row.rank === 1 ? <Crown className="h-4 w-4 text-amber-500 inline" /> : row.rank <= 3 ? <Medal className="h-4 w-4 text-amber-600 inline" /> : row.rank}
                 </span>
-                <span className="flex-1 truncate">{row.name}{row.is_me && " (you)"}</span>
+                <Link to="/profile/$userId" params={{ userId: row.student_id }} className="flex-1 truncate hover:underline">{row.name}{row.is_me && " (you)"}</Link>
                 <span className="tabular-nums font-medium">{row.score_pct.toFixed(0)}%</span>
                 <span className="tabular-nums text-xs text-muted-foreground w-12 text-right">{Math.floor(row.time_taken_sec / 60)}m{row.time_taken_sec % 60}s</span>
               </div>
@@ -114,7 +115,7 @@ export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; q
               {comments.map((c: any) => (
                 <div key={c.id} className={`p-2 rounded border text-sm ${c.is_hidden ? "opacity-60 bg-muted" : ""}`}>
                   <div className="flex items-center justify-between gap-2 mb-1">
-                    <span className="font-medium text-xs">{c.author_name}{c.is_hidden && " · hidden"}</span>
+                    <Link to="/profile/$userId" params={{ userId: c.user_id }} className="font-medium text-xs hover:underline">{c.author_name}{c.is_hidden && " · hidden"}</Link>
                     <div className="flex gap-1">
                       {is_admin && (
                         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => hide.mutate({ id: c.id, hidden: !c.is_hidden })} title={c.is_hidden ? "Unhide" : "Hide"}>

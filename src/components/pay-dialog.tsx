@@ -16,13 +16,14 @@ type Props = {
   amountKobo?: number;
   quizId?: string;
   label: string;
+  months?: number;
   variant?: "default" | "outline" | "secondary";
   size?: "default" | "sm";
 };
 
 const naira = (k?: number) => `₦${((k ?? 0) / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 
-export function PayDialog({ purpose, amountKobo, quizId, label, variant = "default", size = "default" }: Props) {
+export function PayDialog({ purpose, amountKobo, quizId, label, months, variant = "default", size = "default" }: Props) {
   const qc = useQueryClient();
   const infoFn = useServerFn(getPaymentInstructions);
   const submitFn = useServerFn(submitPaymentProof);
@@ -39,7 +40,7 @@ export function PayDialog({ purpose, amountKobo, quizId, label, variant = "defau
     bank_name: "",
   });
 
-  const expected = purpose === "creator_access" ? info?.creator_access_price_kobo ?? amountKobo : amountKobo;
+  const expected = purpose === "creator_access" ? (amountKobo ?? info?.creator_access_price_kobo) : amountKobo;
   const support = (info?.support_whatsapp ?? "+2349071829295").replace(/\D/g, "");
 
   async function submit() {
@@ -57,6 +58,7 @@ export function PayDialog({ purpose, amountKobo, quizId, label, variant = "defau
           purpose,
           amount_kobo: expected ?? 0,
           quiz_id: quizId,
+          months,
           file_path: path,
           file_size: file.size,
           file_mime: file.type,

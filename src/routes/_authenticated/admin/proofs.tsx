@@ -185,8 +185,20 @@ function ProofsPage() {
                 </div>
               </div>
               <div className="flex items-center justify-between border rounded-md p-3">
-                <div><Label>Automatic verification</Label><p className="text-xs text-muted-foreground">Scores receipts for your queue; human confirmation still unlocks access</p></div>
-                <Switch checked={false} disabled />
+                <div><Label>Auto-grant on high confidence</Label><p className="text-xs text-muted-foreground">When on, receipts scoring above the threshold unlock access immediately and still appear in your queue for review</p></div>
+                <Switch checked={s.proof_auto_approve ?? false} onCheckedChange={(v) => save.mutate({ proof_auto_approve: v })} />
+              </div>
+              <div className="rounded-md border p-3 space-y-2">
+                <Label>Creator plan prices (₦, 0 = auto multiple of the 1-month price)</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 3, 6, 12].map((m) => (
+                    <div key={m}>
+                      <p className="text-xs text-muted-foreground mb-1">{m}m</p>
+                      <Input type="number" min={0} defaultValue={Number((s.creator_plan_prices ?? {})[String(m)] ?? 0) / 100}
+                        onBlur={(e) => save.mutate({ creator_plan_prices: { ...(s.creator_plan_prices ?? {}), [String(m)]: Math.max(0, Math.round(parseFloat(e.target.value || "0") * 100)) } })} />
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="flex items-center justify-between border rounded-md p-3">
                 <div><Label>Use AI image check</Label><p className="text-xs text-muted-foreground">Only when the offline check is unsure</p></div>

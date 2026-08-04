@@ -169,15 +169,20 @@ export const listAttemptsForQuiz = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: { quiz_id: string }) => z.object({ quiz_id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAdmin(context.supabase, context.userId);
-    const { data: attempts } = await context.supabase
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: quiz } = await db.from("quizzes").select("created_by").eq("id", data.quiz_id).maybeSingle();
+    const { data: roleRows } = await db.from("user_roles").select("role").eq("user_id", context.userId);
+    const isAdminUser = (roleRows ?? []).some((r: any) => r.role === "admin" || r.role === "super_admin");
+    if (!isAdminUser && quiz?.created_by !== context.userId) throw new Error("Forbidden: you can only see results for your own quizzes");
+    const { data: attempts } = await db
       .from("attempts").select("*").eq("quiz_id", data.quiz_id).order("submitted_at", { ascending: false });
-    const studentIds = Array.from(new Set((attempts ?? []).map((a) => a.student_id)));
+    const studentIds = Array.from(new Set((attempts ?? []).map((a: any) => a.student_id)));
     const { data: profiles } = studentIds.length
-      ? await context.supabase.from("profiles").select("id, full_name, email").in("id", studentIds)
+      ? await db.from("profiles").select("id, full_name, email").in("id", studentIds)
       : { data: [] as any[] };
     const profMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
-    return (attempts ?? []).map((a) => ({ ...a, student: profMap.get(a.student_id) ?? null }));
+    return (attempts ?? []).map((a: any) => ({ ...a, student: profMap.get(a.student_id) ?? null }));
   });
 
 export const listMyAttempts = createServerFn({ method: "GET" })

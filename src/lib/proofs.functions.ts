@@ -24,6 +24,7 @@ const SubmitInput = z.object({
   purpose: z.enum(["creator_access", "ai_credit", "quiz_purchase"]),
   amount_kobo: z.number().int().min(100).max(50_000_000).optional(),
   quiz_id: z.string().uuid().optional(),
+  months: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]).optional(),
   file_path: z.string().min(4).max(400),
   file_size: z.number().int().min(0).max(30_000_000).optional(),
   file_mime: z.string().max(80).optional(),
@@ -55,7 +56,10 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
     let creatorId: string | null = null;
     let quizTitle: string | null = null;
     if (data.purpose === "creator_access") {
-      expected = Number(settings.creator_access_price_kobo ?? 0);
+      const months = data.months ?? 1;
+      const plans = (settings.creator_plan_prices ?? {}) as Record<string, number>;
+      const override = Number(plans[String(months)] ?? 0);
+      expected = override > 0 ? override : Number(settings.creator_access_price_kobo ?? 0) * months;
     } else if (data.purpose === "ai_credit") {
       expected = Number(data.amount_kobo ?? 0);
       if (expected < Number(settings.ai_credit_min_topup_kobo ?? 0)) {
@@ -99,6 +103,7 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
       affiliate_user_id: attr?.affiliate_user_id ?? null,
       meta: {
         manual: true,
+        months: data.months ?? 1,
         name: profile?.full_name ?? null,
         email: profile?.email ?? null,
         ...(quizId ? { quiz_id: quizId, creator_id: creatorId, quiz_title: quizTitle } : {}),

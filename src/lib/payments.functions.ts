@@ -19,6 +19,7 @@ export const updatePaymentSettings = createServerFn({ method: "POST" })
     creator_access_duration_days: z.number().int().min(1).max(365).optional(),
     creator_access_quiz_cap: z.number().int().min(1).max(10000).optional(),
     creator_access_includes_ai: z.boolean().optional(),
+    creator_plan_prices: z.record(z.string(), z.number().int().min(0)).optional(),
     ai_result_price_kobo: z.number().int().min(0).optional(),
     ai_essay_price_kobo: z.number().int().min(0).optional(),
     ai_parser_rate_per_1k_input_kobo: z.number().int().min(0).optional(),
@@ -181,8 +182,12 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
 
   // 4) Grant the thing
   if (intent.purpose === "creator_access") {
-    const days = settings.creator_access_duration_days;
-    const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+    const months = Math.max(1, Number((intent.meta ?? {}).months ?? 1));
+    const infinite = !!(intent.meta ?? {}).infinite;
+    const days = settings.creator_access_duration_days * months;
+    const expires = infinite
+      ? new Date("2999-12-31T00:00:00.000Z").toISOString()
+      : new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
     await db.from("subscriptions").insert({
       user_id: intent.user_id, kind: "creator_access", expires_at: expires,
       source_payment_intent: intent.id,

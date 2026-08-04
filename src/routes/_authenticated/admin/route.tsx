@@ -5,7 +5,7 @@ import { getMyRole } from "@/lib/role.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { LayoutDashboard, ListChecks, Users, Settings as SettingsIcon, Home as HomeIcon, Wallet } from "lucide-react";
+import { LayoutDashboard, ListChecks, Users, Settings as SettingsIcon, Home as HomeIcon, Wallet, LifeBuoy } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   component: AdminLayout,
@@ -37,7 +37,8 @@ function AdminLayout() {
     { to: "/admin", icon: LayoutDashboard, label: "Dashboard", adminOnly: false },
     { to: "/admin/quizzes", icon: ListChecks, label: "Quizzes", adminOnly: false },
     { to: "/admin/exams", icon: ListChecks, label: "Exams", adminOnly: false },
-    { to: "/admin/students", icon: Users, label: "Students", adminOnly: true },
+    { to: "/admin/users", icon: Users, label: "Users & money", adminOnly: true },
+    { to: "/admin/guides", icon: LifeBuoy, label: "Guides", adminOnly: true },
     { to: "/admin/payments", icon: Wallet, label: "Payments", adminOnly: true },
     { to: "/admin/proofs", icon: Wallet, label: "Receipts", adminOnly: true },
     { to: "/admin/settings", icon: SettingsIcon, label: "Settings", adminOnly: true },
