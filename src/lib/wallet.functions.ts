@@ -51,8 +51,9 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     ]);
     if (!bank) throw new Error("Add your bank account details first.");
     if (!wallet || wallet.balance_kobo < data.amount_kobo) throw new Error("Insufficient earnings balance.");
-    if (data.amount_kobo < settings.withdrawal_min_kobo) {
-      throw new Error(`Minimum withdrawal is ₦${(settings.withdrawal_min_kobo/100).toFixed(0)}`);
+    const minKobo = Number(settings?.withdrawal_min_kobo ?? 0);
+    if (data.amount_kobo < minKobo) {
+      throw new Error(`Minimum withdrawal is ₦${(minKobo / 100).toFixed(0)}`);
     }
     // Debit immediately (hold funds); refund on rejection.
     await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - data.amount_kobo }).eq("user_id", context.userId);
@@ -70,7 +71,7 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
 
     const naira = (data.amount_kobo / 100).toFixed(2);
     const msg = `Withdrawal request — HaniLearn-QZ\n\nUser ID: ${context.userId}\nAmount: NGN ${naira}\nBank: ${bank.bank_name}\nAccount #: ${bank.account_number}\nAccount name: ${bank.account_name}\nRequest ID: ${req.id}`;
-    const whatsapp = settings.withdrawal_whatsapp.replace(/[^\d]/g, "");
+    const whatsapp = String(settings?.withdrawal_whatsapp || settings?.support_whatsapp || "+2349071829295").replace(/[^\d]/g, "");
     const whatsappUrl = `https://wa.me/${whatsapp}?text=${encodeURIComponent(msg)}`;
     return { request: req, whatsappUrl, message: msg };
   });

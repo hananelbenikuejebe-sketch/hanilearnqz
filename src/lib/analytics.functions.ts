@@ -263,12 +263,13 @@ export const getQuizAnalytics = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid() }).parse(d))
   .handler(async ({ context, data }) => {
-    await assertAnalyticsAllowed(context.supabase, context.userId);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
     const { data: quiz } = await db.from("quizzes")
       .select("id, title, created_by, total_score, is_published").eq("id", data.quiz_id).maybeSingle();
     if (!quiz) throw new Error("Quiz not found");
+    // Owners always get stats for their own quiz; other viewers need analytics access.
+    if (quiz.created_by !== context.userId) await assertAnalyticsAllowed(context.supabase, context.userId);
     const { data: roleRows } = await db.from("user_roles").select("role").eq("user_id", context.userId);
     const isAdmin = (roleRows ?? []).some((r: any) => r.role === "admin" || r.role === "super_admin");
     if (quiz.created_by !== context.userId && !isAdmin) throw new Error("Forbidden");
