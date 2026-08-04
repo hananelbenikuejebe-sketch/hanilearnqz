@@ -204,3 +204,34 @@ function ContactAdmin({ purpose, amount }: { purpose: string; amount?: number })
     </Button>
   );
 }
+
+function ProPlans({ settings, status }: any) {
+  const base = settings?.creator_access_price_kobo ?? 0;
+  const plans = (settings?.creator_plan_prices ?? {}) as Record<string, number>;
+  const priceFor = (m: number) => (Number(plans[String(m)] ?? 0) > 0 ? Number(plans[String(m)]) : base * m);
+  const active = !!status?.permissions;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base flex items-center gap-2"><Sparkles className="h-4 w-4" />{active ? "Extend Pro creator access" : "Upgrade to Pro creator"}</CardTitle>
+        <CardDescription>
+          {settings
+            ? `${settings.creator_access_quiz_cap} quiz cap · unlimited questions · AI parsing & analytics${settings.creator_access_includes_ai ? " · AI included" : " · AI billed from credit"}`
+            : "…"}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {[1, 3, 6, 12].map((m) => (
+          <div key={m} className="rounded-lg border p-3 space-y-2">
+            <div className="flex items-baseline justify-between">
+              <span className="font-medium">{m} month{m > 1 ? "s" : ""}</span>
+              <span className="text-lg font-bold tabular-nums">{naira(priceFor(m))}</span>
+            </div>
+            <PayDialog purpose="creator_access" months={m as any} amountKobo={priceFor(m)} label="Pay with receipt" size="sm" />
+            <ContactAdmin purpose={`${m}-month creator access`} amount={priceFor(m)} />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
