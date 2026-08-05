@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, Home, RotateCw, Sparkles, Loader2 } from "lucide-react";
 import { SocialPanel } from "@/components/social-panel";
+import { AdSlot } from "@/components/ad-slot";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/quiz/$quizId/result/$attemptId")({
@@ -150,6 +151,10 @@ function ResultPage() {
 
         <div className="mt-6">
           <SocialPanel quizId={quizId} quizTitle={quiz?.title} />
+        </div>
+
+        <div className="mt-6">
+          <AdSlot placement="quiz_end" />
         </div>
       </main>
     </div>
