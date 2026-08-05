@@ -179,9 +179,16 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints, onGenerateKey }: { quiz: any; onSave: (p: any) => void; onUploadBanner: (file: File) => Promise<void>; onDistributePoints: (total: number) => void; onGenerateKey: () => Promise<string> }) {
+function SettingsForm({ quiz, onSave, onSavePrizes, onUploadBanner, onDistributePoints, onGenerateKey }: { quiz: any; onSave: (p: any) => void; onSavePrizes: (prizes: { position: number; amount_kobo: number }[], ends: string | null) => void; onUploadBanner: (file: File) => Promise<void>; onDistributePoints: (total: number) => void; onGenerateKey: () => Promise<string> }) {
   const [f, setF] = useState({ ...quiz });
   const [uploading, setUploading] = useState(false);
+  const existingPrizes: Record<number, number> = {};
+  (quiz.prizes ?? []).forEach((p: any) => { existingPrizes[p.position] = p.amount_kobo; });
+  const [prizeNaira, setPrizeNaira] = useState<Record<number, string>>(
+    Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1, existingPrizes[i + 1] ? String(existingPrizes[i + 1] / 100) : ""]))
+  );
+  const [endsAt, setEndsAt] = useState<string>(quiz.competition_ends_at ? new Date(quiz.competition_ends_at).toISOString().slice(0, 16) : "");
+  const prizePool = Object.values(prizeNaira).reduce((sum, v) => sum + (Number(v) || 0), 0) * 100;
   const bannerRef = useRef<HTMLInputElement>(null);
   const CATS = ["JAMB", "WAEC", "NECO", "GCE", "Post-UTME", "Custom"];
   return (
@@ -282,8 +289,36 @@ function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints, onGene
           </label>
         ))}
       </div>
+      <div className="space-y-3 rounded-md border p-3">
+        <Label className="text-sm font-semibold">Prizes & competition</Label>
+        <label className="flex items-center justify-between p-2 border rounded">
+          <span className="text-sm">Show score as points (off = percentage)</span>
+          <Switch checked={f.show_score_as_points !== false} onCheckedChange={(v) => setF({ ...f, show_score_as_points: v })} />
+        </label>
+        <div>
+          <Label>Competition ends at</Label>
+          <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((pos) => (
+            <div key={pos}>
+              <Label className="text-xs">#{pos} prize (₦)</Label>
+              <Input type="number" min={0} value={prizeNaira[pos] ?? ""} onChange={(e) => setPrizeNaira({ ...prizeNaira, [pos]: e.target.value })} />
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Total pool: ₦{(prizePool / 100).toLocaleString()}</span>
+          <Button type="button" variant="outline" onClick={() => {
+            const prizes = Object.entries(prizeNaira)
+              .map(([pos, v]) => ({ position: Number(pos), amount_kobo: Math.round((Number(v) || 0) * 100) }))
+              .filter((p) => p.amount_kobo > 0);
+            onSavePrizes(prizes, endsAt ? new Date(endsAt).toISOString() : null);
+          }}>Save prizes</Button>
+        </div>
+      </div>
       <Button onClick={() => {
-        const { id: _, created_at: _c, updated_at: _u, created_by: _b, banner_url: _bu, share_url: _su, question_count: _qc, social_counts: _sc, ...patch } = f;
+        const { id: _, created_at: _c, updated_at: _u, created_by: _b, banner_url: _bu, share_url: _su, question_count: _qc, social_counts: _sc, sections: _sec, prizes: _pz, total_marks: _tm, competition_ends_at: _cea, prize_pool_kobo: _ppk, ...patch } = f;
         onSave(patch);
       }}>Save settings</Button>
     </CardContent></Card>
