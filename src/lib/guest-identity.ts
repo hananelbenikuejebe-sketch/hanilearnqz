@@ -54,3 +54,31 @@ export async function getOrCreateGuestIdentity(): Promise<{ handle: string; fing
   try { localStorage.setItem(LS_KEY, JSON.stringify(value)); } catch { /* ignore */ }
   return value;
 }
+
+/**
+ * Ensures there is a Supabase session, creating/reusing a deterministic
+ * device-scoped guest account when the visitor is not signed in.
+ * Returns true when a session exists afterwards.
+ */
+export async function ensureGuestSession(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  const { supabase } = await import("@/integrations/supabase/client");
+  const { data: existing } = await supabase.auth.getUser();
+  if (existing.user) return true;
+
+  const { handle, fingerprint } = await getOrCreateGuestIdentity();
+  const email = `guest-${fingerprint.slice(0, 20)}@guest.hanilearnqz.local`;
+  const password = `g_${fingerprint.slice(0, 32)}!Qz9`;
+
+  const first = await supabase.auth.signInWithPassword({ email, password });
+  if (!first.error) return true;
+
+  const { error: upErr } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: { full_name: handle, guest: true, fingerprint } },
+  });
+  if (upErr) return false;
+  const second = await supabase.auth.signInWithPassword({ email, password });
+  return !second.error;
+}

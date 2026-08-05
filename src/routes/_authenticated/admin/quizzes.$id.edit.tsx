@@ -467,9 +467,9 @@ function SectionsPanel({ quizId, sections, unsectioned, questions, selected, onR
       <div className="space-y-3">
         {sections.sort((a: any, b: any) => a.position - b.position).map((s: any) => (
           <SectionRow key={s.id} section={s}
-            onRename={(t) => renameSection.mutate({ id: s.id, title: t })}
+            onRename={(t: string) => renameSection.mutate({ id: s.id, title: t })}
             onDelete={() => { if (confirm(`Delete section "${s.title}"? Its questions become unassigned.`)) removeSection.mutate(s.id); }}
-            onSaveMarks={(total, distribute) => saveMarks.mutate({ section_id: s.id, total_score: total, distribute })} />
+            onSaveMarks={(total: number, distribute: boolean) => saveMarks.mutate({ section_id: s.id, total_score: total, distribute })} />
         ))}
         {sections.length === 0 && <p className="text-sm text-muted-foreground">No sections yet. Add one above or auto-create from parsed headers.</p>}
       </div>

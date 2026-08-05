@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState, useEffect } from "react";
 import { AppShell } from "@/components/app-nav";
+import { AdSlot } from "@/components/ad-slot";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -106,6 +107,8 @@ function WalletPage() {
             </CardContent>
           </Card>
         </div>
+
+        <AdSlot placement="wallet" />
 
         <ProPlans settings={settings} status={status} />
 
