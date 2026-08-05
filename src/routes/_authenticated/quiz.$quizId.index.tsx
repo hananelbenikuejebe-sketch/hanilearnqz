@@ -10,7 +10,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Clock, FileQuestion, Lock, Play, ShieldCheck, Sparkles, User } from "lucide-react";
+import { Clock, FileQuestion, Lock, Play, ShieldCheck, Sparkles, User, Trophy, Timer } from "lucide-react";
+import { quizBannerStyle } from "@/lib/banner-color";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -63,7 +64,7 @@ function QuizAbout() {
 
   return <main className="min-h-screen bg-background"><div className="container mx-auto max-w-5xl px-3 py-4 sm:py-6">
     <div className="overflow-hidden rounded-lg border bg-card shadow-technical">
-      <div className="grid min-h-56 place-items-end bg-secondary p-5" style={quiz.banner_url ? { backgroundImage: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--card) 92%, transparent)), url(${quiz.banner_url})`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
+      <div className="grid min-h-56 place-items-end bg-secondary p-5" style={quiz.banner_url ? { backgroundImage: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--card) 92%, transparent)), url(${quiz.banner_url})`, backgroundSize: "cover", backgroundPosition: "center" } : { ...quizBannerStyle(quizId, (quiz as any).banner_color).style, backgroundImage: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--card) 75%, transparent)), ${quizBannerStyle(quizId, (quiz as any).banner_color).style.backgroundImage}` }}>
         <div className="w-full">
           <div className="mb-2 flex flex-wrap gap-2">
             <Badge variant="secondary">{quiz.category}</Badge>
@@ -88,6 +89,42 @@ function QuizAbout() {
             <Stat icon={<Clock />} label="Duration" value={`${quiz.duration_min}m`} />
             <Stat icon={<ShieldCheck />} label="Access" value={quiz.visibility} />
           </div>
+
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Stat icon={<Sparkles />} label="Total marks" value={`${(quiz as any).total_marks ?? 0}`} />
+            <Stat icon={<Trophy />} label="Price" value={(quiz as any).price_kobo > 0 ? `₦${((quiz as any).price_kobo/100).toLocaleString()}` : "Free"} />
+            {(quiz as any).competition_ends_at && <CountdownStat endsAt={(quiz as any).competition_ends_at} />}
+          </div>
+
+          {Array.isArray((quiz as any).sections) && (quiz as any).sections.length > 0 && (
+            <Card><CardContent className="p-3">
+              <h2 className="mb-2 text-sm font-semibold">Sections</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-muted-foreground"><tr className="border-b"><th className="py-1 text-left">Section</th><th className="py-1 text-right">Questions</th><th className="py-1 text-right">Marks</th></tr></thead>
+                  <tbody>
+                    {(quiz as any).sections.sort((a: any, b: any) => a.position - b.position).map((s: any) => (
+                      <tr key={s.id} className="border-b last:border-0"><td className="py-1.5">{s.title}</td><td className="py-1.5 text-right">{s.question_count}</td><td className="py-1.5 text-right">{s.total_score ?? s.computed_points}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent></Card>
+          )}
+
+          {Array.isArray((quiz as any).prizes) && (quiz as any).prizes.length > 0 && (
+            <Card><CardContent className="p-3">
+              <h2 className="mb-2 flex items-center gap-1.5 text-sm font-semibold"><Trophy className="h-4 w-4 text-amber-500" />Prizes</h2>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {(quiz as any).prizes.sort((a: any, b: any) => a.position - b.position).map((p: any) => (
+                  <div key={p.id} className="rounded-md border bg-background p-2 text-center">
+                    <div className="text-[11px] uppercase text-muted-foreground">#{p.position}</div>
+                    <div className="text-sm font-semibold">₦{(p.amount_kobo/100).toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+            </CardContent></Card>
+          )}
 
           {quiz.instructions && (
             <Card><CardContent className="p-3">
@@ -142,6 +179,17 @@ function QuizAbout() {
       </CardContent>
     </div>
   </div></main>;
+}
+
+function CountdownStat({ endsAt }: { endsAt: string }) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const diff = new Date(endsAt).getTime() - now;
+  const value = diff <= 0 ? "Ended" : (() => {
+    const d = Math.floor(diff / 86400000); const h = Math.floor((diff % 86400000) / 3600000); const m = Math.floor((diff % 3600000) / 60000);
+    return d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`;
+  })();
+  return <Stat icon={<Timer />} label="Ends in" value={value} />;
 }
 
 function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
