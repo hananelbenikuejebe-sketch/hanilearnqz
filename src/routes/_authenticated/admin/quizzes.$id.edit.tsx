@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
-import { getQuizAdmin, updateQuiz, uploadQuizBanner, generateQuizAccessKey } from "@/lib/quizzes.functions";
+import { getQuizAdmin, updateQuiz, uploadQuizBanner, generateQuizAccessKey, setQuizPrizes } from "@/lib/quizzes.functions";
+import { listSections, upsertSection, deleteSection, assignQuestionsToSection, autoSectionFromSubsections, setSectionMarks } from "@/lib/sections.functions";
 import { createQuestion, updateQuestion, deleteQuestion, bulkInsertQuestions, bulkDeleteQuestions, distributeQuizPoints } from "@/lib/questions.functions";
 import { parseQuestionsFromText, parseQuestionsHeuristic, validateParseInput, generateQuestionsAi } from "@/lib/ai-parse.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -36,6 +37,13 @@ function EditQuiz() {
   const uploadBannerFn = useServerFn(uploadQuizBanner);
   const genKeyFn = useServerFn(generateQuizAccessKey);
   const aiFn = useServerFn(parseQuestionsFromText);
+  const setPrizesFn = useServerFn(setQuizPrizes);
+  const listSectionsFn = useServerFn(listSections);
+  const upsertSectionFn = useServerFn(upsertSection);
+  const deleteSectionFn = useServerFn(deleteSection);
+  const assignFn = useServerFn(assignQuestionsToSection);
+  const autoSectionFn = useServerFn(autoSectionFromSubsections);
+  const setMarksFn = useServerFn(setSectionMarks);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-quiz", id],
@@ -73,6 +81,10 @@ function EditQuiz() {
     mutationFn: (total: number) => distributeFn({ data: { quiz_id: id, total } }),
     onSuccess: (r: any) => { toast.success(`Distributed: ${r.per_question} pts each`); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); },
   });
+  const { data: sectionData } = useQuery({
+    queryKey: ["admin-quiz-sections", id],
+    queryFn: () => listSectionsFn({ data: { quiz_id: id } }),
+  });
 
   if (isLoading || !data) return <div>Loading…</div>;
   const { quiz, questions } = data;
@@ -89,11 +101,12 @@ function EditQuiz() {
         <TabsList>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
+          <TabsTrigger value="sections">Sections ({sectionData?.sections?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="ai">Import & generate</TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings">
-          <SettingsForm quiz={quiz} onSave={(p) => update.mutate(p)} onUploadBanner={async (file) => {
+          <SettingsForm quiz={quiz} onSave={(p) => update.mutate(p)} onSavePrizes={(prizes, ends) => setPrizesFn({ data: { quiz_id: id, prizes, competition_ends_at: ends } }).then(() => { toast.success("Prizes saved"); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); })} onUploadBanner={async (file) => {
             const b64 = await fileToBase64(file);
             await uploadBannerFn({ data: { quiz_id: id, filename: file.name, content_type: file.type || "image/jpeg", base64: b64 } });
             toast.success("Banner uploaded");
@@ -128,6 +141,22 @@ function EditQuiz() {
               onDelete={() => { if (confirm("Delete this question?")) delQ.mutate(q.id); }} />
           ))}
           <Button onClick={() => addQ.mutate()} variant="outline" className="w-full"><Plus className="h-4 w-4 mr-1" />Add question</Button>
+        </TabsContent>
+
+        <TabsContent value="sections" className="space-y-4">
+          <SectionsPanel
+            quizId={id}
+            sections={sectionData?.sections ?? []}
+            unsectioned={sectionData?.unsectioned ?? 0}
+            questions={questions}
+            selected={selected}
+            onRefresh={() => { qc.invalidateQueries({ queryKey: ["admin-quiz-sections", id] }); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); }}
+            upsertSectionFn={upsertSectionFn}
+            deleteSectionFn={deleteSectionFn}
+            assignFn={assignFn}
+            autoSectionFn={autoSectionFn}
+            setMarksFn={setMarksFn}
+          />
         </TabsContent>
 
         <TabsContent value="ai">

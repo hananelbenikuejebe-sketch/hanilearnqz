@@ -1,9 +1,21 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { generateText } from "ai";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { createLovableAiGatewayProvider } from "./ai-gateway.server";
+import { aiChat, isAiConfigured } from "./ai-provider.server";
 import { assertAiAllowed, logAiUsage, checkAiAccess, billAiUsage } from "./authz.server";
+
+/**
+ * All heavy parser/generator/marker work goes through the merged AI router
+ * (OpenRouter first, Lovable AI as fallback) so paid-for features run on the
+ * cheap provider while platform-critical checks stay on Lovable AI.
+ */
+async function heavyText(args: { system: string; prompt: string; temperature?: number; maxOutputTokens?: number; json?: boolean }) {
+  const r = await aiChat("heavy", [
+    { role: "system", content: args.system },
+    { role: "user", content: args.prompt },
+  ], { temperature: args.temperature ?? 0, max_tokens: args.maxOutputTokens, json: args.json });
+  return { text: r.text, provider: r.provider, model: r.model, usage: { inputTokens: r.input_tokens, outputTokens: r.output_tokens }, fellBack: r.fellBack };
+}
 
 
 const ParsedQuestionSchema = z.object({
@@ -96,23 +108,18 @@ export const parseQuestionsFromText = createServerFn({ method: "POST" })
       threshold: settings.confidence_threshold,
     });
 
-    const key = process.env['LOVABLE_API_KEY'];
-    if (!key) {
+    if (!isAiConfigured()) {
       if (!offline.questions.length) throw new Error("AI is not configured yet and the offline parser found no questions.");
       return { ...normalizeParsed(offline as any, data.text, settings.confidence_threshold, Date.now() - started, "Parsed offline — review before publishing."), offline: true };
     }
-    const gateway = createLovableAiGatewayProvider(key);
-    const model = "google/gemini-3-flash-preview";
 
     // Nothing offline? Fall back to a full AI extraction.
     if (!offline.questions.length) {
       const prompt = buildPrompt(data.text, settings, data.format_hint);
       try {
-        const full = await generateText({
-          model: gateway(model), system: SYSTEM_PROMPT, prompt, temperature: 0, maxOutputTokens: 16000,
-        });
+        const full = await heavyText({ system: SYSTEM_PROMPT, prompt, temperature: 0, maxOutputTokens: 16000 });
         await billAiUsage(context.userId, "ai_parser", {
-          model,
+          model: full.model, provider: full.provider,
           input_tokens: (full as any).usage?.inputTokens ?? 0,
           output_tokens: (full as any).usage?.outputTokens ?? 0,
         });
@@ -188,15 +195,14 @@ For every item:
         raw: (q.raw_import_text ?? "").slice(0, 1800),
       }));
       try {
-        const review = await generateText({
-          model: gateway(model),
+        const review = await heavyText({
           system: `${system}\n${schemaLine}`,
           prompt: JSON.stringify({ strictness: settings.strictness, items: payload }),
           temperature: 0,
           maxOutputTokens: 6000,
         });
         await billAiUsage(context.userId, data.ai_generative ? "ai_review" : "ai_parser", {
-          model,
+          model: review.model, provider: review.provider,
           input_tokens: (review as any).usage?.inputTokens ?? 0,
           output_tokens: (review as any).usage?.outputTokens ?? 0,
           meta: { mode: data.ai_generative ? "generative-review" : "review", reviewed: payload.length },
@@ -338,11 +344,8 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
   }).parse(d))
   .handler(async ({ data, context }) => {
     await checkAiAccess(context.supabase, context.userId, "ai_essay");
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("AI is not configured. Grade manually.");
-    const gateway = createLovableAiGatewayProvider(key);
-    const result = await generateText({
-      model: gateway("google/gemini-3-flash-preview"),
+    if (!isAiConfigured()) throw new Error("AI is not configured. Grade manually.");
+    const result = await heavyText({
       system: "You are a strict but fair exam marker. Grade the student answer against the model answer (if provided) and the question. Return ONLY JSON: {\"score\":0-<max>,\"percent\":0-100,\"feedback\":\"...\",\"strengths\":[\"...\"],\"weaknesses\":[\"...\"]}. Be concise.",
       prompt: `Question: ${data.question}\nModel answer: ${data.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${data.student_answer}\nMax points: ${data.max_points}`,
 
@@ -351,7 +354,7 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
     });
     const text = result.text;
     await billAiUsage(context.userId, "ai_essay", {
-      model: "google/gemini-3-flash-preview",
+      model: result.model, provider: result.provider,
       input_tokens: (result as any).usage?.inputTokens ?? 0,
       output_tokens: (result as any).usage?.outputTokens ?? 0,
     });
@@ -566,10 +569,7 @@ export const generateQuestionsAi = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => GenerateInput.parse(d))
   .handler(async ({ data, context }) => {
     await checkAiAccess(context.supabase, context.userId, "ai_generate");
-    const key = process.env['LOVABLE_API_KEY'];
-    if (!key) throw new Error("AI is not configured yet.");
-    const gateway = createLovableAiGatewayProvider(key);
-    const model = "google/gemini-3-flash-preview";
+    if (!isAiConfigured()) throw new Error("AI is not configured yet.");
     const started = Date.now();
 
     const system = `You write exam questions for a Nigerian study app. Output PLAIN TEXT in exactly this import format, nothing else — no markdown, no preamble, no numbering gaps:
@@ -601,12 +601,10 @@ Rules:
 
     let text = "";
     try {
-      const res = await generateText({
-        model: gateway(model), system, prompt, temperature: 0.4, maxOutputTokens: 8000,
-      });
+      const res = await heavyText({ system, prompt, temperature: 0.4, maxOutputTokens: 8000 });
       text = res.text ?? "";
       await billAiUsage(context.userId, "ai_generate", {
-        model,
+        model: res.model, provider: res.provider,
         input_tokens: (res as any).usage?.inputTokens ?? 0,
         output_tokens: (res as any).usage?.outputTokens ?? 0,
         meta: { count: data.count, topic: data.topic.slice(0, 80) },

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState, useEffect } from "react";
 import { getPaymentSettings, updatePaymentSettings } from "@/lib/payments.functions";
+import { supabase } from "@/integrations/supabase/client";
 import { listWithdrawals, resolveWithdrawal } from "@/lib/wallet.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,15 @@ function AdminPayments() {
   const resolve = useServerFn(resolveWithdrawal);
   const { data: settings } = useQuery({ queryKey: ["payment-settings-admin"], queryFn: () => getSettings() });
   const { data: wds } = useQuery({ queryKey: ["withdrawals"], queryFn: () => listWd() });
+  const { data: feeRevenue } = useQuery({
+    queryKey: ["fee-revenue-30d"],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+      const { data, error } = await supabase.from("wallet_transactions").select("amount_kobo").eq("kind", "platform_fee").gte("created_at", since);
+      if (error) throw error;
+      return (data ?? []).reduce((sum: number, t: any) => sum + Math.abs(t.amount_kobo), 0);
+    },
+  });
   const [form, setForm] = useState<any>(null);
   useEffect(() => { if (settings) setForm(settings); }, [settings]);
 
@@ -82,7 +92,17 @@ function AdminPayments() {
           <Num label="Quiz sale platform fee %" value={form.quiz_platform_fee_pct ?? 10} onChange={(v) => setForm({ ...form, quiz_platform_fee_pct: Math.max(0, Math.min(90, v)) })} />
           <Money label="Min withdrawal" value={form.withdrawal_min_kobo} onChange={(v) => setForm({ ...form, withdrawal_min_kobo: v })} />
           <div className="col-span-2"><Label>Withdrawal WhatsApp</Label><Input value={form.withdrawal_whatsapp} onChange={(e) => setForm({ ...form, withdrawal_whatsapp: e.target.value })} /></div>
-          <p className="col-span-2 text-xs text-muted-foreground">Platform fee is deducted from each paid-quiz sale; the remainder is credited to the creator's earnings wallet.</p>
+          <Num label="Wallet top-up fee %" value={form.topup_fee_pct ?? 5} onChange={(v) => setForm({ ...form, topup_fee_pct: Math.max(0, Math.min(20, v)) })} />
+          <Num label="Withdrawal fee %" value={form.withdrawal_fee_pct ?? 5} onChange={(v) => setForm({ ...form, withdrawal_fee_pct: Math.max(0, Math.min(20, v)) })} />
+          <p className="col-span-2 text-xs text-muted-foreground">Platform fee is deducted from each paid-quiz sale; the remainder is credited to the creator's earnings wallet. Top-up/withdrawal fees are deducted from wallet flows accordingly.</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle className="text-base">Fee revenue (last 30 days)</CardTitle></CardHeader>
+        <CardContent>
+          <p className="text-2xl font-bold tabular-nums">{naira(feeRevenue ?? 0)}</p>
+          <p className="text-xs text-muted-foreground">Sum of all platform_fee ledger rows across top-ups, withdrawals and quiz sales.</p>
         </CardContent>
       </Card>
 
