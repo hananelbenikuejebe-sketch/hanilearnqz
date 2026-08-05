@@ -26,6 +26,43 @@ async function socialCounts(adminDb: any, ids: string[]) {
   return base;
 }
 
+async function quizExtras(db: any, quizIds: string[]) {
+  const result: Record<string, { sections: any[]; prizes: any[]; total_marks: number }> = {};
+  quizIds.forEach((id) => { result[id] = { sections: [], prizes: [], total_marks: 0 }; });
+  if (!quizIds.length) return result;
+  const [{ data: sections }, { data: prizes }, { data: questions }] = await Promise.all([
+    db.from("quiz_sections").select("*").in("quiz_id", quizIds).order("position"),
+    db.from("quiz_prizes").select("*").in("quiz_id", quizIds).order("position"),
+    db.from("questions").select("id, quiz_id, section_id, points").in("quiz_id", quizIds),
+  ]);
+  const pointsBySection: Record<string, number> = {};
+  const countBySection: Record<string, number> = {};
+  const totalByQuiz: Record<string, number> = {};
+  (questions ?? []).forEach((q: any) => {
+    totalByQuiz[q.quiz_id] = (totalByQuiz[q.quiz_id] ?? 0) + Number(q.points ?? 1);
+    if (q.section_id) {
+      pointsBySection[q.section_id] = (pointsBySection[q.section_id] ?? 0) + Number(q.points ?? 1);
+      countBySection[q.section_id] = (countBySection[q.section_id] ?? 0) + 1;
+    }
+  });
+  (sections ?? []).forEach((sec: any) => {
+    if (!result[sec.quiz_id]) return;
+    result[sec.quiz_id].sections.push({
+      ...sec,
+      question_count: countBySection[sec.id] ?? 0,
+      computed_points: pointsBySection[sec.id] ?? 0,
+    });
+  });
+  (prizes ?? []).forEach((p: any) => {
+    if (!result[p.quiz_id]) return;
+    result[p.quiz_id].prizes.push(p);
+  });
+  for (const id of quizIds) {
+    result[id].total_marks = totalByQuiz[id] ?? 0;
+  }
+  return result;
+}
+
 function requestOrigin() {
   try { return new URL(getRequest().url).origin; } catch { return "https://hanilearnqz.lovable.app"; }
 }
@@ -72,19 +109,24 @@ export const listPublishedQuizzes = createServerFn({ method: "GET" })
       (qs ?? []).forEach((r: any) => { counts[r.quiz_id]++; });
     }
     const socials = await socialCounts(adminDb, ids);
+    const extras = await quizExtras(adminDb, ids);
     const creatorIds = Array.from(new Set((quizzes ?? []).map((q: any) => q.created_by).filter(Boolean)));
     const { data: creators } = creatorIds.length
       ? await adminDb.from("profiles").select("id, full_name, handle, avatar_url").in("id", creatorIds)
       : { data: [] };
     const creatorMap = new Map((creators ?? []).map((p: any) => [p.id, p]));
     const origin = requestOrigin();
+    const { pickBannerColor } = await import("./banner-color");
     return Promise.all((quizzes ?? []).map(async (q: any) => ({
       ...q,
       question_count: counts[q.id] ?? 0,
       banner_url: await signBanner(adminDb, q.banner_path),
+      banner_color: q.banner_color ?? pickBannerColor(q.id || q.title),
       share_url: `${origin}/share/quiz/${q.id}`,
       social_counts: socials[q.id] ?? { likes: 0, comments: 0, shares: 0 },
       creator: creatorMap.get(q.created_by) ?? null,
+      total_marks: extras[q.id]?.total_marks || q.total_score || 0,
+      prize_pool_kobo: q.prize_pool_kobo ?? 0,
     })));
   });
 
@@ -120,9 +162,12 @@ export const getQuizAbout = createServerFn({ method: "GET" })
       const { data: pur } = await adminDb.from("quiz_purchases").select("id").eq("user_id", context.userId).eq("quiz_id", data.id).maybeSingle();
       purchased = !!pur;
     }
+    const extras = await quizExtras(adminDb, [data.id]);
+    const { pickBannerColor } = await import("./banner-color");
     return {
       ...quiz,
       banner_url: await signBanner(adminDb, (quiz as any).banner_path),
+      banner_color: (quiz as any).banner_color ?? pickBannerColor(data.id || (quiz as any).title),
       share_url: `${requestOrigin()}/share/quiz/${data.id}`,
       question_count: count ?? 0,
       social_counts: counts[data.id],
@@ -132,6 +177,9 @@ export const getQuizAbout = createServerFn({ method: "GET" })
       purchased,
       requires_key: (quiz as any).visibility === "private" && !isOwner && !admin,
       requires_purchase: (quiz as any).price_kobo > 0 && !isOwner && !admin && !purchased,
+      sections: extras[data.id]?.sections ?? [],
+      prizes: extras[data.id]?.prizes ?? [],
+      total_marks: extras[data.id]?.total_marks || (quiz as any).total_score || 0,
     };
   });
 
@@ -167,7 +215,15 @@ export const getQuizAdmin = createServerFn({ method: "GET" })
       .select("*, options(*)")
       .eq("quiz_id", data.id)
       .order("position");
-    return { quiz, questions: questions ?? [] };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const extras = await quizExtras(supabaseAdmin as any, [data.id]);
+    return {
+      quiz,
+      questions: questions ?? [],
+      sections: extras[data.id]?.sections ?? [],
+      prizes: extras[data.id]?.prizes ?? [],
+      total_marks: extras[data.id]?.total_marks || (quiz as any).total_score || 0,
+    };
   });
 
 export const getQuizForPlayer = createServerFn({ method: "GET" })
@@ -219,7 +275,7 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
     // supabaseAdmin already imported above for the private-quiz fetch
     const { data: questions } = await context.supabase
       .from("questions")
-      .select("id, position, type, text, options(id, position, text)")
+      .select("id, position, type, text, points, section_id, options(id, position, text)")
       .eq("quiz_id", data.id)
       .order("position");
 
@@ -228,7 +284,12 @@ export const getQuizForPlayer = createServerFn({ method: "GET" })
       return { ...q, options: quiz.shuffle_options ? shuffle(opts) : opts };
     });
     const finalQuestions = quiz.randomize_questions ? shuffle(prepared) : prepared;
-    return { quiz: { ...quiz, banner_url: await signBanner(adminDb, (quiz as any).banner_path) }, questions: finalQuestions };
+    const { data: sections } = await adminDb.from("quiz_sections").select("*").eq("quiz_id", data.id).order("position");
+    return {
+      quiz: { ...quiz, banner_url: await signBanner(adminDb, (quiz as any).banner_path) },
+      questions: finalQuestions,
+      sections: sections ?? [],
+    };
   });
 
 function shuffle<T>(arr: T[]): T[] {
@@ -486,4 +547,50 @@ export const checkQuizAccess = createServerFn({ method: "GET" })
       price_kobo: quiz.price_kobo,
       access_key: (isOwner || admin) ? quiz.access_key : null, // never leak the key
     };
+  });
+
+/** Owner-only: record prize intent for a competition-style quiz. Does NOT move money. */
+export const setQuizPrizes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      quiz_id: z.string().uuid(),
+      prizes: z.array(z.object({
+        position: z.number().int().min(1).max(10),
+        amount_kobo: z.number().int().min(0).max(100_000_000),
+      })),
+      competition_ends_at: z.string().datetime().optional().nullable(),
+    }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    await db.from("quiz_prizes").delete().eq("quiz_id", data.quiz_id);
+    const rows = data.prizes.filter((p) => p.amount_kobo > 0);
+    if (rows.length) {
+      const { error } = await db.from("quiz_prizes").insert(
+        rows.map((p) => ({ quiz_id: data.quiz_id, position: p.position, amount_kobo: p.amount_kobo })),
+      );
+      if (error) throw error;
+    }
+    const pool = rows.reduce((sum, p) => sum + p.amount_kobo, 0);
+    const patch: any = { prize_pool_kobo: pool };
+    if (data.competition_ends_at !== undefined) patch.competition_ends_at = data.competition_ends_at;
+    const { error: uErr } = await context.supabase.from("quizzes").update(patch).eq("id", data.quiz_id);
+    if (uErr) throw uErr;
+    return { ok: true, prize_pool_kobo: pool };
+  });
+
+/** Persist a deterministic banner colour for quizzes without an uploaded image. */
+export const saveBannerColor = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    await assertCanEditQuiz(context.supabase, context.userId, data.quiz_id);
+    const { pickBannerColor } = await import("./banner-color");
+    const color = pickBannerColor(data.quiz_id);
+    const { error } = await context.supabase.from("quizzes").update({ banner_color: color }).eq("id", data.quiz_id);
+    if (error) throw error;
+    return { banner_color: color };
   });

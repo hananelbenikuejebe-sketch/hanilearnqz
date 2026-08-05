@@ -2,7 +2,8 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useRef, useState } from "react";
-import { getQuizAdmin, updateQuiz, uploadQuizBanner, generateQuizAccessKey } from "@/lib/quizzes.functions";
+import { getQuizAdmin, updateQuiz, uploadQuizBanner, generateQuizAccessKey, setQuizPrizes } from "@/lib/quizzes.functions";
+import { listSections, upsertSection, deleteSection, assignQuestionsToSection, autoSectionFromSubsections, setSectionMarks } from "@/lib/sections.functions";
 import { createQuestion, updateQuestion, deleteQuestion, bulkInsertQuestions, bulkDeleteQuestions, distributeQuizPoints } from "@/lib/questions.functions";
 import { parseQuestionsFromText, parseQuestionsHeuristic, validateParseInput, generateQuestionsAi } from "@/lib/ai-parse.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -36,6 +37,13 @@ function EditQuiz() {
   const uploadBannerFn = useServerFn(uploadQuizBanner);
   const genKeyFn = useServerFn(generateQuizAccessKey);
   const aiFn = useServerFn(parseQuestionsFromText);
+  const setPrizesFn = useServerFn(setQuizPrizes);
+  const listSectionsFn = useServerFn(listSections);
+  const upsertSectionFn = useServerFn(upsertSection);
+  const deleteSectionFn = useServerFn(deleteSection);
+  const assignFn = useServerFn(assignQuestionsToSection);
+  const autoSectionFn = useServerFn(autoSectionFromSubsections);
+  const setMarksFn = useServerFn(setSectionMarks);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-quiz", id],
@@ -73,6 +81,10 @@ function EditQuiz() {
     mutationFn: (total: number) => distributeFn({ data: { quiz_id: id, total } }),
     onSuccess: (r: any) => { toast.success(`Distributed: ${r.per_question} pts each`); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); },
   });
+  const { data: sectionData } = useQuery({
+    queryKey: ["admin-quiz-sections", id],
+    queryFn: () => listSectionsFn({ data: { quiz_id: id } }),
+  });
 
   if (isLoading || !data) return <div>Loading…</div>;
   const { quiz, questions } = data;
@@ -89,11 +101,12 @@ function EditQuiz() {
         <TabsList>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
+          <TabsTrigger value="sections">Sections ({sectionData?.sections?.length ?? 0})</TabsTrigger>
           <TabsTrigger value="ai">Import & generate</TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings">
-          <SettingsForm quiz={quiz} onSave={(p) => update.mutate(p)} onUploadBanner={async (file) => {
+          <SettingsForm quiz={quiz} onSave={(p) => update.mutate(p)} onSavePrizes={(prizes, ends) => setPrizesFn({ data: { quiz_id: id, prizes, competition_ends_at: ends } }).then(() => { toast.success("Prizes saved"); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); })} onUploadBanner={async (file) => {
             const b64 = await fileToBase64(file);
             await uploadBannerFn({ data: { quiz_id: id, filename: file.name, content_type: file.type || "image/jpeg", base64: b64 } });
             toast.success("Banner uploaded");
@@ -130,6 +143,22 @@ function EditQuiz() {
           <Button onClick={() => addQ.mutate()} variant="outline" className="w-full"><Plus className="h-4 w-4 mr-1" />Add question</Button>
         </TabsContent>
 
+        <TabsContent value="sections" className="space-y-4">
+          <SectionsPanel
+            quizId={id}
+            sections={sectionData?.sections ?? []}
+            unsectioned={sectionData?.unsectioned ?? 0}
+            questions={questions}
+            selected={selected}
+            onRefresh={() => { qc.invalidateQueries({ queryKey: ["admin-quiz-sections", id] }); qc.invalidateQueries({ queryKey: ["admin-quiz", id] }); }}
+            upsertSectionFn={upsertSectionFn}
+            deleteSectionFn={deleteSectionFn}
+            assignFn={assignFn}
+            autoSectionFn={autoSectionFn}
+            setMarksFn={setMarksFn}
+          />
+        </TabsContent>
+
         <TabsContent value="ai">
           <AIPanel quizId={id} onDone={() => qc.invalidateQueries({ queryKey: ["admin-quiz", id] })} />
         </TabsContent>
@@ -150,9 +179,16 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints, onGenerateKey }: { quiz: any; onSave: (p: any) => void; onUploadBanner: (file: File) => Promise<void>; onDistributePoints: (total: number) => void; onGenerateKey: () => Promise<string> }) {
+function SettingsForm({ quiz, onSave, onSavePrizes, onUploadBanner, onDistributePoints, onGenerateKey }: { quiz: any; onSave: (p: any) => void; onSavePrizes: (prizes: { position: number; amount_kobo: number }[], ends: string | null) => void; onUploadBanner: (file: File) => Promise<void>; onDistributePoints: (total: number) => void; onGenerateKey: () => Promise<string> }) {
   const [f, setF] = useState({ ...quiz });
   const [uploading, setUploading] = useState(false);
+  const existingPrizes: Record<number, number> = {};
+  (quiz.prizes ?? []).forEach((p: any) => { existingPrizes[p.position] = p.amount_kobo; });
+  const [prizeNaira, setPrizeNaira] = useState<Record<number, string>>(
+    Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1, existingPrizes[i + 1] ? String(existingPrizes[i + 1] / 100) : ""]))
+  );
+  const [endsAt, setEndsAt] = useState<string>(quiz.competition_ends_at ? new Date(quiz.competition_ends_at).toISOString().slice(0, 16) : "");
+  const prizePool = Object.values(prizeNaira).reduce((sum, v) => sum + (Number(v) || 0), 0) * 100;
   const bannerRef = useRef<HTMLInputElement>(null);
   const CATS = ["JAMB", "WAEC", "NECO", "GCE", "Post-UTME", "Custom"];
   return (
@@ -253,8 +289,36 @@ function SettingsForm({ quiz, onSave, onUploadBanner, onDistributePoints, onGene
           </label>
         ))}
       </div>
+      <div className="space-y-3 rounded-md border p-3">
+        <Label className="text-sm font-semibold">Prizes & competition</Label>
+        <label className="flex items-center justify-between p-2 border rounded">
+          <span className="text-sm">Show score as points (off = percentage)</span>
+          <Switch checked={f.show_score_as_points !== false} onCheckedChange={(v) => setF({ ...f, show_score_as_points: v })} />
+        </label>
+        <div>
+          <Label>Competition ends at</Label>
+          <Input type="datetime-local" value={endsAt} onChange={(e) => setEndsAt(e.target.value)} />
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {Array.from({ length: 10 }, (_, i) => i + 1).map((pos) => (
+            <div key={pos}>
+              <Label className="text-xs">#{pos} prize (₦)</Label>
+              <Input type="number" min={0} value={prizeNaira[pos] ?? ""} onChange={(e) => setPrizeNaira({ ...prizeNaira, [pos]: e.target.value })} />
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-muted-foreground">Total pool: ₦{(prizePool / 100).toLocaleString()}</span>
+          <Button type="button" variant="outline" onClick={() => {
+            const prizes = Object.entries(prizeNaira)
+              .map(([pos, v]) => ({ position: Number(pos), amount_kobo: Math.round((Number(v) || 0) * 100) }))
+              .filter((p) => p.amount_kobo > 0);
+            onSavePrizes(prizes, endsAt ? new Date(endsAt).toISOString() : null);
+          }}>Save prizes</Button>
+        </div>
+      </div>
       <Button onClick={() => {
-        const { id: _, created_at: _c, updated_at: _u, created_by: _b, banner_url: _bu, share_url: _su, question_count: _qc, social_counts: _sc, ...patch } = f;
+        const { id: _, created_at: _c, updated_at: _u, created_by: _b, banner_url: _bu, share_url: _su, question_count: _qc, social_counts: _sc, sections: _sec, prizes: _pz, total_marks: _tm, competition_ends_at: _cea, prize_pool_kobo: _ppk, ...patch } = f;
         onSave(patch);
       }}>Save settings</Button>
     </CardContent></Card>
@@ -327,6 +391,113 @@ function QuestionCard({ q, index, selected, onToggleSelect, onSave, onDelete }: 
 
 function Badge({ children }: { children: any }) {
   return <span className="inline-flex items-center justify-center h-6 w-6 rounded bg-primary text-primary-foreground text-xs font-bold shrink-0">{children}</span>;
+}
+
+function SectionsPanel({ quizId, sections, unsectioned, questions, selected, onRefresh, upsertSectionFn, deleteSectionFn, assignFn, autoSectionFn, setMarksFn }: any) {
+  const [title, setTitle] = useState("");
+  const [assignTarget, setAssignTarget] = useState<string>("");
+
+  const createSection = useMutation({
+    mutationFn: () => upsertSectionFn({ data: { quiz_id: quizId, title: title.trim() } }),
+    onSuccess: () => { setTitle(""); toast.success("Section added"); onRefresh(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const renameSection = useMutation({
+    mutationFn: (v: { id: string; title: string }) => upsertSectionFn({ data: { id: v.id, quiz_id: quizId, title: v.title } }),
+    onSuccess: () => onRefresh(),
+  });
+  const removeSection = useMutation({
+    mutationFn: (sid: string) => deleteSectionFn({ data: { id: sid } }),
+    onSuccess: () => { toast.success("Section deleted"); onRefresh(); },
+  });
+  const saveMarks = useMutation({
+    mutationFn: (v: { section_id: string; total_score: number; distribute: boolean }) => setMarksFn({ data: v }),
+    onSuccess: () => { toast.success("Marks updated"); onRefresh(); },
+  });
+  const assignSelected = useMutation({
+    mutationFn: () => assignFn({ data: { quiz_id: quizId, question_ids: Array.from(selected), section_id: assignTarget || null } }),
+    onSuccess: () => { toast.success("Assigned"); onRefresh(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+  const autoSection = useMutation({
+    mutationFn: () => autoSectionFn({ data: { quiz_id: quizId } }),
+    onSuccess: (r: any) => { toast.success(`Created ${r.created} section(s) from headers`); onRefresh(); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  return (
+    <div className="space-y-4">
+      <Card><CardContent className="pt-6 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <Label className="text-sm font-semibold">Auto-create sections from parsed headers</Label>
+            <p className="text-xs text-muted-foreground">Uses each question's subsection label (e.g. "Section A") to build sections automatically.</p>
+          </div>
+          <Button type="button" onClick={() => autoSection.mutate()} disabled={autoSection.isPending}>
+            <WandSparkles className="h-4 w-4 mr-1" />{autoSection.isPending ? "Working…" : "Auto-create"}
+          </Button>
+        </div>
+      </CardContent></Card>
+
+      <Card><CardContent className="pt-6 space-y-3">
+        <Label className="text-sm font-semibold">Add a section</Label>
+        <div className="flex gap-2">
+          <Input placeholder="Section title, e.g. Section A: Objectives" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Button type="button" onClick={() => title.trim() && createSection.mutate()} disabled={createSection.isPending || !title.trim()}><Plus className="h-4 w-4 mr-1" />Add</Button>
+        </div>
+        {unsectioned > 0 && <p className="text-xs text-muted-foreground">{unsectioned} question(s) have no section yet.</p>}
+      </CardContent></Card>
+
+      {selected.size > 0 && (
+        <Card><CardContent className="pt-6 space-y-2">
+          <Label className="text-sm font-semibold">Assign {selected.size} selected question(s) to a section</Label>
+          <div className="flex gap-2">
+            <Select value={assignTarget} onValueChange={setAssignTarget}>
+              <SelectTrigger><SelectValue placeholder="Choose section (or none)" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Unassigned</SelectItem>
+                {sections.map((s: any) => <SelectItem key={s.id} value={s.id}>{s.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button type="button" onClick={() => assignSelected.mutate()} disabled={assignSelected.isPending}>Assign</Button>
+          </div>
+        </CardContent></Card>
+      )}
+
+      <div className="space-y-3">
+        {sections.sort((a: any, b: any) => a.position - b.position).map((s: any) => (
+          <SectionRow key={s.id} section={s}
+            onRename={(t) => renameSection.mutate({ id: s.id, title: t })}
+            onDelete={() => { if (confirm(`Delete section "${s.title}"? Its questions become unassigned.`)) removeSection.mutate(s.id); }}
+            onSaveMarks={(total, distribute) => saveMarks.mutate({ section_id: s.id, total_score: total, distribute })} />
+        ))}
+        {sections.length === 0 && <p className="text-sm text-muted-foreground">No sections yet. Add one above or auto-create from parsed headers.</p>}
+      </div>
+    </div>
+  );
+}
+
+function SectionRow({ section, onRename, onDelete, onSaveMarks }: any) {
+  const [title, setTitle] = useState(section.title);
+  const [marks, setMarks] = useState<string>(section.total_score != null ? String(section.total_score) : String(section.computed_points ?? ""));
+  return (
+    <Card><CardContent className="pt-4 space-y-2">
+      <div className="flex items-center gap-2">
+        <Input value={title} onChange={(e) => setTitle(e.target.value)} onBlur={() => title.trim() && title !== section.title && onRename(title.trim())} className="flex-1" />
+        <Button size="icon" variant="ghost" onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <span>{section.question_count} question(s)</span>
+        <span>·</span>
+        <span>{section.computed_points} pts assigned</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <Input type="number" min={0} placeholder="Section total marks" value={marks} onChange={(e) => setMarks(e.target.value)} className="max-w-[160px]" />
+        <Button size="sm" variant="outline" onClick={() => marks && onSaveMarks(Number(marks), false)}>Save marks</Button>
+        <Button size="sm" variant="outline" onClick={() => marks && onSaveMarks(Number(marks), true)}><Sparkles className="h-3.5 w-3.5 mr-1" />Distribute evenly</Button>
+      </div>
+    </CardContent></Card>
+  );
 }
 
 function AIPanel({ quizId, onDone }: any) {

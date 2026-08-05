@@ -208,23 +208,28 @@ export async function checkAiAccess(supabase: any, userId: string, feature: AiFe
 }
 
 /** Price a feature call in kobo using admin-editable rates. */
-function priceFor(feature: AiFeature, settings: any, opts: { input_tokens?: number; output_tokens?: number }) {
+export function priceForFeature(feature: AiFeature, settings: any, opts: { input_tokens?: number; output_tokens?: number } = {}) {
   if (!settings) return 0;
+  const min = Math.max(0, Number(settings.ai_min_charge_kobo ?? 0));
+  const floorIt = (v: number) => (feature === "ai_proof" ? 0 : Math.max(v, min));
   switch (feature) {
-    case "ai_result": return Number(settings.ai_result_price_kobo ?? 0);
-    case "ai_essay": return Number(settings.ai_essay_price_kobo ?? 0);
-    case "ai_generate": return Number(settings.ai_generate_price_kobo ?? 0);
-    case "ai_review": return Number(settings.ai_review_price_kobo ?? 0);
+    case "ai_result": return floorIt(Number(settings.ai_result_price_kobo ?? 0));
+    case "ai_essay": return floorIt(Number(settings.ai_essay_price_kobo ?? 0));
+    case "ai_generate": return floorIt(Number(settings.ai_generate_price_kobo ?? 0));
+    case "ai_review": return floorIt(Number(settings.ai_review_price_kobo ?? 0));
     case "ai_proof": return 0; // platform-side verification cost, never billed to the user
     default: {
       const inK = (opts.input_tokens ?? 0) / 1000;
       const outK = (opts.output_tokens ?? 0) / 1000;
       const cost = inK * Number(settings.ai_parser_rate_per_1k_input_kobo ?? 0)
         + outK * Number(settings.ai_parser_rate_per_1k_output_kobo ?? 0);
-      return cost > 0 ? Math.max(1, Math.ceil(cost)) : 0;
+      return floorIt(cost > 0 ? Math.ceil(cost) : 0);
     }
   }
 }
+
+/** Back-compat alias. */
+const priceFor = priceForFeature;
 
 /**
  * Debit AI credit after usage and always log it.
@@ -232,7 +237,7 @@ function priceFor(feature: AiFeature, settings: any, opts: { input_tokens?: numb
  * grants *permission* to use AI, it does not make AI free.
  */
 export async function billAiUsage(userId: string, feature: AiFeature, opts: {
-  input_tokens?: number; output_tokens?: number; quiz_id?: string | null; model?: string; meta?: any;
+  input_tokens?: number; output_tokens?: number; quiz_id?: string | null; model?: string; provider?: string; meta?: any;
 }) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const db = supabaseAdmin as any;
@@ -249,15 +254,17 @@ export async function billAiUsage(userId: string, feature: AiFeature, opts: {
     await db.from("wallets").update({ ai_credit_balance_kobo: remaining }).eq("user_id", userId);
     await db.from("wallet_transactions").insert({
       user_id: userId, kind: "ai_usage", amount_kobo: -cost, bucket: "ai_credit",
-      meta: { feature, model: opts.model ?? null, input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0 },
+      meta: { feature, model: opts.model ?? null, provider: opts.provider ?? null, input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0 },
     });
   }
+
   try {
     await db.from("ai_usage_log").insert({
-      user_id: userId, feature, model: opts.model ?? null,
+      user_id: userId, feature, model: opts.model ?? null, provider: opts.provider ?? null,
       input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0,
       credits_cost: cost, quiz_id: opts.quiz_id ?? null, meta: opts.meta ?? {},
     });
   } catch { /* non-fatal */ }
+
   return { debited_kobo: cost, balance_kobo: remaining };
 }

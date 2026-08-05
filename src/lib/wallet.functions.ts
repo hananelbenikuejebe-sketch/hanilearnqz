@@ -56,10 +56,16 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     if (data.amount_kobo < minKobo) {
       throw new Error(`Minimum withdrawal is ₦${(minKobo / 100).toFixed(0)}`);
     }
+    // Fee is applied to the payable/net amount only — the user's balance is debited the full requested amount.
+    const feePct = Number(settings?.withdrawal_fee_pct ?? 5);
+    const feeKobo = Math.floor((data.amount_kobo * feePct) / 100);
+    const netKobo = data.amount_kobo - feeKobo;
+
     // Debit immediately (hold funds); refund on rejection.
     await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - data.amount_kobo }).eq("user_id", context.userId);
     await db.from("wallet_transactions").insert({
       user_id: context.userId, kind: "withdrawal_request", amount_kobo: -data.amount_kobo, bucket: "earnings",
+      meta: { fee_kobo: feeKobo, fee_pct: feePct, net_kobo: netKobo },
     });
     const { data: req, error } = await db.from("withdrawal_requests").insert({
       user_id: context.userId,
@@ -71,10 +77,11 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     if (error) throw error;
 
     const naira = (data.amount_kobo / 100).toFixed(2);
-    const msg = `Withdrawal request — HaniLearn-QZ\n\nUser ID: ${context.userId}\nAmount: NGN ${naira}\nBank: ${bank.bank_name}\nAccount #: ${bank.account_number}\nAccount name: ${bank.account_name}\nRequest ID: ${req.id}`;
+    const nairaNet = (netKobo / 100).toFixed(2);
+    const msg = `Withdrawal request — HaniLearn-QZ\n\nUser ID: ${context.userId}\nGross amount: NGN ${naira}\nFee (${feePct}%): NGN ${(feeKobo/100).toFixed(2)}\nPayable: NGN ${nairaNet}\nBank: ${bank.bank_name}\nAccount #: ${bank.account_number}\nAccount name: ${bank.account_name}\nRequest ID: ${req.id}`;
     const whatsapp = String(settings?.withdrawal_whatsapp || settings?.support_whatsapp || "+2349071829295").replace(/[^\d]/g, "");
     const whatsappUrl = `https://wa.me/${whatsapp}?text=${encodeURIComponent(msg)}`;
-    return { request: req, whatsappUrl, message: msg };
+    return { request: req, whatsappUrl, message: msg, gross_kobo: data.amount_kobo, fee_kobo: feeKobo, net_kobo: netKobo, fee_pct: feePct };
   });
 
 // Admin: list all withdrawals + approve/reject
@@ -148,4 +155,208 @@ export const adminGrantCredit = createServerFn({ method: "POST" })
       meta: { granted_by: context.userId, note: data.note ?? null },
     });
     return { ok: true };
+  });
+
+/** Buy AI credit using spendable wallet balance (no fee — money already inside the platform). */
+export const buyAiCreditFromWallet = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ amount_kobo: z.number().int().min(1) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const [{ data: settings }, { data: wallet }] = await Promise.all([
+      db.from("payment_settings").select("ai_credit_min_topup_kobo, ai_credit_expiry_days").eq("id", "default").single(),
+      db.from("wallets").select("balance_kobo, ai_credit_balance_kobo").eq("user_id", context.userId).maybeSingle(),
+    ]);
+    const minKobo = Number(settings?.ai_credit_min_topup_kobo ?? 30000);
+    if (data.amount_kobo < minKobo) throw new Error(`Minimum AI credit top-up is ₦${(minKobo / 100).toFixed(0)}`);
+    if (!wallet || wallet.balance_kobo < data.amount_kobo) throw new Error("Insufficient wallet balance.");
+
+    const expires = new Date(Date.now() + Number(settings?.ai_credit_expiry_days ?? 30) * 86_400_000).toISOString();
+    await db.from("wallets").update({
+      balance_kobo: wallet.balance_kobo - data.amount_kobo,
+      ai_credit_balance_kobo: (wallet.ai_credit_balance_kobo ?? 0) + data.amount_kobo,
+      ai_credit_expires_at: expires,
+    }).eq("user_id", context.userId);
+    await db.from("wallet_transactions").insert([
+      { user_id: context.userId, kind: "ai_credit_from_wallet", amount_kobo: -data.amount_kobo, bucket: "earnings", meta: { moved_to: "ai_credit" } },
+      { user_id: context.userId, kind: "ai_credit_from_wallet", amount_kobo: data.amount_kobo, bucket: "ai_credit", meta: { moved_from: "earnings" } },
+    ]);
+    return { ok: true };
+  });
+
+/** Buy creator access using spendable wallet balance. */
+export const buyCreatorAccessFromWallet = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ months: z.number().int().min(1).max(24) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { grantCreatorAccess } = await import("./payments.functions");
+    const db = supabaseAdmin as any;
+    const [{ data: settings }, { data: wallet }] = await Promise.all([
+      db.from("payment_settings").select("*").eq("id", "default").single(),
+      db.from("wallets").select("balance_kobo").eq("user_id", context.userId).maybeSingle(),
+    ]);
+    if (!settings) throw new Error("Payment settings missing");
+    const plans = (settings.creator_plan_prices ?? {}) as Record<string, number>;
+    const price = Number(plans[String(data.months)] ?? 0) > 0
+      ? Number(plans[String(data.months)])
+      : settings.creator_access_price_kobo * data.months;
+    if (!wallet || wallet.balance_kobo < price) throw new Error("Insufficient wallet balance.");
+
+    await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - price }).eq("user_id", context.userId);
+    await db.from("wallet_transactions").insert({
+      user_id: context.userId, kind: "creator_purchase_wallet", amount_kobo: -price, bucket: "earnings",
+      meta: { months: data.months },
+    });
+    await grantCreatorAccess(db, settings, context.userId, data.months, false, "wallet balance");
+    return { ok: true };
+  });
+
+/** Pay for a paid quiz using spendable wallet balance. Safe against double purchase. */
+export const payQuizFromWallet = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: quiz } = await db.from("quizzes")
+      .select("id, title, price_kobo, created_by, is_published").eq("id", data.quiz_id).maybeSingle();
+    if (!quiz) throw new Error("Quiz not found");
+    if (!quiz.is_published) throw new Error("Quiz not published");
+    if (!quiz.price_kobo || quiz.price_kobo <= 0) throw new Error("This quiz is free.");
+    if (quiz.created_by === context.userId) throw new Error("You own this quiz.");
+
+    const { data: existing } = await db.from("quiz_purchases").select("id").eq("user_id", context.userId).eq("quiz_id", data.quiz_id).maybeSingle();
+    if (existing) throw new Error("You already purchased this quiz.");
+
+    const [{ data: wallet }, { data: settings }] = await Promise.all([
+      db.from("wallets").select("balance_kobo").eq("user_id", context.userId).maybeSingle(),
+      db.from("payment_settings").select("quiz_platform_fee_pct").eq("id", "default").maybeSingle(),
+    ]);
+    const price = quiz.price_kobo;
+    if (!wallet || wallet.balance_kobo < price) throw new Error("Insufficient wallet balance.");
+
+    // Debit buyer
+    await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - price }).eq("user_id", context.userId);
+
+    // Insert purchase row (unique-ish guard against races)
+    const { error: purchaseErr } = await db.from("quiz_purchases").insert({
+      user_id: context.userId, quiz_id: data.quiz_id, price_kobo: price,
+    });
+    if (purchaseErr) {
+      // Roll back debit if the purchase failed (e.g. race causing duplicate).
+      await db.from("wallets").update({ balance_kobo: wallet.balance_kobo }).eq("user_id", context.userId);
+      throw new Error("You already purchased this quiz.");
+    }
+
+    const feePct = Number(settings?.quiz_platform_fee_pct ?? 10);
+    const platformFee = Math.floor((price * feePct) / 100);
+    const creatorShare = price - platformFee;
+
+    await db.from("wallets").upsert({ user_id: quiz.created_by }, { onConflict: "user_id" });
+    const { data: cw } = await db.from("wallets").select("balance_kobo").eq("user_id", quiz.created_by).single();
+    await db.from("wallets").update({ balance_kobo: (cw?.balance_kobo ?? 0) + creatorShare }).eq("user_id", quiz.created_by);
+
+    await db.from("wallet_transactions").insert([
+      { user_id: context.userId, kind: "quiz_purchase_wallet", amount_kobo: -price, bucket: "earnings", meta: { quiz_id: data.quiz_id } },
+      { user_id: quiz.created_by, kind: "quiz_sale", amount_kobo: creatorShare, bucket: "earnings", meta: { quiz_id: data.quiz_id, buyer: context.userId, gross_kobo: price, platform_fee_kobo: platformFee, fee_pct: feePct } },
+    ]);
+    if (platformFee > 0) {
+      await db.from("wallet_transactions").insert({
+        user_id: quiz.created_by, kind: "platform_fee", amount_kobo: -platformFee, bucket: "earnings",
+        meta: { quiz_id: data.quiz_id, reason: "quiz_purchase", fee_pct: feePct },
+      });
+    }
+    return { ok: true };
+  });
+
+/** Owner funds a quiz's prize pool from their wallet balance. */
+export const fundQuizPrizePool = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid(), amount_kobo: z.number().int().min(1) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: quiz } = await db.from("quizzes").select("id, created_by").eq("id", data.quiz_id).maybeSingle();
+    if (!quiz) throw new Error("Quiz not found");
+    if (quiz.created_by !== context.userId) throw new Error("Only the quiz owner can fund the prize pool.");
+
+    const { data: wallet } = await db.from("wallets").select("balance_kobo").eq("user_id", context.userId).maybeSingle();
+    if (!wallet || wallet.balance_kobo < data.amount_kobo) throw new Error("Insufficient wallet balance to fund this prize pool.");
+
+    await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - data.amount_kobo }).eq("user_id", context.userId);
+    await db.from("wallet_transactions").insert({
+      user_id: context.userId, kind: "prize_pool_hold", amount_kobo: -data.amount_kobo, bucket: "earnings",
+      meta: { quiz_id: data.quiz_id },
+    });
+    return { ok: true };
+  });
+
+/** Award quiz prizes after the competition ends. Owner or admin only, fully idempotent. */
+export const awardQuizPrizes = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: quiz } = await db.from("quizzes")
+      .select("id, created_by, competition_ends_at, prizes_awarded_at").eq("id", data.quiz_id).maybeSingle();
+    if (!quiz) throw new Error("Quiz not found");
+    const admin = await isSuperAdmin(context.supabase, context.userId);
+    if (quiz.created_by !== context.userId && !admin) throw new Error("Forbidden");
+    if (quiz.prizes_awarded_at) return { ok: true, already_awarded: true };
+    if (!quiz.competition_ends_at || new Date(quiz.competition_ends_at).getTime() > Date.now()) {
+      throw new Error("Competition has not ended yet.");
+    }
+
+    const { data: prizes } = await db.from("quiz_prizes").select("*").eq("quiz_id", data.quiz_id).order("position", { ascending: true });
+    if (!prizes || prizes.length === 0) {
+      await db.from("quizzes").update({ prizes_awarded_at: new Date().toISOString() }).eq("id", data.quiz_id);
+      return { ok: true, awarded: 0 };
+    }
+
+    // Re-check under a fresh read to stay idempotent against concurrent calls.
+    const { data: freshQuiz } = await db.from("quizzes").select("prizes_awarded_at").eq("id", data.quiz_id).single();
+    if (freshQuiz?.prizes_awarded_at) return { ok: true, already_awarded: true };
+
+    const { data: attempts } = await db.from("attempts")
+      .select("student_id, score_pct, submitted_at")
+      .eq("quiz_id", data.quiz_id)
+      .not("submitted_at", "is", null)
+      .order("score_pct", { ascending: false })
+      .order("submitted_at", { ascending: true });
+
+    const bestByUser = new Map<string, { student_id: string; score_pct: number; submitted_at: string }>();
+    for (const a of attempts ?? []) {
+      const existing = bestByUser.get(a.student_id);
+      if (!existing || a.score_pct > existing.score_pct || (a.score_pct === existing.score_pct && a.submitted_at < existing.submitted_at)) {
+        bestByUser.set(a.student_id, a);
+      }
+    }
+    const leaderboard = Array.from(bestByUser.values()).sort((a, b) =>
+      b.score_pct - a.score_pct || (a.submitted_at < b.submitted_at ? -1 : 1)
+    );
+
+    let awarded = 0;
+    for (const prize of prizes) {
+      if (prize.awarded_at) continue;
+      const winner = leaderboard[prize.position - 1];
+      if (!winner || prize.amount_kobo <= 0) {
+        await db.from("quiz_prizes").update({ awarded_at: new Date().toISOString() }).eq("id", prize.id);
+        continue;
+      }
+      await db.from("wallets").upsert({ user_id: winner.student_id }, { onConflict: "user_id" });
+      const { data: ww } = await db.from("wallets").select("balance_kobo").eq("user_id", winner.student_id).single();
+      await db.from("wallets").update({ balance_kobo: (ww?.balance_kobo ?? 0) + prize.amount_kobo }).eq("user_id", winner.student_id);
+      await db.from("wallet_transactions").insert({
+        user_id: winner.student_id, kind: "prize_payout", amount_kobo: prize.amount_kobo, bucket: "earnings",
+        meta: { quiz_id: data.quiz_id, position: prize.position, prize_id: prize.id },
+      });
+      await db.from("quiz_prizes").update({ awarded_to: winner.student_id, awarded_at: new Date().toISOString() }).eq("id", prize.id);
+      awarded++;
+    }
+
+    await db.from("quizzes").update({ prizes_awarded_at: new Date().toISOString() }).eq("id", data.quiz_id);
+    return { ok: true, awarded };
   });
