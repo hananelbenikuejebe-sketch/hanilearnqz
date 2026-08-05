@@ -260,10 +260,11 @@ export async function billAiUsage(userId: string, feature: AiFeature, opts: {
 
   try {
     await db.from("ai_usage_log").insert({
-      user_id: userId, feature, model: opts.model ?? null,
+      user_id: userId, feature, model: opts.model ?? null, provider: opts.provider ?? null,
       input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0,
       credits_cost: cost, quiz_id: opts.quiz_id ?? null, meta: opts.meta ?? {},
     });
   } catch { /* non-fatal */ }
+
   return { debited_kobo: cost, balance_kobo: remaining };
 }
