@@ -73,7 +73,6 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
       bank_name: bank.bank_name,
       account_number: bank.account_number,
       account_name: bank.account_name,
-      meta: { fee_kobo: feeKobo, fee_pct: feePct, net_kobo: netKobo },
     }).select().single();
     if (error) throw error;
 

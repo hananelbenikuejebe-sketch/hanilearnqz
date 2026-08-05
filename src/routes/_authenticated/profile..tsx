@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
 import { UserPlus, UserCheck, ListChecks, MessageCircle, Award } from "lucide-react";
 
-export const Route = createFileRoute("/_authenticated/profile/$userId")({
+export const Route = createFileRoute("/_authenticated/profile/")({
   head: () => ({ meta: [
     { title: "Community profile — HaniLearn-QZ" },
     { name: "description", content: "View a HaniLearn-QZ creator profile, achievements and published quizzes." },

@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
-import { Search, Clock, FileQuestion, Play, Heart, MessageSquare, Grid2X2, List, Rows3, Users } from "lucide-react";
+import { Search, Clock, FileQuestion, Play, Heart, MessageSquare, Grid2X2, List, Rows3, Users, Trophy } from "lucide-react";
+import { quizBannerStyle } from "@/lib/banner-color";
 
 export const Route = createFileRoute("/_authenticated/explore")({
   head: () => ({ meta: [
@@ -100,9 +101,15 @@ function Explore() {
         <div className={view === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-2"}>
           {filtered.map((quiz: any) => (
             <Card key={quiz.id} className={`group transition overflow-hidden ${view === "grid" ? "hover:shadow-lg hover:-translate-y-0.5" : "flex"}`}>
-              {quiz.banner_url && view !== "compact" && (
-                <div className={view === "grid" ? "h-32 bg-muted overflow-hidden" : "w-36 shrink-0 bg-muted overflow-hidden"}>
-                  <img src={quiz.banner_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+              {view !== "compact" && (
+                <div className={view === "grid" ? "h-32 bg-muted overflow-hidden relative" : "w-36 shrink-0 bg-muted overflow-hidden relative"}>
+                  {quiz.banner_url ? (
+                    <img src={quiz.banner_url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                  ) : (
+                    <div className="w-full h-full grid place-items-center" style={quizBannerStyle(quiz.id, quiz.banner_color).style}>
+                      <span className="text-3xl font-bold text-primary-foreground/90">{(quiz.title || "?").slice(0, 1).toUpperCase()}</span>
+                    </div>
+                  )}
                 </div>
               )}
               <div className="min-w-0 flex-1"><CardHeader className={view === "compact" ? "p-3 pb-1" : "pb-3"}>
@@ -115,11 +122,15 @@ function Explore() {
                 {quiz.description && <CardDescription className="line-clamp-2 text-xs">{quiz.description}</CardDescription>}
               </CardHeader>
               <CardContent className={view === "compact" ? "px-3 pb-3 pt-0" : "pt-0"}>
-                <div className="flex items-center gap-3 text-xs text-muted-foreground mb-3">
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mb-3">
                   <span className="flex items-center gap-1"><FileQuestion className="h-3.5 w-3.5" />{quiz.question_count}</span>
                   <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{quiz.duration_min}m</span>
                   <span className="flex items-center gap-1"><Heart className="h-3.5 w-3.5" />{quiz.social_counts?.likes ?? 0}</span>
                   <span className="flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{quiz.social_counts?.comments ?? 0}</span>
+                  {quiz.total_marks > 0 && <span className="flex items-center gap-1">{quiz.total_marks} marks</span>}
+                  {quiz.prize_pool_kobo > 0 && (
+                    <Badge className="gap-1 bg-amber-500 text-black hover:bg-amber-600 text-[10px]"><Trophy className="h-3 w-3" />₦{(quiz.prize_pool_kobo / 100).toLocaleString()}</Badge>
+                  )}
                 </div>
                 <Button asChild className={view === "grid" ? "w-full" : "w-fit"} size="sm">
                   <Link to="/quiz/$quizId" params={{ quizId: quiz.id }}><Play className="h-3.5 w-3.5 mr-1" />Start</Link>
