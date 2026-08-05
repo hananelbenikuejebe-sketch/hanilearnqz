@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { Wallet as WalletIcon, ArrowUpRight, ArrowDownRight, Link2, Copy, Sparkles } from "lucide-react";
-import { getMyWallet, saveBankAccount, requestWithdrawal } from "@/lib/wallet.functions";
+import { getMyWallet, saveBankAccount, requestWithdrawal, buyAiCreditFromWallet, buyCreatorAccessFromWallet } from "@/lib/wallet.functions";
 import { getPaymentSettings, initiatePayment, verifyAndSettle } from "@/lib/payments.functions";
 import { getOrCreateMyAffiliate } from "@/lib/affiliate.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
@@ -45,6 +45,8 @@ function WalletPage() {
   const verifyFn = useServerFn(verifyAndSettle);
   const saveBank = useServerFn(saveBankAccount);
   const withdrawFn = useServerFn(requestWithdrawal);
+  const buyAiFn = useServerFn(buyAiCreditFromWallet);
+  const buyCreatorFn = useServerFn(buyCreatorAccessFromWallet);
 
   const { data: wallet } = useQuery({ queryKey: ["my-wallet"], queryFn: () => walletFn() });
   const { data: settings } = useQuery({ queryKey: ["payment-settings"], queryFn: () => settingsFn() });
@@ -87,7 +89,12 @@ function WalletPage() {
           <Card>
             <CardHeader className="pb-2"><CardDescription>AI credit</CardDescription>
               <CardTitle className="text-3xl tabular-nums">{naira(wallet?.wallet?.ai_credit_balance_kobo ?? 0)}</CardTitle>
-              {wallet?.wallet?.ai_credit_expires_at && <p className="text-xs text-muted-foreground">Expires {new Date(wallet.wallet.ai_credit_expires_at).toLocaleDateString()}</p>}
+              {wallet?.wallet?.ai_credit_expires_at && (
+                <p className="text-xs text-muted-foreground">
+                  Expires {new Date(wallet.wallet.ai_credit_expires_at).toLocaleDateString()}
+                  {" · "}{Math.max(0, Math.ceil((new Date(wallet.wallet.ai_credit_expires_at).getTime() - Date.now()) / 86_400_000))}d remaining
+                </p>
+              )}
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">
@@ -101,6 +108,10 @@ function WalletPage() {
         </div>
 
         <ProPlans settings={settings} status={status} />
+
+        <FundWalletCard settings={settings} />
+
+        <SpendCard wallet={wallet} settings={settings} buyAiFn={buyAiFn} buyCreatorFn={buyCreatorFn} />
 
         <Card>
           <CardHeader><CardTitle className="text-base flex items-center gap-2"><Link2 className="h-4 w-4" />Your affiliate link</CardTitle>
@@ -231,6 +242,91 @@ function ProPlans({ settings, status }: any) {
             <ContactAdmin purpose={`${m}-month creator access`} amount={priceFor(m)} />
           </div>
         ))}
+      </CardContent>
+    </Card>
+  );
+}
+
+
+function FundWalletCard({ settings }: any) {
+  const [amount, setAmount] = useState(500000);
+  const initFn = useServerFn(initiatePayment);
+  const feePct = Number(settings?.topup_fee_pct ?? 5);
+  const fee = Math.floor((amount * feePct) / 100);
+  const net = amount - fee;
+  const [busy, setBusy] = useState(false);
+
+  async function fund() {
+    setBusy(true);
+    try {
+      const r: any = await initFn({ data: { purpose: "wallet_topup", amount_kobo: amount } });
+      window.location.href = r.checkoutUrl;
+    } catch (e: any) {
+      toast.error(e?.message ?? "Could not start top-up");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Fund wallet</CardTitle>
+        <CardDescription>Top up your spendable balance via Monnify. A {feePct}% platform fee applies.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <div><Label>Amount (₦)</Label><Input type="number" min={100} value={amount / 100 || ""} onChange={(e) => setAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} className="w-32" /></div>
+          <Button onClick={fund} disabled={busy || amount < 10000}>{busy ? "Starting…" : "Top up wallet"}</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          You pay {naira(amount)} · fee {naira(fee)} ({feePct}%) · credited to wallet <span className="font-semibold text-foreground">{naira(net)}</span>
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SpendCard({ wallet, settings, buyAiFn, buyCreatorFn }: any) {
+  const qc = useQueryClient();
+  const balance = wallet?.wallet?.balance_kobo ?? 0;
+  const [aiAmt, setAiAmt] = useState(settings?.ai_credit_min_topup_kobo ?? 30000);
+  const [months, setMonths] = useState(1);
+  const base = settings?.creator_access_price_kobo ?? 0;
+  const plans = (settings?.creator_plan_prices ?? {}) as Record<string, number>;
+  const priceFor = (m: number) => (Number(plans[String(m)] ?? 0) > 0 ? Number(plans[String(m)]) : base * m);
+
+  const buyAi = useMutation({
+    mutationFn: () => buyAiFn({ data: { amount_kobo: aiAmt } }),
+    onSuccess: () => { toast.success("AI credit purchased from wallet"); qc.invalidateQueries(); },
+    onError: (e: any) => toast.error(e.message ?? "Failed"),
+  });
+  const buyCreator = useMutation({
+    mutationFn: () => buyCreatorFn({ data: { months } }),
+    onSuccess: () => { toast.success("Creator access purchased from wallet"); qc.invalidateQueries(); },
+    onError: (e: any) => toast.error(e.message ?? "Failed"),
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Spend from wallet</CardTitle>
+        <CardDescription>Use your wallet balance ({naira(balance)}) directly — no extra fees on internal spending.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-end gap-2">
+          <div><Label>AI credit amount (₦)</Label><Input type="number" value={aiAmt / 100 || ""} onChange={(e) => setAiAmt(Math.floor(parseFloat(e.target.value) * 100) || 0)} className="w-28" /></div>
+          <Button size="sm" variant="outline" onClick={() => buyAi.mutate()} disabled={buyAi.isPending || balance < aiAmt}>Buy AI credit</Button>
+        </div>
+        <div className="flex flex-wrap items-end gap-2">
+          <div><Label>Creator access (months)</Label>
+            <select className="border rounded-md h-9 px-2 text-sm w-28" value={months} onChange={(e) => setMonths(Number(e.target.value))}>
+              {[1, 3, 6, 12].map((m) => <option key={m} value={m}>{m} mo — {naira(priceFor(m))}</option>)}
+            </select>
+          </div>
+          <Button size="sm" variant="outline" onClick={() => buyCreator.mutate()} disabled={buyCreator.isPending || balance < priceFor(months)}>Buy creator access</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">Wallet money can also be used to pay for individual quizzes and to fund prize pools when creating a competition quiz.</p>
       </CardContent>
     </Card>
   );
