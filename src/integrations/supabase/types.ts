@@ -14,6 +14,104 @@ export type Database = {
   }
   public: {
     Tables: {
+      ad_events: {
+        Row: {
+          ad_id: string
+          created_at: string
+          id: string
+          kind: string
+          placement: string | null
+          user_id: string | null
+        }
+        Insert: {
+          ad_id: string
+          created_at?: string
+          id?: string
+          kind: string
+          placement?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          ad_id?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          placement?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ad_events_ad_id_fkey"
+            columns: ["ad_id"]
+            isOneToOne: false
+            referencedRelation: "ads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads: {
+        Row: {
+          active: boolean
+          auto_show: boolean
+          body: string | null
+          clicks: number
+          created_at: string
+          created_by: string | null
+          cta_label: string | null
+          cta_url: string | null
+          end_at: string | null
+          every_n: number
+          id: string
+          image_url: string | null
+          impressions: number
+          placements: string[]
+          start_at: string | null
+          title: string
+          updated_at: string
+          weight: number
+        }
+        Insert: {
+          active?: boolean
+          auto_show?: boolean
+          body?: string | null
+          clicks?: number
+          created_at?: string
+          created_by?: string | null
+          cta_label?: string | null
+          cta_url?: string | null
+          end_at?: string | null
+          every_n?: number
+          id?: string
+          image_url?: string | null
+          impressions?: number
+          placements?: string[]
+          start_at?: string | null
+          title: string
+          updated_at?: string
+          weight?: number
+        }
+        Update: {
+          active?: boolean
+          auto_show?: boolean
+          body?: string | null
+          clicks?: number
+          created_at?: string
+          created_by?: string | null
+          cta_label?: string | null
+          cta_url?: string | null
+          end_at?: string | null
+          every_n?: number
+          id?: string
+          image_url?: string | null
+          impressions?: number
+          placements?: string[]
+          start_at?: string | null
+          title?: string
+          updated_at?: string
+          weight?: number
+        }
+        Relationships: []
+      }
       affiliate_attributions: {
         Row: {
           affiliate_user_id: string
@@ -69,6 +167,7 @@ export type Database = {
           meta: Json | null
           model: string | null
           output_tokens: number | null
+          provider: string | null
           quiz_id: string | null
           user_id: string | null
         }
@@ -81,6 +180,7 @@ export type Database = {
           meta?: Json | null
           model?: string | null
           output_tokens?: number | null
+          provider?: string | null
           quiz_id?: string | null
           user_id?: string | null
         }
@@ -93,6 +193,7 @@ export type Database = {
           meta?: Json | null
           model?: string | null
           output_tokens?: number | null
+          provider?: string | null
           quiz_id?: string | null
           user_id?: string | null
         }
@@ -131,6 +232,8 @@ export type Database = {
           awarded: number
           correct_count: number
           id: string
+          points_awarded: number | null
+          points_max: number | null
           quiz_id: string
           score_pct: number
           started_at: string
@@ -145,6 +248,8 @@ export type Database = {
           awarded?: number
           correct_count?: number
           id?: string
+          points_awarded?: number | null
+          points_max?: number | null
           quiz_id: string
           score_pct?: number
           started_at?: string
@@ -159,6 +264,8 @@ export type Database = {
           awarded?: number
           correct_count?: number
           id?: string
+          points_awarded?: number | null
+          points_max?: number | null
           quiz_id?: string
           score_pct?: number
           started_at?: string
@@ -363,6 +470,94 @@ export type Database = {
         }
         Relationships: []
       }
+      group_members: {
+        Row: {
+          created_at: string
+          group_id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          group_id: string
+          role?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          group_id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_members_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      group_messages: {
+        Row: {
+          body: string
+          created_at: string
+          group_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          group_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          group_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_messages_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      groups: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_community: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_community?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_community?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
       monnify_webhook_events: {
         Row: {
           event_type: string | null
@@ -387,6 +582,42 @@ export type Database = {
           processed?: boolean
           received_at?: string
           transaction_reference?: string | null
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          id: string
+          image_url: string | null
+          kind: string
+          link: string | null
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          kind?: string
+          link?: string | null
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          kind?: string
+          link?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -549,6 +780,9 @@ export type Database = {
           ai_credit_min_topup_kobo: number
           ai_essay_price_kobo: number
           ai_generate_price_kobo: number
+          ai_heavy_provider: string
+          ai_light_provider: string
+          ai_min_charge_kobo: number
           ai_parser_rate_per_1k_input_kobo: number
           ai_parser_rate_per_1k_output_kobo: number
           ai_result_price_kobo: number
@@ -566,6 +800,8 @@ export type Database = {
           free_offline_parse_limit: number
           free_tier_enabled: boolean
           id: string
+          openrouter_enabled: boolean
+          openrouter_model: string
           pay_account_name: string
           pay_account_number: string
           pay_bank_name: string
@@ -576,7 +812,9 @@ export type Database = {
           proof_use_ai: boolean
           quiz_platform_fee_pct: number
           support_whatsapp: string
+          topup_fee_pct: number
           updated_at: string
+          withdrawal_fee_pct: number
           withdrawal_min_kobo: number
           withdrawal_whatsapp: string
         }
@@ -586,6 +824,9 @@ export type Database = {
           ai_credit_min_topup_kobo?: number
           ai_essay_price_kobo?: number
           ai_generate_price_kobo?: number
+          ai_heavy_provider?: string
+          ai_light_provider?: string
+          ai_min_charge_kobo?: number
           ai_parser_rate_per_1k_input_kobo?: number
           ai_parser_rate_per_1k_output_kobo?: number
           ai_result_price_kobo?: number
@@ -603,6 +844,8 @@ export type Database = {
           free_offline_parse_limit?: number
           free_tier_enabled?: boolean
           id?: string
+          openrouter_enabled?: boolean
+          openrouter_model?: string
           pay_account_name?: string
           pay_account_number?: string
           pay_bank_name?: string
@@ -613,7 +856,9 @@ export type Database = {
           proof_use_ai?: boolean
           quiz_platform_fee_pct?: number
           support_whatsapp?: string
+          topup_fee_pct?: number
           updated_at?: string
+          withdrawal_fee_pct?: number
           withdrawal_min_kobo?: number
           withdrawal_whatsapp?: string
         }
@@ -623,6 +868,9 @@ export type Database = {
           ai_credit_min_topup_kobo?: number
           ai_essay_price_kobo?: number
           ai_generate_price_kobo?: number
+          ai_heavy_provider?: string
+          ai_light_provider?: string
+          ai_min_charge_kobo?: number
           ai_parser_rate_per_1k_input_kobo?: number
           ai_parser_rate_per_1k_output_kobo?: number
           ai_result_price_kobo?: number
@@ -640,6 +888,8 @@ export type Database = {
           free_offline_parse_limit?: number
           free_tier_enabled?: boolean
           id?: string
+          openrouter_enabled?: boolean
+          openrouter_model?: string
           pay_account_name?: string
           pay_account_number?: string
           pay_bank_name?: string
@@ -650,7 +900,9 @@ export type Database = {
           proof_use_ai?: boolean
           quiz_platform_fee_pct?: number
           support_whatsapp?: string
+          topup_fee_pct?: number
           updated_at?: string
+          withdrawal_fee_pct?: number
           withdrawal_min_kobo?: number
           withdrawal_whatsapp?: string
         }
@@ -692,6 +944,33 @@ export type Database = {
         }
         Relationships: []
       }
+      push_subscriptions: {
+        Row: {
+          auth: string | null
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string | null
+          user_id: string
+        }
+        Insert: {
+          auth?: string | null
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string | null
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       questions: {
         Row: {
           ai_confidence: number | null
@@ -706,6 +985,7 @@ export type Database = {
           raw_import_text: string | null
           review_reason: string | null
           sample_answer: string | null
+          section_id: string | null
           subsection: string | null
           tags: string[]
           text: string
@@ -724,6 +1004,7 @@ export type Database = {
           raw_import_text?: string | null
           review_reason?: string | null
           sample_answer?: string | null
+          section_id?: string | null
           subsection?: string | null
           tags?: string[]
           text: string
@@ -742,6 +1023,7 @@ export type Database = {
           raw_import_text?: string | null
           review_reason?: string | null
           sample_answer?: string | null
+          section_id?: string | null
           subsection?: string | null
           tags?: string[]
           text?: string
@@ -753,6 +1035,13 @@ export type Database = {
             columns: ["quiz_id"]
             isOneToOne: false
             referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "questions_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_sections"
             referencedColumns: ["id"]
           },
         ]
@@ -838,6 +1127,44 @@ export type Database = {
           },
         ]
       }
+      quiz_prizes: {
+        Row: {
+          amount_kobo: number
+          awarded_at: string | null
+          awarded_to: string | null
+          created_at: string
+          id: string
+          position: number
+          quiz_id: string
+        }
+        Insert: {
+          amount_kobo?: number
+          awarded_at?: string | null
+          awarded_to?: string | null
+          created_at?: string
+          id?: string
+          position: number
+          quiz_id: string
+        }
+        Update: {
+          amount_kobo?: number
+          awarded_at?: string | null
+          awarded_to?: string | null
+          created_at?: string
+          id?: string
+          position?: number
+          quiz_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_prizes_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quiz_purchases: {
         Row: {
           created_at: string
@@ -873,6 +1200,44 @@ export type Database = {
           },
           {
             foreignKeyName: "quiz_purchases_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_sections: {
+        Row: {
+          created_at: string
+          id: string
+          instructions: string | null
+          position: number
+          quiz_id: string
+          title: string
+          total_score: number | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          instructions?: string | null
+          position?: number
+          quiz_id: string
+          title: string
+          total_score?: number | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          instructions?: string | null
+          position?: number
+          quiz_id?: string
+          title?: string
+          total_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_sections_quiz_id_fkey"
             columns: ["quiz_id"]
             isOneToOne: false
             referencedRelation: "quizzes"
@@ -926,9 +1291,11 @@ export type Database = {
           allow_likes: boolean
           allow_retakes: boolean
           allow_sharing: boolean
+          banner_color: string | null
           banner_path: string | null
           banner_url: string | null
           category: string
+          competition_ends_at: string | null
           created_at: string
           created_by: string | null
           description: string | null
@@ -943,12 +1310,15 @@ export type Database = {
           max_attempts: number | null
           parsing_settings: Json
           price_kobo: number
+          prize_pool_kobo: number
+          prizes_awarded_at: string | null
           randomize_questions: boolean
           scheduled_at: string | null
           share_image_url: string | null
           show_answers_after: boolean
           show_explanations: boolean
           show_leaderboard: boolean
+          show_score_as_points: boolean
           shuffle_options: boolean
           source_type: string | null
           start_at: string | null
@@ -964,9 +1334,11 @@ export type Database = {
           allow_likes?: boolean
           allow_retakes?: boolean
           allow_sharing?: boolean
+          banner_color?: string | null
           banner_path?: string | null
           banner_url?: string | null
           category?: string
+          competition_ends_at?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -981,12 +1353,15 @@ export type Database = {
           max_attempts?: number | null
           parsing_settings?: Json
           price_kobo?: number
+          prize_pool_kobo?: number
+          prizes_awarded_at?: string | null
           randomize_questions?: boolean
           scheduled_at?: string | null
           share_image_url?: string | null
           show_answers_after?: boolean
           show_explanations?: boolean
           show_leaderboard?: boolean
+          show_score_as_points?: boolean
           shuffle_options?: boolean
           source_type?: string | null
           start_at?: string | null
@@ -1002,9 +1377,11 @@ export type Database = {
           allow_likes?: boolean
           allow_retakes?: boolean
           allow_sharing?: boolean
+          banner_color?: string | null
           banner_path?: string | null
           banner_url?: string | null
           category?: string
+          competition_ends_at?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -1019,12 +1396,15 @@ export type Database = {
           max_attempts?: number | null
           parsing_settings?: Json
           price_kobo?: number
+          prize_pool_kobo?: number
+          prizes_awarded_at?: string | null
           randomize_questions?: boolean
           scheduled_at?: string | null
           share_image_url?: string | null
           show_answers_after?: boolean
           show_explanations?: boolean
           show_leaderboard?: boolean
+          show_score_as_points?: boolean
           shuffle_options?: boolean
           source_type?: string | null
           start_at?: string | null
