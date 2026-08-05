@@ -31,6 +31,8 @@ export const updatePaymentSettings = createServerFn({ method: "POST" })
     withdrawal_min_kobo: z.number().int().min(0).optional(),
     withdrawal_whatsapp: z.string().max(30).optional(),
     quiz_platform_fee_pct: z.number().int().min(0).max(90).optional(),
+    topup_fee_pct: z.number().min(0).max(20).optional(),
+    withdrawal_fee_pct: z.number().min(0).max(20).optional(),
     // free tier
     free_tier_enabled: z.boolean().optional(),
     free_max_questions_per_quiz: z.number().int().min(1).max(500).optional(),
@@ -71,7 +73,7 @@ function makeRef(prefix: string) {
 export const initiatePayment = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({
-    purpose: z.enum(["creator_access", "ai_credit"]),
+    purpose: z.enum(["creator_access", "ai_credit", "wallet_topup"]),
     amount_kobo: z.number().int().min(10000).optional(),
   }).parse(d))
   .handler(async ({ context, data }) => {
@@ -86,6 +88,10 @@ export const initiatePayment = createServerFn({ method: "POST" })
     let amountKobo: number;
     if (data.purpose === "creator_access") {
       amountKobo = settings.creator_access_price_kobo;
+    } else if (data.purpose === "wallet_topup") {
+      if (!data.amount_kobo) throw new Error("Amount required for wallet top-up");
+      if (data.amount_kobo < 10000) throw new Error("Minimum wallet top-up is ₦100");
+      amountKobo = data.amount_kobo;
     } else {
       if (!data.amount_kobo) throw new Error("Amount required for AI credit top-up");
       if (data.amount_kobo < settings.ai_credit_min_topup_kobo) {
@@ -102,10 +108,12 @@ export const initiatePayment = createServerFn({ method: "POST" })
     // Existing affiliate attribution for this user (if any)
     const { data: attr } = await db.from("affiliate_attributions").select("affiliate_user_id").eq("referred_user_id", context.userId).maybeSingle();
 
-    const reference = makeRef(data.purpose === "creator_access" ? "CA" : "AI");
+    const reference = makeRef(data.purpose === "creator_access" ? "CA" : data.purpose === "wallet_topup" ? "WT" : "AI");
     const origin = requestOrigin();
     const narration = data.purpose === "creator_access"
       ? `Creator access — 1 month (${settings.creator_access_quiz_cap} quiz cap)`
+      : data.purpose === "wallet_topup"
+      ? `Wallet top-up`
       : `AI credit top-up`;
 
     const init = await initTransaction({
@@ -156,6 +164,27 @@ export const verifyAndSettle = createServerFn({ method: "POST" })
     return await settleIntent(db, intent, paidAmountKobo);
   });
 
+/** Reusable creator-access grant: inserts subscription row + ensures creator role/permissions. */
+export async function grantCreatorAccess(db: any, settings: any, userId: string, months: number, infinite: boolean, noteSuffix: string, sourceIntentId?: string) {
+  const days = settings.creator_access_duration_days * months;
+  const expires = infinite
+    ? new Date("2999-12-31T00:00:00.000Z").toISOString()
+    : new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  await db.from("subscriptions").insert({
+    user_id: userId, kind: "creator_access", expires_at: expires,
+    source_payment_intent: sourceIntentId ?? null,
+  });
+  await db.from("user_roles").upsert({ user_id: userId, role: "creator" }, { onConflict: "user_id,role" });
+  await db.from("creator_permissions").upsert({
+    user_id: userId,
+    ai_enabled: settings.creator_access_includes_ai,
+    analytics_enabled: true,
+    can_publish: true,
+    max_quizzes: settings.creator_access_quiz_cap,
+    notes: `Auto-granted via ${noteSuffix}`,
+  }, { onConflict: "user_id" });
+}
+
 /** Idempotent settlement: only credits once. Reused by webhook + client verify. */
 export async function settleIntent(db: any, intent: any, paidAmountKobo: number) {
   // Re-check inside the function to remain idempotent under concurrent calls.
@@ -170,38 +199,23 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
   // 2) Ensure wallet row
   await db.from("wallets").upsert({ user_id: intent.user_id }, { onConflict: "user_id" });
 
-  // 3) Ledger the top-up
-  await db.from("wallet_transactions").insert({
-    user_id: intent.user_id,
-    kind: intent.purpose === "creator_access" ? "creator_purchase" : "ai_credit_topup",
-    amount_kobo: paidAmountKobo,
-    bucket: intent.purpose === "creator_access" ? "purchase" : "ai_credit",
-    monnify_ref: intent.payment_reference,
-    meta: { intent_id: intent.id },
-  });
+  // 3) Ledger the top-up (wallet_topup ledgered inside its own branch below, net of fee)
+  if (intent.purpose !== "wallet_topup") {
+    await db.from("wallet_transactions").insert({
+      user_id: intent.user_id,
+      kind: intent.purpose === "creator_access" ? "creator_purchase" : intent.purpose === "quiz_purchase" ? "quiz_purchase" : "ai_credit_topup",
+      amount_kobo: paidAmountKobo,
+      bucket: intent.purpose === "creator_access" ? "purchase" : intent.purpose === "quiz_purchase" ? "purchase" : "ai_credit",
+      monnify_ref: intent.payment_reference,
+      meta: { intent_id: intent.id },
+    });
+  }
 
   // 4) Grant the thing
   if (intent.purpose === "creator_access") {
     const months = Math.max(1, Number((intent.meta ?? {}).months ?? 1));
     const infinite = !!(intent.meta ?? {}).infinite;
-    const days = settings.creator_access_duration_days * months;
-    const expires = infinite
-      ? new Date("2999-12-31T00:00:00.000Z").toISOString()
-      : new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-    await db.from("subscriptions").insert({
-      user_id: intent.user_id, kind: "creator_access", expires_at: expires,
-      source_payment_intent: intent.id,
-    });
-    // Ensure creator role + permissions
-    await db.from("user_roles").upsert({ user_id: intent.user_id, role: "creator" }, { onConflict: "user_id,role" });
-    await db.from("creator_permissions").upsert({
-      user_id: intent.user_id,
-      ai_enabled: settings.creator_access_includes_ai,
-      analytics_enabled: true,
-      can_publish: true,
-      max_quizzes: settings.creator_access_quiz_cap,
-      notes: `Auto-granted via payment ${intent.payment_reference}`,
-    }, { onConflict: "user_id" });
+    await grantCreatorAccess(db, settings, intent.user_id, months, infinite, `payment ${intent.payment_reference}`, intent.id);
   } else if (intent.purpose === "quiz_purchase") {
     const meta = intent.meta ?? {};
     const quizId = meta.quiz_id;
@@ -229,6 +243,22 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
         });
       }
     }
+  } else if (intent.purpose === "wallet_topup") {
+    const feePct = Number(settings.topup_fee_pct ?? 5);
+    const fee = Math.floor((paidAmountKobo * feePct) / 100);
+    const net = paidAmountKobo - fee;
+    const { data: w } = await db.from("wallets").select("balance_kobo").eq("user_id", intent.user_id).single();
+    await db.from("wallets").update({ balance_kobo: (w?.balance_kobo ?? 0) + net }).eq("user_id", intent.user_id);
+    await db.from("wallet_transactions").insert({
+      user_id: intent.user_id, kind: "wallet_topup", amount_kobo: net, bucket: "earnings",
+      monnify_ref: intent.payment_reference,
+      meta: { intent_id: intent.id, gross_kobo: paidAmountKobo, fee_kobo: fee, fee_pct: feePct },
+    });
+    await db.from("wallet_transactions").insert({
+      user_id: intent.user_id, kind: "platform_fee", amount_kobo: -fee, bucket: "earnings",
+      monnify_ref: intent.payment_reference,
+      meta: { intent_id: intent.id, reason: "wallet_topup", fee_pct: feePct },
+    });
   } else {
     // AI credit top-up: extend expiry to X days from now; add to balance.
     const expires = new Date(Date.now() + settings.ai_credit_expiry_days * 24 * 60 * 60 * 1000).toISOString();
@@ -241,7 +271,7 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
 
   // 5) Affiliate commission (only on real purchases, never on wallet top-ups per policy)
   // Quiz purchases exclude affiliate commission — the creator is already paid.
-  if (intent.affiliate_user_id && settings.affiliate_pct > 0 && intent.purpose !== "quiz_purchase") {
+  if (intent.affiliate_user_id && settings.affiliate_pct > 0 && intent.purpose !== "quiz_purchase" && intent.purpose !== "wallet_topup") {
     const commission = Math.floor((paidAmountKobo * settings.affiliate_pct) / 100);
     if (commission > 0) {
       await db.from("wallets").upsert({ user_id: intent.affiliate_user_id }, { onConflict: "user_id" });

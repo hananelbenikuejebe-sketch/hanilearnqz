@@ -56,10 +56,16 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     if (data.amount_kobo < minKobo) {
       throw new Error(`Minimum withdrawal is ₦${(minKobo / 100).toFixed(0)}`);
     }
+    // Fee is applied to the payable/net amount only — the user's balance is debited the full requested amount.
+    const feePct = Number(settings?.withdrawal_fee_pct ?? 5);
+    const feeKobo = Math.floor((data.amount_kobo * feePct) / 100);
+    const netKobo = data.amount_kobo - feeKobo;
+
     // Debit immediately (hold funds); refund on rejection.
     await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - data.amount_kobo }).eq("user_id", context.userId);
     await db.from("wallet_transactions").insert({
       user_id: context.userId, kind: "withdrawal_request", amount_kobo: -data.amount_kobo, bucket: "earnings",
+      meta: { fee_kobo: feeKobo, fee_pct: feePct, net_kobo: netKobo },
     });
     const { data: req, error } = await db.from("withdrawal_requests").insert({
       user_id: context.userId,
@@ -67,14 +73,16 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
       bank_name: bank.bank_name,
       account_number: bank.account_number,
       account_name: bank.account_name,
+      meta: { fee_kobo: feeKobo, fee_pct: feePct, net_kobo: netKobo },
     }).select().single();
     if (error) throw error;
 
     const naira = (data.amount_kobo / 100).toFixed(2);
-    const msg = `Withdrawal request — HaniLearn-QZ\n\nUser ID: ${context.userId}\nAmount: NGN ${naira}\nBank: ${bank.bank_name}\nAccount #: ${bank.account_number}\nAccount name: ${bank.account_name}\nRequest ID: ${req.id}`;
+    const nairaNet = (netKobo / 100).toFixed(2);
+    const msg = `Withdrawal request — HaniLearn-QZ\n\nUser ID: ${context.userId}\nGross amount: NGN ${naira}\nFee (${feePct}%): NGN ${(feeKobo/100).toFixed(2)}\nPayable: NGN ${nairaNet}\nBank: ${bank.bank_name}\nAccount #: ${bank.account_number}\nAccount name: ${bank.account_name}\nRequest ID: ${req.id}`;
     const whatsapp = String(settings?.withdrawal_whatsapp || settings?.support_whatsapp || "+2349071829295").replace(/[^\d]/g, "");
     const whatsappUrl = `https://wa.me/${whatsapp}?text=${encodeURIComponent(msg)}`;
-    return { request: req, whatsappUrl, message: msg };
+    return { request: req, whatsappUrl, message: msg, gross_kobo: data.amount_kobo, fee_kobo: feeKobo, net_kobo: netKobo, fee_pct: feePct };
   });
 
 // Admin: list all withdrawals + approve/reject

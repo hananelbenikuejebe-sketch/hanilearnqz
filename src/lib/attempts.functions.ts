@@ -1,8 +1,50 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertAdmin, getCreatorPerms, logAiUsage } from "./authz.server";
+import { assertAdmin, getAiBalance, billAiUsage, priceForFeature } from "./authz.server";
+import { aiChat, parseJsonLoose, isAiConfigured } from "./ai-provider.server";
 
+const DEFAULT_OBJECTIVE_POINTS = 1;
+const DEFAULT_OPEN_POINTS = 10;
+
+const pointsFor = (q: any) => {
+  const p = Number(q.points);
+  if (Number.isFinite(p) && p > 0) return p;
+  return q.type === "short" || q.type === "essay" ? DEFAULT_OPEN_POINTS : DEFAULT_OBJECTIVE_POINTS;
+};
+
+/**
+ * Tells the client, before submitting, whether AI marking will run for the
+ * open-ended questions and what it will cost the taker.
+ */
+export const getGradingPreflight = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ quiz_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: questions } = await db
+      .from("questions").select("id, type, points").eq("quiz_id", data.quiz_id);
+    const qs = (questions ?? []) as any[];
+    const open = qs.filter((q) => q.type === "short" || q.type === "essay");
+    const totalMarks = qs.reduce((s, q) => s + pointsFor(q), 0);
+    const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
+    const unit = priceForFeature("ai_essay", settings);
+    const balance = await getAiBalance(db, context.userId);
+    const estimate = unit * open.length;
+    const configured = isAiConfigured();
+    return {
+      open_count: open.length,
+      total_marks: totalMarks,
+      objective_count: qs.length - open.length,
+      ai_configured: configured,
+      unit_cost_kobo: unit,
+      estimated_cost_kobo: estimate,
+      ai_credit_kobo: balance,
+      can_grade_all: configured && (unit === 0 || balance >= estimate),
+      gradable_count: unit === 0 ? open.length : Math.min(open.length, Math.floor(balance / Math.max(1, unit))),
+    };
+  });
 
 export const submitAttempt = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -31,91 +73,95 @@ export const submitAttempt = createServerFn({ method: "POST" })
     }
 
     const { data: questions } = await context.supabase
-      .from("questions").select("id, type, text, points, sample_answer, options(id, is_correct, text)").eq("quiz_id", data.quiz_id);
+      .from("questions")
+      .select("id, type, text, points, sample_answer, section_id, options(id, is_correct, text)")
+      .eq("quiz_id", data.quiz_id);
     const qs = (questions ?? []) as any[];
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
+    const essayUnitCost = priceForFeature("ai_essay", settings);
 
     let objectiveCorrect = 0;
     let objectiveGradable = 0;
+    let pointsAwarded = 0;
+    let pointsMax = 0;
     let openAwardedTotal = 0;
     let openMaxTotal = 0;
     let openMarkedCount = 0;
     let aiSkippedReason: string | null = null;
 
-    // AI grading gate: honour the quiz creator's ai_enabled permission.
-    let aiAllowed = false;
-    if (quiz.created_by) {
-      try {
-        const perms = await getCreatorPerms(context.supabase, quiz.created_by);
-        // Admins auto-have AI; creators only if ai_enabled.
-        aiAllowed = perms ? !!perms.ai_enabled : true;
-      } catch { aiAllowed = false; }
-    }
-    const aiKey = process.env.LOVABLE_API_KEY;
-    if (!aiKey) { aiAllowed = false; aiSkippedReason = "AI is not configured yet."; }
+    // AI marking is paid for by the person taking the quiz, out of their AI credit.
+    // Hard lock: once the balance can no longer cover a marking call, remaining
+    // open questions score 0 (the taker is warned before submitting).
+    let aiBudget = await getAiBalance(db, context.userId);
+    let aiAvailable = isAiConfigured();
+    if (!aiAvailable) aiSkippedReason = "AI marking is not configured — open-ended answers were scored 0.";
 
     const perQuestionAi: Record<string, any> = {};
 
     for (const q of qs) {
+      const maxPts = pointsFor(q);
+      pointsMax += maxPts;
+
       if (q.type === "mcq" || q.type === "tf") {
         objectiveGradable++;
         const correctIds = (q.options ?? []).filter((o: any) => o.is_correct).map((o: any) => o.id).sort();
         const ans = data.answers[q.id];
         const ansArr = Array.isArray(ans) ? [...ans].sort() : ans ? [ans] : [];
-        if (correctIds.length === ansArr.length && correctIds.every((c: string, i: number) => c === ansArr[i])) objectiveCorrect++;
+        const right = correctIds.length === ansArr.length && correctIds.every((c: string, i: number) => c === ansArr[i]);
+        if (right) { objectiveCorrect++; pointsAwarded += maxPts; }
       } else if (q.type === "short" || q.type === "essay") {
-        const maxPts = Number(q.points ?? 10);
         openMaxTotal += maxPts;
         const studentAns = String(data.answers[q.id] ?? "").trim();
-        if (!studentAns) continue;
-        if (aiAllowed) {
+        if (!studentAns) {
+          perQuestionAi[q.id] = { score: 0, max: maxPts, feedback: "No answer submitted." };
+          continue;
+        }
+        const canAfford = essayUnitCost === 0 || aiBudget >= essayUnitCost;
+        if (aiAvailable && canAfford) {
           try {
-            const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", "Lovable-API-Key": aiKey! },
-              body: JSON.stringify({
-                model: "google/gemini-3-flash-preview",
-                messages: [
-                  { role: "system", content: "You are a strict but fair exam marker. Return ONLY JSON: {\"score\":number,\"feedback\":\"...\"}. Score is 0..max_points." },
-                  { role: "user", content: `Question: ${q.text}\nModel answer: ${q.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${studentAns}\nmax_points: ${maxPts}` },
-                ],
-                temperature: 0,
-              }),
-            });
-            if (!res.ok) throw new Error(`AI marker HTTP ${res.status}`);
-            const json = await res.json();
-            const text = json.choices?.[0]?.message?.content ?? "{}";
-            const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
-            const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
-            const parsed = start !== -1 && end > start ? JSON.parse(cleaned.slice(start, end + 1)) : { score: 0, feedback: "" };
+            const r = await aiChat("heavy", [
+              { role: "system", content: 'You are a strict but fair exam marker. Return ONLY JSON: {"score":number,"feedback":"one short paragraph"}. score is between 0 and max_points and may use halves.' },
+              { role: "user", content: `Question: ${q.text}\nModel answer: ${q.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${studentAns}\nmax_points: ${maxPts}` },
+            ], { temperature: 0, max_tokens: 500, json: true });
+            const parsed = parseJsonLoose<{ score?: number; feedback?: string }>(r.text, {});
             const score = Math.max(0, Math.min(maxPts, Number(parsed.score) || 0));
             openAwardedTotal += score;
+            pointsAwarded += score;
             openMarkedCount++;
-            perQuestionAi[q.id] = { score, max: maxPts, feedback: String(parsed.feedback ?? "") };
-            await logAiUsage(context.supabase, context.userId, {
-              feature: "essay_grade", model: "google/gemini-3-flash-preview",
-              input_tokens: json.usage?.prompt_tokens ?? 0, output_tokens: json.usage?.completion_tokens ?? 0,
-              credits_cost: Number(json.usage?.total_tokens ?? 0) / 1000 * 0.02, quiz_id: data.quiz_id,
+            perQuestionAi[q.id] = { score, max: maxPts, feedback: String(parsed.feedback ?? ""), provider: r.provider, model: r.model };
+            const billed = await billAiUsage(context.userId, "ai_essay", {
+              input_tokens: r.input_tokens, output_tokens: r.output_tokens,
+              quiz_id: data.quiz_id, model: r.model, provider: r.provider,
+              meta: { question_id: q.id, fell_back: r.fellBack },
             });
+            aiBudget = Math.max(0, aiBudget - (billed.debited_kobo ?? 0));
           } catch (e: any) {
             perQuestionAi[q.id] = { score: 0, max: maxPts, feedback: `AI marker unavailable: ${e?.message ?? "error"}. Scored 0 pending manual review.` };
-            aiSkippedReason = aiSkippedReason ?? "AI marker failed for one or more essay answers; they were scored 0.";
+            aiSkippedReason = aiSkippedReason ?? "The AI marker failed on one or more answers; they were scored 0 and can be reviewed manually.";
           }
         } else {
-          perQuestionAi[q.id] = { score: 0, max: maxPts, feedback: aiSkippedReason ?? "AI marking is disabled for this quiz — scored 0. A creator can grade manually." };
+          perQuestionAi[q.id] = {
+            score: 0, max: maxPts,
+            feedback: aiAvailable
+              ? "Not marked — you ran out of AI credit, so this answer scored 0. Top up your AI credit and retake to have it marked."
+              : "AI marking unavailable — scored 0.",
+          };
+          if (aiAvailable) aiSkippedReason = "You ran out of AI credit, so some open-ended answers were scored 0.";
         }
+      } else {
+        // Unknown type — treat as objective miss so totals stay honest.
+        objectiveGradable++;
       }
     }
+
     const total = qs.length;
-    // Composite score: objective percent + open-question percent, weighted by question count.
+    const openCount = qs.filter((q) => q.type === "short" || q.type === "essay").length;
+    const score_pct = pointsMax > 0 ? Math.round((pointsAwarded / pointsMax) * 10000) / 100 : 0;
     const objectivePct = objectiveGradable > 0 ? (objectiveCorrect / objectiveGradable) * 100 : 0;
     const openPct = openMaxTotal > 0 ? (openAwardedTotal / openMaxTotal) * 100 : 0;
-    const openCount = qs.filter((q) => q.type === "short" || q.type === "essay").length;
-    let score_pct = 0;
-    if (objectiveGradable + openCount > 0) {
-      score_pct = ((objectivePct * objectiveGradable) + (openPct * openCount)) / (objectiveGradable + openCount);
-    }
-    score_pct = Math.round(score_pct * 100) / 100;
-    const correct = objectiveCorrect;
     const gradable = objectiveGradable + openCount;
 
     const { data: attempt, error } = await context.supabase
@@ -124,24 +170,30 @@ export const submitAttempt = createServerFn({ method: "POST" })
         student_id: context.userId,
         quiz_id: data.quiz_id,
         score_pct,
-        correct_count: correct,
+        correct_count: objectiveCorrect,
         total: gradable,
         time_taken_sec: data.time_taken_sec,
         answers: data.answers,
         submitted_at: new Date().toISOString(),
         awarded: openAwardedTotal,
-        ai_feedback: { per_question: perQuestionAi, ai_used: aiAllowed, note: aiSkippedReason },
+        points_awarded: Math.round(pointsAwarded * 100) / 100,
+        points_max: Math.round(pointsMax * 100) / 100,
+        ai_feedback: { per_question: perQuestionAi, ai_used: openMarkedCount > 0, note: aiSkippedReason },
       } as any)
       .select().single();
     if (error) throw error;
     return {
-      id: attempt.id, score_pct, correct_count: correct, total: gradable, total_questions: total,
+      id: attempt.id, score_pct,
+      points_awarded: Math.round(pointsAwarded * 100) / 100,
+      points_max: Math.round(pointsMax * 100) / 100,
+      correct_count: objectiveCorrect, total: gradable, total_questions: total,
       objective_pct: Math.round(objectivePct * 100) / 100,
       open_pct: Math.round(openPct * 100) / 100,
       open_marked: openMarkedCount, open_count: openCount,
-      ai_used: aiAllowed, ai_note: aiSkippedReason,
+      ai_used: openMarkedCount > 0, ai_note: aiSkippedReason,
     };
   });
+
 
 export const getAttemptDetail = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
