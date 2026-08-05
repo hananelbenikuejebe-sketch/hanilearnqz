@@ -39,8 +39,10 @@ export function NotificationBell() {
 
   useEffect(() => {
     if (typeof window === "undefined" || !userId) return;
+    // Unique topic per mounted bell (mobile + desktop nav both render one),
+    // otherwise the second mount calls .on() on an already-subscribed channel.
     const channel = supabase
-      .channel(`notifications-${userId}`)
+      .channel(`notifications-${userId}-${Math.random().toString(36).slice(2)}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${userId}` }, (payload) => {
         qc.invalidateQueries({ queryKey: ["notifications"] });
         try {

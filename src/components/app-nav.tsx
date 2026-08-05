@@ -13,6 +13,7 @@ import {
   Menu,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
 import { cn } from "@/lib/utils";
 import {
   Sheet,
@@ -57,6 +58,7 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
           <span className="text-sm font-semibold tracking-tight">HaniLearn-QZ</span>
         </Link>
         <div className="flex items-center gap-1">
+          <NotificationBell />
           <ThemeToggle />
         </div>
       </header>
@@ -79,7 +81,7 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
           ))}
         </div>
         <div className="flex items-center justify-between border-t p-3">
-          <span className="text-xs text-muted-foreground">Theme</span>
+          <NotificationBell />
           <ThemeToggle />
         </div>
       </nav>

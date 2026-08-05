@@ -38,7 +38,7 @@ function QuizPlayer() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const startRef = useRef(Date.now());
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
   useEffect(() => { if (data?.quiz?.enforce_time && data.quiz.duration_min) setRemaining(data.quiz.duration_min * 60); }, [data]);
   const submit = useMutation({

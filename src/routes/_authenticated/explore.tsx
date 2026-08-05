@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Search, Clock, FileQuestion, Play, Heart, MessageSquare, Grid2X2, List, Rows3, Users, Trophy } from "lucide-react";
 import { quizBannerStyle } from "@/lib/banner-color";
+import { AdSlot } from "@/components/ad-slot";
 
 export const Route = createFileRoute("/_authenticated/explore")({
   head: () => ({ meta: [
@@ -94,6 +95,7 @@ function Explore() {
           </Select>
         </div>
         {q.trim().length > 1 && (people ?? []).length > 0 && <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4"/>People</div><div className="flex gap-2 overflow-x-auto pb-2">{(people ?? []).map((p: any) => <Button key={p.id} asChild variant="outline" className="h-auto shrink-0 justify-start px-3 py-2"><Link to="/profile/$userId" params={{ userId: p.id }}><span className="grid h-8 w-8 place-items-center rounded-full bg-muted">{(p.full_name || p.handle || "?").slice(0,1).toUpperCase()}</span><span className="ml-2 text-left"><span className="block text-sm">{p.full_name || p.handle}</span>{p.handle && <span className="block text-xs text-muted-foreground">@{p.handle}</span>}</span></Link></Button>)}</div></div>}
+        <AdSlot placement="explore" className="mb-4" />
         {isLoading && <p className="text-muted-foreground">Loading…</p>}
         {!isLoading && filtered.length === 0 && (
           <Card><CardContent className="py-12 text-center text-muted-foreground">No quizzes match your filters.</CardContent></Card>

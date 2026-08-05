@@ -68,35 +68,40 @@ function Profile() {
     <AppShell isSuperAdmin={status?.is_super_admin}>
       <div className="mx-auto max-w-5xl space-y-4 p-3 md:p-8">
         <Card>
-          <CardContent className="flex flex-wrap items-center gap-4 p-4 md:p-6">
-            <Avatar className="h-14 w-14 md:h-16 md:w-16"><AvatarFallback className="text-base">{initials}</AvatarFallback></Avatar>
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate">{me?.name ?? "…"}</h1>
-                {me?.guest && <Badge variant="outline">Guest</Badge>}
-                {status?.is_super_admin && <Badge>Super admin</Badge>}
-                {status?.can_create && !status?.is_super_admin && <Badge variant="secondary">Creator</Badge>}
-              </div>
-              {pub?.profile?.handle && <p className="text-sm text-muted-foreground">@{pub.profile.handle}</p>}
-              <p className="truncate text-sm text-muted-foreground">{me?.email}</p>
-              {me?.joined && <p className="text-xs text-muted-foreground">Joined {new Date(me.joined).toLocaleDateString()}</p>}
-              {status?.effective?.tier === "free" && (
-                <p className="mt-1 text-xs text-muted-foreground">Free creator · {status.effective.max_quizzes} quizzes/month · {status.effective.max_questions_per_quiz} questions/quiz</p>
-              )}
-              {pub && (
-                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span className="tabular-nums"><b className="text-foreground">{pub.quizzes.length}</b> quizzes created</span>
-                  <span className="tabular-nums"><b className="text-foreground">{pub.followers}</b> followers</span>
-                  <span className="tabular-nums"><b className="text-foreground">{pub.following}</b> following</span>
+          <CardContent className="p-4 md:p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start">
+              <div className="flex min-w-0 flex-1 items-start gap-3 md:gap-4">
+                <Avatar className="h-14 w-14 shrink-0 md:h-16 md:w-16"><AvatarFallback className="text-base">{initials}</AvatarFallback></Avatar>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="min-w-0 break-words text-xl md:text-2xl">{me?.name ?? "…"}</h1>
+                    {me?.guest && <Badge variant="outline">Guest</Badge>}
+                    {status?.is_super_admin && <Badge>Super admin</Badge>}
+                    {status?.can_create && !status?.is_super_admin && <Badge variant="secondary">Creator</Badge>}
+                  </div>
+                  {pub?.profile?.handle && <p className="text-sm text-muted-foreground">@{pub.profile.handle}</p>}
+                  <p className="break-all text-sm text-muted-foreground">{me?.email}</p>
+                  {me?.joined && <p className="text-xs text-muted-foreground">Joined {new Date(me.joined).toLocaleDateString()}</p>}
+                  {status?.effective?.tier === "free" && (
+                    <p className="mt-1 text-xs text-muted-foreground">Free creator · {status.effective.max_quizzes} quizzes/month · {status.effective.max_questions_per_quiz} questions/quiz</p>
+                  )}
+                  {pub && (
+                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span className="tabular-nums"><b className="text-foreground">{pub.quizzes.length}</b> quizzes created</span>
+                      <span className="tabular-nums"><b className="text-foreground">{pub.followers}</b> followers</span>
+                      <span className="tabular-nums"><b className="text-foreground">{pub.following}</b> following</span>
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {me?.guest && <Button size="sm" onClick={() => navigate({ to: "/auth" })}>Sign up</Button>}
+                <Button size="sm" variant="outline" onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/auth" }); }}>
+                  <LogOut className="mr-1 h-4 w-4" />Sign out
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              {me?.guest && <Button size="sm" onClick={() => navigate({ to: "/auth" })}>Sign up</Button>}
-              <Button size="sm" variant="outline" onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/auth" }); }}>
-                <LogOut className="mr-1 h-4 w-4" />Sign out
-              </Button>
-            </div>
+
           </CardContent>
         </Card>
 
