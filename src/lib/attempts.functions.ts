@@ -8,7 +8,7 @@ import {
   mapWithConcurrency, withTimeout,
 } from "./grading.server";
 
-const QUESTION_SELECT = "id, position, type, text, points, sample_answer, section_id, options(id, position, text, is_correct)";
+const QUESTION_SELECT = "id, position, type, text, points, sample_answer, explanation, section_id, options(id, position, text, is_correct)";
 
 /**
  * Tells the client, before submitting, whether AI marking will run for the
