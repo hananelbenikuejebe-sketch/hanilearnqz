@@ -337,16 +337,23 @@ function QuestionCard({ q, index, selected, onToggleSelect, onSave, onDelete }: 
     (q.options ?? []).sort((a: any, b: any) => a.position - b.position).map((o: any) => ({ text: o.text, is_correct: o.is_correct }))
   );
   function setCorrect(i: number) { setOptions(options.map((o: any, idx: number) => ({ ...o, is_correct: idx === i }))); }
+  const missingKey = (type === "mcq" || type === "tf") && !options.some((o: any) => o.is_correct);
 
   return (
-    <Card>
+    <Card className={missingKey ? "border-destructive/50" : undefined}>
       <CardContent className="pt-6 space-y-3">
+        {missingKey && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs">
+            No correct answer set — students are not scored on this question. Tick the correct option below and save.
+          </div>
+        )}
         <div className="flex items-start gap-2">
           {onToggleSelect && <input type="checkbox" checked={!!selected} onChange={onToggleSelect} className="mt-2" />}
           <Badge>{index + 1}</Badge>
           <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} className="flex-1" />
           <Button size="icon" variant="ghost" onClick={onDelete}><Trash2 className="h-4 w-4" /></Button>
         </div>
+
         <div className="grid sm:grid-cols-4 gap-3">
           <Select value={type} onValueChange={(v) => setType(v)}>
             <SelectTrigger><SelectValue /></SelectTrigger>
