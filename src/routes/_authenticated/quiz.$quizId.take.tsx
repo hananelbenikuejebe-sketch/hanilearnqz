@@ -4,7 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { getQuizForPlayer } from "@/lib/quizzes.functions";
-import { submitAttempt } from "@/lib/attempts.functions";
+import { submitAttempt, getGradingPreflight } from "@/lib/attempts.functions";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,6 +30,12 @@ function QuizPlayer() {
   const navigate = useNavigate();
   const fetchQuiz = useServerFn(getQuizForPlayer);
   const submitFn = useServerFn(submitAttempt);
+  const preflightFn = useServerFn(getGradingPreflight);
+  const { data: preflight } = useQuery({
+    queryKey: ["grading-preflight", quizId],
+    queryFn: () => preflightFn({ data: { quiz_id: quizId } }),
+    retry: false,
+  });
   const { data, isLoading, error } = useQuery({
     queryKey: ["quiz-player", quizId, key ?? ""],
     queryFn: () => fetchQuiz({ data: { id: quizId, access_key: key ?? null } }),
@@ -197,7 +203,25 @@ function QuizPlayer() {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Submit quiz?</AlertDialogTitle>
-          <AlertDialogDescription>{unanswered ? `${unanswered} unanswered question${unanswered === 1 ? "" : "s"}. Submit anyway?` : "Your timer stops immediately and corrections open next."}</AlertDialogDescription>
+          <AlertDialogDescription asChild>
+            <div className="space-y-2 text-left">
+              <p>{unanswered ? `${unanswered} unanswered question${unanswered === 1 ? "" : "s"}. Submit anyway?` : "Your timer stops immediately and every question — including theory — is graded right away."}</p>
+              {!!preflight?.ai_marked_count && (
+                <div className="rounded-md border border-accent/40 bg-accent/10 p-2 text-xs">
+                  <p className="font-semibold">AI marking will run now</p>
+                  <p className="mt-1">
+                    {preflight.ai_marked_count} open-ended answer{preflight.ai_marked_count === 1 ? "" : "s"} will be marked by AI and
+                    {" "}<strong>₦{(preflight.estimated_cost_kobo / 100).toFixed(2)} will be deducted automatically</strong> from your AI credit
+                    (balance ₦{(preflight.ai_credit_kobo / 100).toFixed(2)}).
+                  </p>
+                  {!preflight.can_grade_all && (
+                    <p className="mt-1 text-destructive">Your credit does not cover all of them — the ones that cannot be marked will score 0.</p>
+                  )}
+                </div>
+              )}
+              {!!preflight?.total_marks && <p className="text-xs text-muted-foreground">Scored out of {preflight.total_marks} marks set by the creator.</p>}
+            </div>
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Keep working</AlertDialogCancel>
