@@ -88,15 +88,19 @@ export const getGroup = createServerFn({ method: "GET" })
     if (gErr) throw gErr;
 
     const memberIds = (members ?? []).map((m: any) => m.user_id);
-    const { data: profiles } = memberIds.length
-      ? await db.from("profiles").select("id, full_name, handle, avatar_url").in("id", memberIds)
+    const senderIds = (messages ?? []).map((m: any) => m.user_id);
+    const allProfileIds = Array.from(new Set([...memberIds, ...senderIds]));
+    const { data: profiles } = allProfileIds.length
+      ? await db.from("profiles").select("id, full_name, handle, avatar_url").in("id", allProfileIds)
       : { data: [] };
     const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+    const profilesRecord: Record<string, any> = {};
+    for (const p of profiles ?? []) profilesRecord[p.id] = p;
 
     const membersWithProfile = (members ?? []).map((m: any) => ({ ...m, profile: profileMap.get(m.user_id) ?? null }));
     const messagesWithSender = (messages ?? []).slice().reverse().map((m: any) => ({ ...m, sender: profileMap.get(m.user_id) ?? null }));
 
-    return { group, members: membersWithProfile, messages: messagesWithSender, my_id: context.userId };
+    return { group, members: membersWithProfile, messages: messagesWithSender, profiles: profilesRecord, my_id: context.userId };
   });
 
 export const sendGroupMessage = createServerFn({ method: "POST" })
@@ -156,9 +160,12 @@ export const searchUsersForGroup = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
-    let q = db.from("profiles").select("id, full_name, handle, avatar_url, is_guest").neq("id", context.userId).limit(20);
+    let q = db.from("profiles").select("id, full_name, handle, avatar_url, is_guest")
+      .neq("id", context.userId)
+      .order("full_name", { ascending: true, nullsFirst: false })
+      .limit(100);
     if (data.q) q = q.or(`full_name.ilike.%${data.q}%,handle.ilike.%${data.q}%`);
     const { data: rows, error } = await q;
     if (error) throw error;
-    return (rows ?? []).filter((p: any) => !p.is_guest || p.full_name);
+    return rows ?? [];
   });

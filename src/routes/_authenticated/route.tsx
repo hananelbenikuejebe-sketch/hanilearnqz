@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { ensureGuestSession } from "@/lib/guest-identity";
+import { AdInterstitial } from "@/components/ad-interstitial";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -17,5 +18,10 @@ export const Route = createFileRoute("/_authenticated")({
     }
     throw redirect({ to: "/auth" });
   },
-  component: () => <Outlet />,
+  component: () => (
+    <>
+      <Outlet />
+      <AdInterstitial />
+    </>
+  ),
 });

@@ -73,6 +73,18 @@ function RootShell({ children }: { children: ReactNode }) {
   );
 }
 
+const ORG_JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "HaniLearn",
+  url: "https://hanilearnqz.lovable.app",
+  publisher: {
+    "@type": "Organization",
+    name: "HaniLearn",
+    url: "https://hanilearnqz.lovable.app",
+  },
+};
+
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
@@ -88,6 +100,7 @@ function RootComponent() {
   return (
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSON_LD) }} />
         <Outlet />
         <Toaster richColors position="top-right" />
       </QueryClientProvider>

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdmin } from "@/lib/authz.server";
 
-/** Best-effort bulk notification insert. Never throws. */
+/** Best-effort bulk notification insert + web push. Never throws. */
 export async function notifyUsers(
   userIds: string[],
   n: { kind: string; title: string; body?: string; link?: string; image_url?: string },
@@ -23,10 +23,37 @@ export async function notifyUsers(
     for (let i = 0; i < rows.length; i += 500) {
       await (supabaseAdmin as any).from("notifications").insert(rows.slice(i, i + 500));
     }
+    const { pushToUsers } = await import("@/lib/web-push.server");
+    void pushToUsers(uniq, n);
   } catch (e) {
     console.error("[notifyUsers] failed", e);
   }
 }
+
+
+/** Upload a broadcast notification image to the public "content-images" bucket. Admin only. */
+export const uploadNotificationImage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      filename: z.string().max(160),
+      content_type: z.string().max(80),
+      base64: z.string().min(10),
+    }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const buf = Buffer.from(data.base64, "base64");
+    const ext = data.filename.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = `notifications/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: upErr } = await (supabaseAdmin as any).storage
+      .from("content-images")
+      .upload(path, buf, { contentType: data.content_type, upsert: true });
+    if (upErr) throw upErr;
+    const { data: pub } = (supabaseAdmin as any).storage.from("content-images").getPublicUrl(path);
+    return { path, url: pub?.publicUrl ?? null };
+  });
 
 export const listMyNotifications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -105,6 +132,8 @@ export const adminBroadcast = createServerFn({ method: "POST" })
       const { error } = await db.from("notifications").insert(rows.slice(i, i + 500));
       if (error) throw error;
     }
+    const { pushToUsers } = await import("@/lib/web-push.server");
+    void pushToUsers(userIds, { title: data.title, body: data.body, link: data.link, image_url: data.image_url });
     return { ok: true, sent: rows.length };
   });
 
@@ -165,4 +194,54 @@ export const deletePushSubscription = createServerFn({ method: "POST" })
     const { error } = await db.from("push_subscriptions").delete().eq("user_id", context.userId).eq("endpoint", data.endpoint);
     if (error) throw error;
     return { ok: true };
+  });
+
+export const getVapidPublicKey = createServerFn({ method: "GET" }).handler(async () => {
+  return { publicKey: process.env["VAPID_PUBLIC_KEY"] || null };
+});
+
+export const adminSendTestPush = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertAdmin(supabaseAdmin, context.userId);
+    const { pushToUsers } = await import("@/lib/web-push.server");
+    const result = await pushToUsers([context.userId], {
+      title: "Test push \u2014 HaniLearn-QZ",
+      body: "If you can see this, web push is working \ud83c\udf89",
+      link: "/notifications",
+    });
+    if (!result.attempted) {
+      throw new Error("No push subscription found for you yet \u2014 enable notifications first, or VAPID keys are not configured on the server.");
+    }
+    if (!result.sent) {
+      throw new Error(`Attempted ${result.attempted} device(s) but 0 succeeded. Check that the browser subscription is fresh (re-enable notifications) and VAPID keys match.`);
+    }
+    return result;
+  });
+
+export const composeNotificationWithAi = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ prompt: z.string().trim().min(2).max(500) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertAdmin(supabaseAdmin, context.userId);
+    const { aiChat, parseJsonLoose } = await import("@/lib/ai-provider.server");
+    const system = [
+      "You draft short, punchy push/in-app notification copy for a quiz platform called HaniLearn-QZ.",
+      "Always reply with ONLY compact JSON, no markdown, matching this shape:",
+      '{"title": string (max 60 chars), "body": string (max 160 chars), "link": string (a relative app path like /explore, /wallet, /create, or empty string), "audience": "all" | "creators" | "students"}',
+      "Titles should be attention-grabbing but not spammy. Bodies should nudge action (e.g. take a quiz, top up AI credit, invite friends).",
+    ].join(" ");
+    const res = await aiChat("light", [
+      { role: "system", content: system },
+      { role: "user", content: data.prompt },
+    ], { json: true, max_tokens: 300 });
+    const parsed: any = parseJsonLoose(res.text, { title: "New update", body: res.text.slice(0, 160), link: "", audience: "all" });
+    return {
+      title: String(parsed.title || "New update").slice(0, 60),
+      body: String(parsed.body || "").slice(0, 160),
+      link: String(parsed.link || ""),
+      audience: (["all", "creators", "students"].includes(parsed.audience) ? parsed.audience : "all") as "all" | "creators" | "students",
+    };
   });

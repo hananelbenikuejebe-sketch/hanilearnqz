@@ -11,9 +11,11 @@ import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ArrowLeft, ArrowRight, Clock, Send } from "lucide-react";
 import { toast } from "sonner";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const takeSearch = z.object({ key: z.string().max(40).optional() });
 
@@ -39,6 +41,12 @@ function QuizPlayer() {
   const [submitted, setSubmitted] = useState(false);
   const startRef = useRef(Date.now());
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const [flowMode, setFlowMode] = useState<"continuous" | "paged">(() => {
+    if (typeof window === "undefined") return "continuous";
+    return (localStorage.getItem("quiz-flow-mode") as "continuous" | "paged") || "continuous";
+  });
+  const [pageIndex, setPageIndex] = useState(0);
+  useEffect(() => { if (typeof window !== "undefined") localStorage.setItem("quiz-flow-mode", flowMode); }, [flowMode]);
 
   useEffect(() => { if (data?.quiz?.enforce_time && data.quiz.duration_min) setRemaining(data.quiz.duration_min * 60); }, [data]);
   const submit = useMutation({
@@ -65,6 +73,9 @@ function QuizPlayer() {
     return groups;
   }, [questions, sections]);
 
+  const flatQuestions = useMemo(() => grouped.flatMap((g) => g.questions.map((q: any) => ({ ...q, __section: g.section }))), [grouped]);
+  useEffect(() => { if (pageIndex >= flatQuestions.length) setPageIndex(Math.max(0, flatQuestions.length - 1)); }, [flatQuestions.length, pageIndex]);
+
   const answeredCount = useMemo(() => questions.filter((q: any) => { const a = answers[q.id]; return Array.isArray(a) ? a.length > 0 : !!a; }).length, [answers, questions]);
   const timeStr = useMemo(() => remaining === null ? "" : `${Math.floor(remaining / 60)}:${(remaining % 60).toString().padStart(2, "0")}`, [remaining]);
 
@@ -89,10 +100,19 @@ function QuizPlayer() {
         <div className="min-w-0"><div className="truncate text-sm font-semibold">{data.quiz.title}</div><div className="text-xs text-muted-foreground">Answered {answeredCount}/{questions.length}</div></div>
         <div className="flex shrink-0 items-center gap-2 text-xs">
           {remaining !== null && <span className={`inline-flex items-center gap-1 font-mono ${remaining < 60 ? "text-destructive" : ""}`}><Clock className="h-3.5 w-3.5" />{timeStr}</span>}
+          <label className="hidden items-center gap-1.5 sm:flex">
+            <span className="text-muted-foreground">{flowMode === "paged" ? "One at a time" : "Continuous"}</span>
+            <Switch checked={flowMode === "paged"} onCheckedChange={(v) => setFlowMode(v ? "paged" : "continuous")} aria-label="Toggle question flow" />
+          </label>
+          <ThemeToggle />
           <Button size="sm" onClick={() => setConfirmOpen(true)} disabled={submit.isPending}><Send className="h-3.5 w-3.5" />Submit</Button>
         </div>
       </div>
       <Progress value={(answeredCount / questions.length) * 100} className="h-1 rounded-none" />
+      <div className="container mx-auto flex items-center justify-end gap-1.5 px-3 pb-1 pt-1 sm:hidden">
+        <span className="text-[11px] text-muted-foreground">{flowMode === "paged" ? "One at a time" : "Continuous"}</span>
+        <Switch checked={flowMode === "paged"} onCheckedChange={(v) => setFlowMode(v ? "paged" : "continuous")} aria-label="Toggle question flow" />
+      </div>
       {grouped.length > 1 && (
         <div className="container mx-auto flex gap-1.5 overflow-x-auto px-3 pb-2 pt-1">
           {grouped.map((g, i) => (
@@ -106,61 +126,72 @@ function QuizPlayer() {
       )}
     </header>
     <main className="container mx-auto max-w-4xl px-3 py-4 space-y-6">
-      {grouped.map((g, gi) => {
-        const startIndex = runningIndex;
-        runningIndex += g.questions.length;
-        return (
-          <section key={g.section?.id ?? `u-${gi}`} ref={(el) => { sectionRefs.current[g.section?.id ?? `u-${gi}`] = el; }} className="scroll-mt-32 space-y-3">
-            {g.section && (
-              <div className="rounded-md border bg-secondary/40 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <h2 className="text-sm font-bold">{g.section.title}</h2>
-                  {(g.section.total_score != null) && <span className="text-xs font-semibold text-muted-foreground">{g.section.total_score} marks</span>}
+      {flowMode === "continuous" ? (
+        <>
+          {grouped.map((g, gi) => {
+            const startIndex = runningIndex;
+            runningIndex += g.questions.length;
+            return (
+              <section key={g.section?.id ?? `u-${gi}`} ref={(el) => { sectionRefs.current[g.section?.id ?? `u-${gi}`] = el; }} className="scroll-mt-32 space-y-3">
+                {g.section && (
+                  <div className="rounded-md border bg-secondary/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <h2 className="text-sm font-bold">{g.section.title}</h2>
+                      {(g.section.total_score != null) && <span className="text-xs font-semibold text-muted-foreground">{g.section.total_score} marks</span>}
+                    </div>
+                    {g.section.instructions && <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{g.section.instructions}</p>}
+                  </div>
+                )}
+                {g.questions.map((current: any, qi: number) => {
+                  const num = startIndex + qi + 1;
+                  return <QuestionCard key={current.id} current={current} num={num} answers={answers} setAnswers={setAnswers} />;
+                })}
+              </section>
+            );
+          })}
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {questions.map((q: any, i: number) => (
+              <button key={q.id} type="button" onClick={() => document.getElementById(`q-${q.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                className={`h-8 w-8 rounded-md border text-xs font-semibold ${answers[q.id] ? "border-success/40 bg-success/10" : "bg-card"}`}>{i + 1}</button>
+            ))}
+          </div>
+          <div className="flex justify-center">
+            <Button size="lg" onClick={() => setConfirmOpen(true)} disabled={submit.isPending}><Send className="h-4 w-4 mr-1" />Submit quiz</Button>
+          </div>
+        </>
+      ) : (
+        <>
+          {flatQuestions[pageIndex] && (
+            <div className="space-y-3">
+              {flatQuestions[pageIndex].__section && (
+                <div className="rounded-md border bg-secondary/40 p-3">
+                  <h2 className="text-sm font-bold">{flatQuestions[pageIndex].__section.title}</h2>
                 </div>
-                {g.section.instructions && <p className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{g.section.instructions}</p>}
-              </div>
+              )}
+              <QuestionCard current={flatQuestions[pageIndex]} num={pageIndex + 1} answers={answers} setAnswers={setAnswers} />
+            </div>
+          )}
+          <div className="flex items-center justify-between gap-2">
+            <Button variant="outline" onClick={() => setPageIndex((i) => Math.max(0, i - 1))} disabled={pageIndex === 0}>
+              <ArrowLeft className="h-4 w-4 mr-1" />Previous
+            </Button>
+            <span className="text-sm font-medium tabular-nums text-muted-foreground">Question {pageIndex + 1} of {flatQuestions.length}</span>
+            {pageIndex >= flatQuestions.length - 1 ? (
+              <Button onClick={() => setConfirmOpen(true)} disabled={submit.isPending}><Send className="h-4 w-4 mr-1" />Submit</Button>
+            ) : (
+              <Button onClick={() => setPageIndex((i) => Math.min(flatQuestions.length - 1, i + 1))}>
+                Next<ArrowRight className="h-4 w-4 ml-1" />
+              </Button>
             )}
-            {g.questions.map((current: any, qi: number) => {
-              const num = startIndex + qi + 1;
-              const ans = answers[current.id];
-              return (
-                <Card key={current.id} className="p-4 shadow-technical sm:p-5">
-                  <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Question {num}</span>
-                    <span className="flex items-center gap-2"><span>{current.type.toUpperCase()}</span>{current.points != null && <span className="font-semibold">[{current.points} marks]</span>}</span>
-                  </div>
-                  <h1 className="whitespace-pre-wrap text-base font-semibold leading-6">{current.text}</h1>
-                  <div className="mt-4 space-y-2">
-                    {(current.type === "mcq" || current.type === "tf") && (
-                      <RadioGroup value={(ans as string) ?? ""} onValueChange={(v) => setAnswers((a) => ({ ...a, [current.id]: v }))}>
-                        {current.options.map((o: any, i: number) => (
-                          <Label key={o.id} htmlFor={o.id} className="flex cursor-pointer items-start gap-3 rounded-md border bg-card p-3 text-sm shadow-sm hover:bg-secondary has-[:checked]:border-primary has-[:checked]:bg-primary/10">
-                            <RadioGroupItem value={o.id} id={o.id} className="mt-0.5" />
-                            <span className="font-mono text-xs text-muted-foreground">{String.fromCharCode(65 + i)}</span>
-                            <span>{o.text}</span>
-                          </Label>
-                        ))}
-                      </RadioGroup>
-                    )}
-                    {(current.type === "short" || current.type === "essay") && (
-                      <Textarea rows={current.type === "essay" ? 8 : 3} value={(ans as string) ?? ""} onChange={(e) => setAnswers((a) => ({ ...a, [current.id]: e.target.value }))} placeholder="Type your answer…" />
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
-          </section>
-        );
-      })}
-      <div className="flex flex-wrap justify-center gap-1.5">
-        {questions.map((q: any, i: number) => (
-          <button key={q.id} type="button" onClick={() => document.getElementById(`q-${q.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
-            className={`h-8 w-8 rounded-md border text-xs font-semibold ${answers[q.id] ? "border-success/40 bg-success/10" : "bg-card"}`}>{i + 1}</button>
-        ))}
-      </div>
-      <div className="flex justify-center">
-        <Button size="lg" onClick={() => setConfirmOpen(true)} disabled={submit.isPending}><Send className="h-4 w-4 mr-1" />Submit quiz</Button>
-      </div>
+          </div>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {flatQuestions.map((q: any, i: number) => (
+              <button key={q.id} type="button" onClick={() => setPageIndex(i)}
+                className={`h-8 w-8 rounded-md border text-xs font-semibold ${i === pageIndex ? "border-primary bg-primary/10" : answers[q.id] ? "border-success/40 bg-success/10" : "bg-card"}`}>{i + 1}</button>
+            ))}
+          </div>
+        </>
+      )}
     </main>
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <AlertDialogContent>
@@ -175,4 +206,34 @@ function QuizPlayer() {
       </AlertDialogContent>
     </AlertDialog>
   </div>;
+}
+
+
+function QuestionCard({ current, num, answers, setAnswers }: { current: any; num: number; answers: Record<string, string | string[]>; setAnswers: React.Dispatch<React.SetStateAction<Record<string, string | string[]>>> }) {
+  const ans = answers[current.id];
+  return (
+    <Card id={`q-${current.id}`} className="p-4 shadow-technical sm:p-5">
+      <div className="mb-3 flex items-center justify-between text-xs text-muted-foreground">
+        <span>Question {num}</span>
+        <span className="flex items-center gap-2"><span>{current.type.toUpperCase()}</span>{current.points != null && <span className="font-semibold">[{current.points} marks]</span>}</span>
+      </div>
+      <h1 className="whitespace-pre-wrap text-base font-semibold leading-6">{current.text}</h1>
+      <div className="mt-4 space-y-2">
+        {(current.type === "mcq" || current.type === "tf") && (
+          <RadioGroup value={(ans as string) ?? ""} onValueChange={(v) => setAnswers((a) => ({ ...a, [current.id]: v }))}>
+            {current.options.map((o: any, i: number) => (
+              <Label key={o.id} htmlFor={o.id} className="flex cursor-pointer items-start gap-3 rounded-md border bg-card p-3 text-sm shadow-sm hover:bg-secondary has-[:checked]:border-primary has-[:checked]:bg-primary/10">
+                <RadioGroupItem value={o.id} id={o.id} className="mt-0.5" />
+                <span className="font-mono text-xs text-muted-foreground">{String.fromCharCode(65 + i)}</span>
+                <span>{o.text}</span>
+              </Label>
+            ))}
+          </RadioGroup>
+        )}
+        {(current.type === "short" || current.type === "essay") && (
+          <Textarea rows={current.type === "essay" ? 8 : 3} value={(ans as string) ?? ""} onChange={(e) => setAnswers((a) => ({ ...a, [current.id]: e.target.value }))} placeholder="Type your answer…" />
+        )}
+      </div>
+    </Card>
+  );
 }

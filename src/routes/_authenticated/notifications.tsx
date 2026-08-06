@@ -7,6 +7,7 @@ import { listMyNotifications, markNotificationsRead } from "@/lib/notifications.
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { AppShell } from "@/components/app-nav";
 import { EnableNotificationsButton } from "@/components/notification-bell";
+import { AdSlot } from "@/components/ad-slot";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -66,6 +67,8 @@ function NotificationsPage() {
           </CardHeader>
           <CardContent><EnableNotificationsButton /></CardContent>
         </Card>
+
+        <AdSlot placement="notifications" />
 
         <Tabs value={filter} onValueChange={(v) => setFilter(v as any)}>
           <TabsList>

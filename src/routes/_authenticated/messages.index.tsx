@@ -5,15 +5,18 @@ import { useState } from "react";
 import { listConversations } from "@/lib/messages.functions";
 import { listMyGroups, createGroup, searchUsersForGroup } from "@/lib/groups.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
+import { displayName, initialsOf } from "@/lib/display-name";
 import { AppShell } from "@/components/app-nav";
+import { AdSlot } from "@/components/ad-slot";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { MessageCircle, Users, Plus, Check } from "lucide-react";
+import { MessageCircle, Users, Plus, Check, Search } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/messages/")({
@@ -27,6 +30,80 @@ export const Route = createFileRoute("/_authenticated/messages/")({
   ] }),
   component: Messages,
 });
+
+function relativeTime(iso: string) {
+  const d = new Date(iso).getTime();
+  const diff = Date.now() - d;
+  const mins = Math.round(diff / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(iso).toLocaleDateString();
+}
+
+function PersonPicker({ selected, setSelected, q, setQ, results }: any) {
+  return (
+    <div className="space-y-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+        <Input className="pl-8" placeholder="Search by name or handle…" value={q} onChange={(e: any) => setQ(e.target.value)} />
+      </div>
+      <div className="max-h-56 space-y-1 overflow-y-auto">
+        {(results ?? []).map((p: any) => {
+          const isSel = !!selected[p.id];
+          return (
+            <button key={p.id} type="button" onClick={() => setSelected((s: any) => { const n = { ...s }; if (isSel) delete n[p.id]; else n[p.id] = p; return n; })}
+              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/40 ${isSel ? "bg-accent/50" : ""}`}>
+              <Avatar className="h-7 w-7 shrink-0">
+                {p.avatar_url && <AvatarImage src={p.avatar_url} alt={displayName(p)} />}
+                <AvatarFallback className="text-[10px]">{initialsOf(p)}</AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 flex-1 truncate text-left">{displayName(p)}</span>
+              {isSel && <Check className="h-4 w-4 text-primary" />}
+            </button>
+          );
+        })}
+        {!results?.length && <p className="px-2 py-4 text-center text-xs text-muted-foreground">No people found.</p>}
+      </div>
+    </div>
+  );
+}
+
+function NewMessageDialog() {
+  const searchFn = useServerFn(searchUsersForGroup);
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const { data: results } = useQuery({ queryKey: ["dm-user-search", q], queryFn: () => searchFn({ data: { q } }), enabled: open });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild><Button size="sm" variant="outline" className="gap-1"><Plus className="h-3.5 w-3.5" /> New message</Button></DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader><DialogTitle>Start a conversation</DialogTitle></DialogHeader>
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pl-8" placeholder="Search by name or handle…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <div className="max-h-64 space-y-1 overflow-y-auto">
+          {(results ?? []).map((p: any) => (
+            <Link key={p.id} to="/messages/$userId" params={{ userId: p.id }} onClick={() => setOpen(false)}
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/40">
+              <Avatar className="h-7 w-7 shrink-0">
+                {p.avatar_url && <AvatarImage src={p.avatar_url} alt={displayName(p)} />}
+                <AvatarFallback className="text-[10px]">{initialsOf(p)}</AvatarFallback>
+              </Avatar>
+              <span className="min-w-0 flex-1 truncate text-left">{displayName(p)}</span>
+            </Link>
+          ))}
+          {!results?.length && <p className="px-2 py-4 text-center text-xs text-muted-foreground">No people found.</p>}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function NewGroupDialog() {
   const qc = useQueryClient();
@@ -57,22 +134,7 @@ function NewGroupDialog() {
         <div className="space-y-3">
           <Input placeholder="Group name" value={name} onChange={(e) => setName(e.target.value)} />
           <Textarea placeholder="Description (optional)" rows={2} value={description} onChange={(e) => setDescription(e.target.value)} />
-          <Input placeholder="Search people…" value={q} onChange={(e) => setQ(e.target.value)} />
-          <div className="max-h-48 space-y-1 overflow-y-auto">
-            {(results ?? []).map((p: any) => {
-              const isSel = !!selected[p.id];
-              return (
-                <button key={p.id} type="button" onClick={() => setSelected((s) => { const n = { ...s }; if (isSel) delete n[p.id]; else n[p.id] = p; return n; })}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent/40 ${isSel ? "bg-accent/50" : ""}`}>
-                  <div className="grid h-7 w-7 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                    {(p.full_name || p.handle || "?").slice(0, 1).toUpperCase()}
-                  </div>
-                  <span className="min-w-0 flex-1 truncate text-left">{p.full_name || p.handle || "User"}</span>
-                  {isSel && <Check className="h-4 w-4 text-primary" />}
-                </button>
-              );
-            })}
-          </div>
+          <PersonPicker selected={selected} setSelected={setSelected} q={q} setQ={setQ} results={results} />
           {!!Object.keys(selected).length && <p className="text-xs text-muted-foreground">{Object.keys(selected).length} selected</p>}
         </div>
         <DialogFooter>
@@ -92,10 +154,10 @@ function Messages() {
   const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ["my-groups"], queryFn: () => groupsFn() });
   const { data: status } = useQuery({ queryKey: ["creator-status"], queryFn: () => statusFn() });
 
-  return <AppShell isSuperAdmin={status?.is_super_admin}><div className="mx-auto max-w-3xl space-y-5 p-4 md:p-8">
+  return <AppShell isSuperAdmin={status?.is_super_admin}><div className="mx-auto w-full max-w-3xl space-y-5 overflow-x-hidden p-4 pb-24 md:p-8">
     <div className="flex items-start justify-between gap-3">
       <div><h1 className="text-3xl font-bold">Messages</h1><p className="text-sm text-muted-foreground">Direct chats and group conversations.</p></div>
-      {tab === "groups" && <NewGroupDialog />}
+      {tab === "groups" ? <NewGroupDialog /> : <NewMessageDialog />}
     </div>
 
     <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
@@ -105,21 +167,32 @@ function Messages() {
       </TabsList>
     </Tabs>
 
+    <AdSlot placement="messages" />
+
     {tab === "direct" && <>
       {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-      {!isLoading && !(data ?? []).length && <Card><CardContent className="py-12 text-center"><MessageCircle className="mx-auto mb-3 h-8 w-8 text-muted-foreground"/><p className="font-medium">No conversations yet</p><p className="text-sm text-muted-foreground">Open a profile and tap Message.</p></CardContent></Card>}
-      <div className="divide-y border-y">{(data ?? []).map((c: any) => <Link key={c.peer_id} to="/messages/$userId" params={{ userId: c.peer_id }} className="flex items-center gap-3 py-4 hover:bg-accent/30">
-        <div className="grid h-10 w-10 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">{(c.profile?.full_name || c.profile?.handle || "?").slice(0, 1).toUpperCase()}</div>
-        <div className="min-w-0 flex-1"><div className="font-medium">{c.profile?.full_name || c.profile?.handle || "User"}</div><div className="truncate text-sm text-muted-foreground">{c.last_message.body}</div></div>
-        {c.unread > 0 && <Badge>{c.unread}</Badge>}
+      {!isLoading && !(data ?? []).length && <Card><CardContent className="py-12 text-center"><MessageCircle className="mx-auto mb-3 h-8 w-8 text-muted-foreground"/><p className="font-medium">No conversations yet</p><p className="text-sm text-muted-foreground">Tap "New message" to start chatting.</p></CardContent></Card>}
+      <div className="divide-y rounded-lg border">{(data ?? []).map((c: any) => <Link key={c.peer_id} to="/messages/$userId" params={{ userId: c.peer_id }} className="flex items-center gap-3 px-3 py-3 transition hover:bg-accent/30">
+        <Avatar className="h-11 w-11 shrink-0">
+          {c.profile?.avatar_url && <AvatarImage src={c.profile.avatar_url} alt={displayName(c.profile)} />}
+          <AvatarFallback>{initialsOf(c.profile)}</AvatarFallback>
+        </Avatar>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <span className="truncate font-medium">{displayName(c.profile)}</span>
+            <span className="shrink-0 text-[11px] text-muted-foreground">{relativeTime(c.last_message.created_at)}</span>
+          </div>
+          <div className="truncate text-sm text-muted-foreground">{c.last_message.body}</div>
+        </div>
+        {c.unread > 0 && <Badge className="shrink-0">{c.unread}</Badge>}
       </Link>)}</div>
     </>}
 
     {tab === "groups" && <>
       {groupsLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
       {!groupsLoading && !(groups ?? []).length && <Card><CardContent className="py-12 text-center"><Users className="mx-auto mb-3 h-8 w-8 text-muted-foreground"/><p className="font-medium">No groups yet</p></CardContent></Card>}
-      <div className="divide-y border-y">{(groups ?? []).map((g: any) => <Link key={g.id} to="/messages/group/$groupId" params={{ groupId: g.id }} className="flex items-center gap-3 py-4 hover:bg-accent/30">
-        <div className="grid h-10 w-10 place-items-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">{g.name.slice(0, 1).toUpperCase()}</div>
+      <div className="divide-y rounded-lg border">{(groups ?? []).map((g: any) => <Link key={g.id} to="/messages/group/$groupId" params={{ groupId: g.id }} className="flex items-center gap-3 px-3 py-3 transition hover:bg-accent/30">
+        <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-secondary text-sm font-bold text-secondary-foreground">{g.name.slice(0, 1).toUpperCase()}</div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2"><span className="font-medium truncate">{g.name}</span>{g.is_community && <Badge variant="secondary" className="text-[10px]">Community</Badge>}</div>
           <div className="truncate text-sm text-muted-foreground">{g.last_message?.body ?? `${g.member_count} member${g.member_count === 1 ? "" : "s"}`}</div>

@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Search, Clock, FileQuestion, Play, Heart, MessageSquare, Grid2X2, List, Rows3, Users, Trophy } from "lucide-react";
 import { quizBannerStyle } from "@/lib/banner-color";
-import { AdSlot } from "@/components/ad-slot";
+import { AdSlot, FeedAdCard, useActiveAds, interleaveAds } from "@/components/ad-slot";
 
 export const Route = createFileRoute("/_authenticated/explore")({
   head: () => ({ meta: [
@@ -41,6 +41,7 @@ function Explore() {
   const { data: status } = useQuery({ queryKey: ["creator-status"], queryFn: () => fetchStatus() });
   const { data: followingIds } = useQuery({ queryKey: ["following-ids"], queryFn: () => followingFn() });
   const { data: people } = useQuery({ queryKey: ["profile-search", q], queryFn: () => searchPeople({ data: { q } }), enabled: q.trim().length > 1 });
+  const feedAds = useActiveAds("explore").filter((a: any) => a.auto_show);
 
   const cats = useMemo(() => {
     const s = new Set<string>();
@@ -101,7 +102,12 @@ function Explore() {
           <Card><CardContent className="py-12 text-center text-muted-foreground">No quizzes match your filters.</CardContent></Card>
         )}
         <div className={view === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-2"}>
-          {filtered.map((quiz: any) => (
+          {interleaveAds(filtered, feedAds, 4).map((entry) => {
+            if (entry.type === "ad") {
+              return <FeedAdCard key={entry.key} ad={entry.ad} placement="explore" className={view === "grid" ? undefined : "sm:max-w-md"} />;
+            }
+            const quiz = entry.item;
+            return (
             <Card key={quiz.id} className={`group transition overflow-hidden ${view === "grid" ? "hover:shadow-lg hover:-translate-y-0.5" : "flex"}`}>
               {view !== "compact" && (
                 <div className={view === "grid" ? "h-32 bg-muted overflow-hidden relative" : "w-36 shrink-0 bg-muted overflow-hidden relative"}>
@@ -139,7 +145,8 @@ function Explore() {
                 </Button>
               </CardContent></div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       </div>
     </AppShell>

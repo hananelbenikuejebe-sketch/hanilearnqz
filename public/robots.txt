@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://hanilearnqz.lovable.app/sitemap.xml

@@ -190,7 +190,7 @@ export const getQuizSharePreview = createServerFn({ method: "GET" })
     const adminDb = supabaseAdmin as any;
     const { data: quiz, error } = await adminDb
       .from("quizzes")
-      .select("id, title, description, category, subject, difficulty, duration_min, is_published, banner_path, share_image_url")
+      .select("id, title, description, category, subject, difficulty, duration_min, is_published, banner_path, share_image_url, created_by")
       .eq("id", data.id)
       .eq("is_published", true)
       .maybeSingle();
@@ -199,7 +199,12 @@ export const getQuizSharePreview = createServerFn({ method: "GET" })
     const { count } = await adminDb.from("questions").select("id", { count: "exact", head: true }).eq("quiz_id", data.id);
     const origin = requestOrigin();
     const banner_url = await signBanner(adminDb, quiz.banner_path);
-    return { ...quiz, banner_url, question_count: count ?? 0, share_url: `${origin}/share/quiz/${data.id}`, share_image_url: quiz.share_image_url ?? banner_url ?? `${origin}/api/public/quiz-card/${data.id}.svg` };
+    let creator: { full_name: string | null; handle: string | null } | null = null;
+    if (quiz.created_by) {
+      const { data: p } = await adminDb.from("profiles").select("full_name, handle").eq("id", quiz.created_by).maybeSingle();
+      creator = p ?? null;
+    }
+    return { ...quiz, banner_url, question_count: count ?? 0, share_url: `${origin}/share/quiz/${data.id}`, share_image_url: quiz.share_image_url ?? banner_url ?? `${origin}/api/public/quiz-card/${data.id}.svg`, creator };
   });
 
 export const getQuizAdmin = createServerFn({ method: "GET" })

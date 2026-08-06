@@ -11,16 +11,23 @@ export const getMyWallet = createServerFn({ method: "GET" })
     const { ensureFreeMonthlyCredit } = await import("./authz.server");
     await ensureFreeMonthlyCredit(db, context.userId);
     await db.from("wallets").upsert({ user_id: context.userId }, { onConflict: "user_id" });
-    const [{ data: wallet }, { data: txs }, { data: bank }, { data: pending }] = await Promise.all([
+    const [{ data: wallet }, { data: txs }, { data: bank }, { data: pending }, { data: sub }] = await Promise.all([
       db.from("wallets").select("*").eq("user_id", context.userId).single(),
       db.from("wallet_transactions").select("*").eq("user_id", context.userId).order("created_at", { ascending: false }).limit(50),
       db.from("bank_accounts").select("*").eq("user_id", context.userId).maybeSingle(),
       db.from("withdrawal_requests").select("*").eq("user_id", context.userId).order("created_at", { ascending: false }).limit(10),
+      db.from("subscriptions").select("expires_at, active").eq("user_id", context.userId).eq("kind", "creator_access").eq("active", true).order("expires_at", { ascending: false }).limit(1).maybeSingle(),
     ]);
     const visibleWallet = wallet && wallet.ai_credit_expires_at && new Date(wallet.ai_credit_expires_at).getTime() < Date.now()
       ? { ...wallet, ai_credit_balance_kobo: 0 }
       : wallet;
-    return { wallet: visibleWallet, transactions: txs ?? [], bank_account: bank ?? null, withdrawals: pending ?? [] };
+    return {
+      wallet: visibleWallet,
+      transactions: txs ?? [],
+      bank_account: bank ?? null,
+      withdrawals: pending ?? [],
+      creator_access_expires_at: sub?.expires_at ?? null,
+    };
   });
 
 export const saveBankAccount = createServerFn({ method: "POST" })

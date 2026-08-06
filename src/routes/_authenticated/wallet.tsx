@@ -35,6 +35,16 @@ export const Route = createFileRoute("/_authenticated/wallet")({
 
 const naira = (kobo: number) => `₦${(kobo / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 
+function formatExpiry(label: string, iso: string | null | undefined) {
+  if (!iso) return "None";
+  const t = new Date(iso).getTime();
+  if (t > new Date("2900-01-01").getTime()) return `${label} — lifetime`;
+  const days = Math.ceil((t - Date.now()) / 86_400_000);
+  const dateStr = new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  if (days < 0) return `Expired (${dateStr})`;
+  return `${label} until ${dateStr} (${days} day${days === 1 ? "" : "s"} left)`;
+}
+
 function WalletPage() {
   const search = useSearch({ from: "/_authenticated/wallet" });
   const qc = useQueryClient();
@@ -80,6 +90,14 @@ function WalletPage() {
           <h1 className="text-2xl font-bold tracking-tight">Wallet</h1>
         </div>
 
+        <Card>
+          <CardContent className="flex flex-wrap items-center gap-2 pt-6 text-sm">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="font-medium">Creator (Pro) access:</span>
+            <span className="text-muted-foreground">{formatExpiry("Pro", (wallet as any)?.creator_access_expires_at)}</span>
+          </CardContent>
+        </Card>
+
         <div className="grid sm:grid-cols-2 gap-4">
           <Card>
             <CardHeader className="pb-2"><CardDescription>Earnings (withdrawable)</CardDescription>
@@ -90,12 +108,7 @@ function WalletPage() {
           <Card>
             <CardHeader className="pb-2"><CardDescription>AI credit</CardDescription>
               <CardTitle className="text-3xl tabular-nums">{naira(wallet?.wallet?.ai_credit_balance_kobo ?? 0)}</CardTitle>
-              {wallet?.wallet?.ai_credit_expires_at && (
-                <p className="text-xs text-muted-foreground">
-                  Expires {new Date(wallet.wallet.ai_credit_expires_at).toLocaleDateString()}
-                  {" · "}{Math.max(0, Math.ceil((new Date(wallet.wallet.ai_credit_expires_at).getTime() - Date.now()) / 86_400_000))}d remaining
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">{formatExpiry("AI credit", wallet?.wallet?.ai_credit_expires_at)}</p>
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">

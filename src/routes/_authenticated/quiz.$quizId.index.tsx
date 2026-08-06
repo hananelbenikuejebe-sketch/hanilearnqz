@@ -62,29 +62,29 @@ function QuizAbout() {
   const canTake = quiz.is_owner || quiz.is_admin || (!quiz.requires_purchase);
   const creator = (quiz as any).creator;
 
-  return <main className="min-h-screen bg-background"><div className="container mx-auto max-w-5xl px-3 py-4 sm:py-6">
+  return <main className="min-h-screen w-full overflow-x-hidden bg-background"><div className="mx-auto w-full max-w-5xl px-3 py-4 sm:py-6">
     <div className="overflow-hidden rounded-lg border bg-card shadow-technical">
-      <div className="grid min-h-56 place-items-end bg-secondary p-5" style={quiz.banner_url ? { backgroundImage: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--card) 92%, transparent)), url(${quiz.banner_url})`, backgroundSize: "cover", backgroundPosition: "center" } : { ...quizBannerStyle(quizId, (quiz as any).banner_color).style, backgroundImage: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--card) 75%, transparent)), ${quizBannerStyle(quizId, (quiz as any).banner_color).style.backgroundImage}` }}>
-        <div className="w-full">
-          <div className="mb-2 flex flex-wrap gap-2">
-            <Badge variant="secondary">{quiz.category}</Badge>
-            <Badge variant="outline">{quiz.difficulty}</Badge>
-            {quiz.subject && <Badge variant="outline">{quiz.subject}</Badge>}
-            {quiz.visibility === "private" && <Badge variant="outline"><Lock className="h-3 w-3 mr-1" />Private</Badge>}
-            {priced && <Badge className="bg-amber-500 text-black hover:bg-amber-600">₦{((quiz as any).price_kobo/100).toLocaleString()}</Badge>}
+      <div className="grid min-h-40 place-items-end bg-secondary p-3 sm:min-h-56 sm:p-5" style={quiz.banner_url ? { backgroundImage: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--card) 92%, transparent)), url(${quiz.banner_url})`, backgroundSize: "cover", backgroundPosition: "center" } : { ...quizBannerStyle(quizId, (quiz as any).banner_color).style, backgroundImage: `linear-gradient(180deg, transparent, color-mix(in oklab, var(--card) 75%, transparent)), ${quizBannerStyle(quizId, (quiz as any).banner_color).style.backgroundImage}` }}>
+        <div className="w-full min-w-0">
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            <Badge variant="secondary" className="text-[10px] sm:text-xs">{quiz.category}</Badge>
+            <Badge variant="outline" className="text-[10px] sm:text-xs">{quiz.difficulty}</Badge>
+            {quiz.subject && <Badge variant="outline" className="text-[10px] sm:text-xs">{quiz.subject}</Badge>}
+            {quiz.visibility === "private" && <Badge variant="outline" className="text-[10px] sm:text-xs"><Lock className="h-3 w-3 mr-1" />Private</Badge>}
+            {priced && <Badge className="bg-amber-500 text-[10px] text-black hover:bg-amber-600 sm:text-xs">₦{((quiz as any).price_kobo/100).toLocaleString()}</Badge>}
           </div>
-          <h1 className="text-2xl font-bold leading-tight sm:text-3xl">{quiz.title}</h1>
-          {quiz.description && <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{quiz.description}</p>}
+          <h1 className="truncate text-lg font-bold leading-tight sm:text-3xl" title={quiz.title}>{quiz.title}</h1>
+          {quiz.description && <p className="mt-2 line-clamp-2 max-w-2xl text-xs text-muted-foreground sm:text-sm">{quiz.description}</p>}
           {creator && (
-            <Link to="/profile/$userId" params={{ userId: creator.id }} className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground">
-              <User className="h-3 w-3" />by {creator.full_name || creator.handle || "creator"}
+            <Link to="/profile/$userId" params={{ userId: creator.id }} className="mt-2 inline-flex max-w-full items-center gap-1.5 truncate text-xs text-muted-foreground hover:text-foreground">
+              <User className="h-3 w-3 shrink-0" /><span className="truncate">by {creator.full_name || creator.handle || "creator"}</span>
             </Link>
           )}
         </div>
       </div>
-      <CardContent className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="space-y-3 text-sm">
-          <div className="grid grid-cols-3 gap-2">
+      <CardContent className="grid min-w-0 gap-4 p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="min-w-0 space-y-3 text-sm">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <Stat icon={<FileQuestion />} label="Questions" value={`${quiz.question_count}`} />
             <Stat icon={<Clock />} label="Duration" value={`${quiz.duration_min}m`} />
             <Stat icon={<ShieldCheck />} label="Access" value={quiz.visibility} />
@@ -168,14 +168,14 @@ function QuizAbout() {
 
           {/* Free / already purchased — go take it */}
           {canTake && !quiz.requires_key && (
-            <Button asChild size="lg">
+            <Button asChild size="lg" className="w-full">
               <Link to="/quiz/$quizId/take" params={{ quizId }} search={quiz.requires_key ? { key: accessKey } as any : undefined}>
                 <Play className="h-4 w-4 mr-1" />{quiz.purchased ? "Take (purchased)" : "Take quiz"}
               </Link>
             </Button>
           )}
         </section>
-        <aside><SocialPanel quizId={quizId} quizTitle={quiz.title} shareUrl={quiz.share_url} /></aside>
+        <aside className="min-w-0"><SocialPanel quizId={quizId} quizTitle={quiz.title} shareUrl={quiz.share_url} /></aside>
       </CardContent>
     </div>
   </div></main>;
