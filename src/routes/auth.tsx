@@ -18,7 +18,16 @@ const REF_KEY = "hanilearn.ref";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
-  head: () => ({ meta: [{ title: "Sign in — HaniLearn-QZ" }] }),
+  head: () => ({
+    meta: [
+      { title: "Sign in — HaniLearn" },
+      { name: "description", content: "Sign in or create a free HaniLearn account to build, share and take quizzes and CBT exams." },
+      { property: "og:title", content: "Sign in — HaniLearn" },
+      { property: "og:description", content: "Sign in or create a free HaniLearn account to build, share and take quizzes and CBT exams." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   validateSearch: (s: any) => z.object({ ref: z.string().max(16).optional() }).parse(s),
   component: AuthPage,
 });

@@ -3,6 +3,21 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { isSuperAdmin } from "./authz.server";
 
+/** Fetch every row of a query in pages of 1000 to bypass PostgREST's implicit row cap. */
+async function fetchAllRows<T = any>(build: (from: number, to: number) => any, pageSize = 1000): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await build(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as T[];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 /** One merged view of every user: role, creator plan, wallet, AI spend, activity. */
 export const getUsersOverview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -12,19 +27,17 @@ export const getUsersOverview = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
 
-    const [
-      { data: profiles }, { data: roles }, { data: perms }, { data: wallets },
-      { data: subs }, { data: usage }, { data: quizzes }, { data: attempts }, { data: txs },
-    ] = await Promise.all([
-      db.from("profiles").select("id, full_name, email, handle, is_guest, created_at"),
-      db.from("user_roles").select("user_id, role"),
-      db.from("creator_permissions").select("*"),
-      db.from("wallets").select("*"),
-      db.from("subscriptions").select("user_id, kind, expires_at, active").eq("kind", "creator_access"),
-      db.from("ai_usage_log").select("user_id, feature, credits_cost, created_at").order("created_at", { ascending: false }).limit(4000),
-      db.from("quizzes").select("id, created_by, is_published"),
-      db.from("attempts").select("id, student_id"),
-      db.from("wallet_transactions").select("user_id, kind, amount_kobo, bucket, created_at").order("created_at", { ascending: false }).limit(500),
+    const [profiles, roles, perms, wallets, subs, usage, quizzes, attempts, txs] = await Promise.all([
+      fetchAllRows((f, t) => db.from("profiles").select("id, full_name, email, handle, is_guest, created_at").range(f, t)),
+      fetchAllRows((f, t) => db.from("user_roles").select("user_id, role").range(f, t)),
+      fetchAllRows((f, t) => db.from("creator_permissions").select("*").range(f, t)),
+      fetchAllRows((f, t) => db.from("wallets").select("*").range(f, t)),
+      fetchAllRows((f, t) => db.from("subscriptions").select("user_id, kind, expires_at, active").eq("kind", "creator_access").range(f, t)),
+      fetchAllRows((f, t) => db.from("ai_usage_log").select("user_id, feature, credits_cost, created_at").range(f, t)),
+      fetchAllRows((f, t) => db.from("quizzes").select("id, created_by, is_published").range(f, t)),
+      fetchAllRows((f, t) => db.from("attempts").select("id, student_id").range(f, t)),
+      // Recent transactions for display only — capped, does not affect totals below.
+      db.from("wallet_transactions").select("user_id, kind, amount_kobo, bucket, created_at").order("created_at", { ascending: false }).limit(500).then((r: any) => r.data ?? []),
     ]);
 
     const rows: Record<string, any> = {};
@@ -38,16 +51,16 @@ export const getUsersOverview = createServerFn({ method: "GET" })
         plan_expires_at: null as string | null, plan_active: false,
       };
     }
-    for (const r of roles ?? []) rows[r.user_id]?.roles.push(r.role);
-    for (const p of perms ?? []) if (rows[p.user_id]) rows[p.user_id].permissions = p;
-    for (const w of wallets ?? []) {
+    for (const r of roles) rows[r.user_id]?.roles.push(r.role);
+    for (const p of perms) if (rows[p.user_id]) rows[p.user_id].permissions = p;
+    for (const w of wallets) {
       const r = rows[w.user_id]; if (!r) continue;
       r.balance_kobo = w.balance_kobo ?? 0;
       const expired = w.ai_credit_expires_at && new Date(w.ai_credit_expires_at).getTime() < Date.now();
       r.ai_credit_kobo = expired ? 0 : (w.ai_credit_balance_kobo ?? 0);
       r.ai_credit_expires_at = w.ai_credit_expires_at ?? null;
     }
-    for (const s of subs ?? []) {
+    for (const s of subs) {
       const r = rows[s.user_id]; if (!r) continue;
       const live = !!s.active && new Date(s.expires_at).getTime() > Date.now();
       if (live && (!r.plan_expires_at || s.expires_at > r.plan_expires_at)) { r.plan_expires_at = s.expires_at; r.plan_active = true; }
@@ -61,7 +74,7 @@ export const getUsersOverview = createServerFn({ method: "GET" })
       const r = rows[q.created_by]; if (!r) continue;
       r.quizzes += 1; if (q.is_published) r.published += 1;
     }
-    for (const a of attempts ?? []) { const r = rows[a.student_id]; if (r) r.attempts += 1; }
+    for (const a of attempts) { const r = rows[a.student_id]; if (r) r.attempts += 1; }
 
     let list = Object.values(rows);
     const term = data.q.trim().toLowerCase();
@@ -72,18 +85,18 @@ export const getUsersOverview = createServerFn({ method: "GET" })
     list.sort((a: any, b: any) => b.ai_spent_kobo - a.ai_spent_kobo || (b.quizzes - a.quizzes));
 
     const totals = {
-      users: (profiles ?? []).length,
-      guests: (profiles ?? []).filter((p: any) => p.is_guest).length,
+      users: profiles.length,
+      guests: profiles.filter((p: any) => p.is_guest).length,
       creators_active: Object.values(rows).filter((r: any) => r.plan_active).length,
       earnings_kobo: Object.values(rows).reduce((s: number, r: any) => s + r.balance_kobo, 0),
       ai_credit_kobo: Object.values(rows).reduce((s: number, r: any) => s + r.ai_credit_kobo, 0),
       ai_spent_kobo: Object.values(rows).reduce((s: number, r: any) => s + r.ai_spent_kobo, 0),
-      ai_calls: (usage ?? []).length,
-      quizzes: (quizzes ?? []).length,
+      ai_calls: usage.length,
+      quizzes: quizzes.length,
       attempts: (attempts ?? []).length,
     };
 
-    return { users: list.slice(0, 200), totals, recent_transactions: txs ?? [] };
+    return { users: list.slice(0, 200), totals, recent_transactions: txs };
   });
 
 /** Grant creator access for N months, or forever. */

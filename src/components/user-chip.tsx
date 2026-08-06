@@ -1,17 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { displayName, initialsOf } from "@/lib/display-name";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-function initialsOf(name?: string | null) {
-  return (name || "?")
-    .split(" ")
-    .filter(Boolean)
-    .map((s) => s[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 export function UserChip({
   userId,
@@ -32,7 +23,8 @@ export function UserChip({
   variant?: "inline" | "row";
   className?: string;
 }) {
-  const display = name || (handle ? `@${handle}` : "Unknown");
+  const profile = { id: userId, full_name: name, handle };
+  const display = displayName(profile);
   const dim = size === "xs" ? "h-5 w-5" : size === "md" ? "h-9 w-9" : "h-7 w-7";
   const text = size === "xs" ? "text-[9px]" : size === "md" ? "text-xs" : "text-[10px]";
 
@@ -50,7 +42,7 @@ export function UserChip({
       <span className="flex min-w-0 items-center gap-2">
         <Avatar className={cn(dim, "shrink-0")}>
           {avatarUrl && <AvatarImage src={avatarUrl} alt={display} />}
-          <AvatarFallback className={text}>{initialsOf(name || handle)}</AvatarFallback>
+          <AvatarFallback className={text}>{initialsOf(profile)}</AvatarFallback>
         </Avatar>
         <span className="min-w-0 leading-tight">
           <span className="flex items-center gap-1">

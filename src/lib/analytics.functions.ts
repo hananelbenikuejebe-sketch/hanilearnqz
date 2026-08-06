@@ -3,6 +3,21 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdmin, assertAnalyticsAllowed, assertAiAllowed, logAiUsage, checkAiAccess, billAiUsage } from "./authz.server";
 
+/** Fetch every row of a query in pages of 1000 to bypass PostgREST's implicit row cap. */
+async function fetchAllRows<T = any>(build: (from: number, to: number) => any, pageSize = 1000): Promise<T[]> {
+  const all: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await build(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as T[];
+    all.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 function bucketByDay(rows: { submitted_at: string | null; score_pct: number | string }[], days = 30) {
   const out: { date: string; attempts: number; avg: number }[] = [];
   const map = new Map<string, { sum: number; n: number }>();
@@ -29,13 +44,13 @@ export const getAdminAnalytics = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     await assertAdmin(context.supabase, context.userId);
-    const [{ data: quizzes }, { data: attempts }, { data: students }] = await Promise.all([
-      context.supabase.from("quizzes").select("id, title, category, subject, is_published, created_at"),
-      context.supabase.from("attempts").select("id, quiz_id, student_id, score_pct, correct_count, total, time_taken_sec, submitted_at"),
-      context.supabase.from("user_roles").select("user_id").eq("role", "student"),
+    const [quizzes, attempts, students] = await Promise.all([
+      fetchAllRows((f, t) => context.supabase.from("quizzes").select("id, title, category, subject, is_published, created_at").range(f, t)),
+      fetchAllRows((f, t) => context.supabase.from("attempts").select("id, quiz_id, student_id, score_pct, correct_count, total, time_taken_sec, submitted_at").range(f, t)),
+      fetchAllRows((f, t) => context.supabase.from("user_roles").select("user_id").eq("role", "student").range(f, t)),
     ]);
-    const qById = new Map((quizzes ?? []).map((q: any) => [q.id, q]));
-    const attemptsArr = attempts ?? [];
+    const qById = new Map(quizzes.map((q: any) => [q.id, q]));
+    const attemptsArr = attempts;
     const total = attemptsArr.length;
     const avg = total ? attemptsArr.reduce((s, a: any) => s + Number(a.score_pct), 0) / total : 0;
     const passing = attemptsArr.filter((a: any) => Number(a.score_pct) >= 50).length;
@@ -69,9 +84,9 @@ export const getAdminAnalytics = createServerFn({ method: "GET" })
 
     return {
       summary: {
-        quizzes: quizzes?.length ?? 0,
-        published: quizzes?.filter((q: any) => q.is_published).length ?? 0,
-        students: students?.length ?? 0,
+        quizzes: quizzes.length,
+        published: quizzes.filter((q: any) => q.is_published).length,
+        students: students.length,
         attempts: total,
         avg_score: Math.round(avg * 10) / 10,
         pass_rate: total ? Math.round((passing / total) * 100) : 0,
@@ -226,7 +241,7 @@ export const getMyCreatorAnalytics = createServerFn({ method: "GET" })
         .in("quiz_id", ids);
       attempts = data ?? [];
     }
-    const qById = new Map((quizzes ?? []).map((q: any) => [q.id, q]));
+    const qById = new Map(quizzes.map((q: any) => [q.id, q]));
     const total = attempts.length;
     const avg = total ? attempts.reduce((s, a) => s + Number(a.score_pct), 0) / total : 0;
     const passing = attempts.filter((a) => Number(a.score_pct) >= 50).length;

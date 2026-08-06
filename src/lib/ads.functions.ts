@@ -3,9 +3,34 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { assertAdmin } from "@/lib/authz.server";
 
-export const PLACEMENTS = ["explore", "quiz_end", "switch", "wallet"] as const;
+export const PLACEMENTS = ["explore", "quiz_end", "switch", "wallet", "notifications", "messages", "popup"] as const;
 
 const placementEnum = z.enum(PLACEMENTS);
+
+/** Upload an ad creative image to the public "ad-creatives" bucket. Admin only. */
+export const uploadAdImage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({
+      filename: z.string().max(160),
+      content_type: z.string().max(80),
+      base64: z.string().min(10),
+    }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    await assertAdmin(context.supabase, context.userId);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const buf = Buffer.from(data.base64, "base64");
+    const ext = data.filename.split(".").pop()?.toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = `ads/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const { error: upErr } = await (supabaseAdmin as any).storage
+      .from("ad-creatives")
+      .upload(path, buf, { contentType: data.content_type, upsert: true });
+    if (upErr) throw upErr;
+    const { data: pub } = (supabaseAdmin as any).storage.from("ad-creatives").getPublicUrl(path);
+    return { path, url: pub?.publicUrl ?? null };
+  });
+
 
 /** Active ads matching a placement whose schedule window includes now. */
 export const listActiveAds = createServerFn({ method: "GET" })
@@ -95,6 +120,7 @@ const adInput = z.object({
   auto_show: z.boolean().default(true),
   weight: z.number().int().min(1).max(100).default(10),
   every_n: z.number().int().min(2).max(30).default(6),
+  frequency_minutes: z.number().int().min(1).max(1440).default(5),
   start_at: z.string().optional().nullable(),
   end_at: z.string().optional().nullable(),
 });

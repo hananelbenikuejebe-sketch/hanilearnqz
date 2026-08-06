@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { listMyNotifications, markNotificationsRead, savePushSubscription } from "@/lib/notifications.functions";
+import { getVapidPublicKey, listMyNotifications, markNotificationsRead, savePushSubscription } from "@/lib/notifications.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 function timeAgo(iso: string) {
@@ -115,8 +115,84 @@ function urlBase64ToUint8Array(base64String: string) {
   return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
 }
 
+let cachedVapidKey: string | null | undefined;
+
+/** Subscribes (or re-subscribes with the correct VAPID key) and persists the subscription. */
+export async function ensurePushSubscription(
+  saveFn: (opts: { data: { endpoint: string; p256dh?: string; auth?: string } }) => Promise<unknown>,
+  fetchVapidKey: () => Promise<{ publicKey: string | null }>,
+): Promise<"granted" | "denied" | "unsupported" | "error"> {
+  if (typeof window === "undefined" || typeof Notification === "undefined") return "unsupported";
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return "unsupported";
+  try {
+    if (Notification.permission !== "granted") return Notification.permission === "denied" ? "denied" : "error";
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    await navigator.serviceWorker.ready;
+
+    let vapidKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY as string | undefined;
+    if (!vapidKey) {
+      if (cachedVapidKey === undefined) {
+        const r = await fetchVapidKey().catch(() => ({ publicKey: null }));
+        cachedVapidKey = r.publicKey;
+      }
+      vapidKey = cachedVapidKey ?? undefined;
+    }
+
+    let sub = await reg.pushManager.getSubscription();
+    // A subscription created before VAPID was wired up has no applicationServerKey — recreate it.
+    const hasKeyMismatch = sub && vapidKey && !(sub.options as any)?.applicationServerKey;
+    if (sub && (hasKeyMismatch || !vapidKey)) {
+      await sub.unsubscribe().catch(() => {});
+      sub = null;
+    }
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        ...(vapidKey ? { applicationServerKey: urlBase64ToUint8Array(vapidKey) } : {}),
+      });
+    }
+    const json = sub.toJSON() as any;
+    if (!json.endpoint) return "error";
+    await saveFn({ data: { endpoint: json.endpoint, p256dh: json.keys?.p256dh, auth: json.keys?.auth } });
+    return "granted";
+  } catch (e) {
+    console.warn("[ensurePushSubscription] failed", e);
+    return "error";
+  }
+}
+
+const AUTO_PROMPT_KEY = "hlqz_push_prompt_attempted_v1";
+
+/** Mounted once in the authenticated shell: silently asks for notification permission on first visit. */
+export function AutoPushPrompt() {
+  const saveFn = useServerFn(savePushSubscription);
+  const vapidFn = useServerFn(getVapidPublicKey);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof Notification === "undefined") return;
+    if (Notification.permission !== "default") {
+      if (Notification.permission === "granted") void ensurePushSubscription(saveFn as any, vapidFn as any);
+      return;
+    }
+    let attempted = false;
+    try { attempted = localStorage.getItem(AUTO_PROMPT_KEY) === "1"; } catch { /* noop */ }
+    if (attempted) return;
+    const t = setTimeout(async () => {
+      try { localStorage.setItem(AUTO_PROMPT_KEY, "1"); } catch { /* noop */ }
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === "granted") await ensurePushSubscription(saveFn as any, vapidFn as any);
+      } catch { /* denial or unsupported: fail silently, never spam again */ }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [saveFn, vapidFn]);
+
+  return null;
+}
+
 export function EnableNotificationsButton({ className }: { className?: string }) {
   const saveFn = useServerFn(savePushSubscription);
+  const vapidFn = useServerFn(getVapidPublicKey);
   const [status, setStatus] = useState<"idle" | "granted" | "denied" | "unsupported">("idle");
 
   useEffect(() => {
@@ -132,16 +208,7 @@ export function EnableNotificationsButton({ className }: { className?: string })
       const perm = await Notification.requestPermission();
       setStatus(perm === "granted" ? "granted" : perm === "denied" ? "denied" : "idle");
       if (perm !== "granted") return;
-      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-      const reg = await navigator.serviceWorker.register("/sw.js");
-      const vapidKey = (import.meta as any).env?.VITE_VAPID_PUBLIC_KEY;
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        ...(vapidKey ? { applicationServerKey: urlBase64ToUint8Array(vapidKey) } : {}),
-      }).catch(() => null);
-      if (!sub) return;
-      const json = sub.toJSON() as any;
-      await saveFn({ data: { endpoint: json.endpoint, p256dh: json.keys?.p256dh, auth: json.keys?.auth } });
+      await ensurePushSubscription(saveFn as any, vapidFn as any);
     } catch (e) {
       console.warn("[EnableNotificationsButton] falling back to in-app only", e);
     }

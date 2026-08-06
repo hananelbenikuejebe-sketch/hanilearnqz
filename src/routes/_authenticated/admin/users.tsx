@@ -17,6 +17,16 @@ export const Route = createFileRoute("/_authenticated/admin/users")({
 
 const naira = (k = 0) => `₦${(Number(k || 0) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
 
+function formatExpiry(label: string, iso: string | null | undefined) {
+  if (!iso) return "None";
+  const t = new Date(iso).getTime();
+  if (t > new Date("2900-01-01").getTime()) return `${label} — lifetime`;
+  const days = Math.ceil((t - Date.now()) / 86_400_000);
+  const dateStr = new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  if (days < 0) return `Expired (${dateStr})`;
+  return `${label} until ${dateStr} (${days}d left)`;
+}
+
 function Users() {
   const qc = useQueryClient();
   const overviewFn = useServerFn(getUsersOverview);
@@ -72,13 +82,13 @@ function Users() {
                     {u.full_name || u.handle || "Unnamed"}
                   </Link>
                   {u.is_guest && <Badge variant="outline">guest</Badge>}
-                  {u.plan_active && <Badge>{new Date(u.plan_expires_at).getFullYear() > 2900 ? "lifetime" : `pro → ${new Date(u.plan_expires_at).toLocaleDateString()}`}</Badge>}
+                  {u.plan_active ? <Badge>{formatExpiry("Pro", u.plan_expires_at)}</Badge> : <Badge variant="outline">Pro: none</Badge>}
                   {u.roles.map((r: string) => <Badge key={r} variant="secondary">{r}</Badge>)}
                   <span className="text-xs text-muted-foreground">{u.email || "—"}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground sm:grid-cols-6">
                   <span>Earnings <b className="text-foreground tabular-nums">{naira(u.balance_kobo)}</b></span>
-                  <span>AI credit <b className="text-foreground tabular-nums">{naira(u.ai_credit_kobo)}</b></span>
+                  <span>AI credit <b className="text-foreground tabular-nums">{naira(u.ai_credit_kobo)}</b> <span className="text-muted-foreground">({formatExpiry("credit", u.ai_credit_expires_at)})</span></span>
                   <span>AI spent <b className="text-foreground tabular-nums">{naira(u.ai_spent_kobo)}</b></span>
                   <span>AI calls <b className="text-foreground tabular-nums">{u.ai_calls}</b></span>
                   <span>Quizzes <b className="text-foreground tabular-nums">{u.quizzes} ({u.published} live)</b></span>

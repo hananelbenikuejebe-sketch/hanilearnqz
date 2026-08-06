@@ -86,8 +86,8 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
         </div>
       </nav>
 
-      {/* Mobile bottom tab bar */}
-      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-30 flex h-14 items-stretch border-t bg-card/95 backdrop-blur md:hidden">
+      {/* Mobile bottom tab bar — right padding reserves space so the Lovable edit badge never covers a tab */}
+      <nav className="safe-bottom fixed inset-x-0 bottom-0 z-30 flex h-14 items-stretch border-t bg-card/95 pr-16 backdrop-blur md:hidden">
         {primaryItems.map((it) => (
           <TabLink key={it.to} to={it.to} icon={it.icon} label={it.label} active={isActive(path, it.to)} />
         ))}
