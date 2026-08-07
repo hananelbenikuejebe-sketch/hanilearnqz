@@ -73,13 +73,13 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
       if (authed) {
         if (!externalCompletedPromise) {
           externalCompletedPromise = listCompletedFn()
-            .then((r) => new Set(r.tourKeys))
+            .then((r: any) => new Set<string>((r?.tourKeys ?? []) as Array<string>))
             .catch(() => new Set<string>());
         }
         const remote = externalCompletedCache ?? (await externalCompletedPromise);
         externalCompletedCache = remote;
         if (cancelled) return;
-        const merged = new Set<string>([...loadLocalCompleted(), ...remote]);
+        const merged = new Set<string>([...loadLocalCompleted(), ...(remote ?? [])]);
         setCompleted(merged);
         saveLocalCompleted(merged);
       }
