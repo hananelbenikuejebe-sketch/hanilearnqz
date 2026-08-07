@@ -90,6 +90,35 @@ export const markNotificationsRead = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Shared segment resolver for admin broadcast + the AI notification composer. */
+async function resolveAudience(db: any, audience: "all" | "creators" | "students" | "low_credit" | "inactive"): Promise<string[]> {
+  if (audience === "all") {
+    const { data: rows } = await db.from("profiles").select("id");
+    return (rows ?? []).map((r: any) => r.id);
+  }
+  if (audience === "creators") {
+    const { data: rows } = await db.from("quizzes").select("created_by");
+    return Array.from(new Set((rows ?? []).map((r: any) => r.created_by).filter(Boolean)));
+  }
+  if (audience === "students") {
+    const { data: creatorRows } = await db.from("quizzes").select("created_by");
+    const creatorIds = new Set((creatorRows ?? []).map((r: any) => r.created_by));
+    const { data: rows } = await db.from("profiles").select("id");
+    return (rows ?? []).map((r: any) => r.id).filter((id: string) => !creatorIds.has(id));
+  }
+  if (audience === "low_credit") {
+    // Nudge people whose AI credit wallet is nearly empty toward a top-up.
+    const { data: rows } = await db.from("wallets").select("user_id, ai_credit_balance_kobo").lt("ai_credit_balance_kobo", 5000);
+    return (rows ?? []).map((r: any) => r.user_id).filter(Boolean);
+  }
+  // inactive: signed up more than 14 days ago and no attempts in the last 14 days.
+  const cutoff = new Date(Date.now() - 14 * 86400000).toISOString();
+  const { data: profiles } = await db.from("profiles").select("id, created_at").lt("created_at", cutoff);
+  const { data: recentAttempts } = await db.from("attempts").select("student_id").gte("started_at", cutoff);
+  const recentIds = new Set((recentAttempts ?? []).map((r: any) => r.student_id));
+  return (profiles ?? []).map((r: any) => r.id).filter((id: string) => !recentIds.has(id));
+}
+
 export const adminBroadcast = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -98,27 +127,14 @@ export const adminBroadcast = createServerFn({ method: "POST" })
       body: z.string().trim().max(2000).optional(),
       link: z.string().trim().max(500).optional(),
       image_url: z.string().trim().max(1000).optional(),
-      audience: z.enum(["all", "creators", "students"]),
+      audience: z.enum(["all", "creators", "students", "low_credit", "inactive"]),
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertAdmin(supabaseAdmin, context.userId);
     const db = supabaseAdmin as any;
-
-    let userIds: string[] = [];
-    if (data.audience === "all") {
-      const { data: rows } = await db.from("profiles").select("id");
-      userIds = (rows ?? []).map((r: any) => r.id);
-    } else if (data.audience === "creators") {
-      const { data: rows } = await db.from("quizzes").select("created_by");
-      userIds = Array.from(new Set((rows ?? []).map((r: any) => r.created_by).filter(Boolean)));
-    } else {
-      const { data: creatorRows } = await db.from("quizzes").select("created_by");
-      const creatorIds = new Set((creatorRows ?? []).map((r: any) => r.created_by));
-      const { data: rows } = await db.from("profiles").select("id");
-      userIds = (rows ?? []).map((r: any) => r.id).filter((id: string) => !creatorIds.has(id));
-    }
+    const userIds = await resolveAudience(db, data.audience);
 
     const rows = userIds.map((user_id) => ({
       user_id,
