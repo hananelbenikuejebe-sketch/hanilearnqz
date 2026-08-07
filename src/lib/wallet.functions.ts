@@ -67,6 +67,7 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     const feePct = Number(settings?.withdrawal_fee_pct ?? 5);
     const feeKobo = Math.floor((data.amount_kobo * feePct) / 100);
     const netKobo = data.amount_kobo - feeKobo;
+    void feeKobo; // credited to platform when the withdrawal is marked paid (see resolveWithdrawal)
 
     // Debit immediately (hold funds); refund on rejection.
     await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - data.amount_kobo }).eq("user_id", context.userId);
@@ -116,6 +117,13 @@ export const resolveWithdrawal = createServerFn({ method: "POST" })
     if (data.action === "paid") {
       await db.from("withdrawal_requests").update({ status: "paid", resolved_at: new Date().toISOString(), admin_note: data.note ?? null }).eq("id", data.id);
       await db.from("wallet_transactions").insert({ user_id: req.user_id, kind: "withdrawal_paid", amount_kobo: 0, bucket: "earnings", meta: { withdrawal_id: req.id } });
+      const { data: settings } = await db.from("payment_settings").select("withdrawal_fee_pct").eq("id", "default").maybeSingle();
+      const feePct = Number(settings?.withdrawal_fee_pct ?? 5);
+      const feeKobo = Math.floor((req.amount_kobo * feePct) / 100);
+      if (feeKobo > 0) {
+        const { creditPlatformFee } = await import("./platform-wallet.server");
+        await creditPlatformFee(db, feeKobo, { reason: "withdrawal_fee", withdrawal_id: req.id, user_id: req.user_id, fee_pct: feePct });
+      }
     } else {
       // Refund
       const { data: w } = await db.from("wallets").select("balance_kobo").eq("user_id", req.user_id).single();
@@ -270,11 +278,34 @@ export const payQuizFromWallet = createServerFn({ method: "POST" })
       { user_id: quiz.created_by, kind: "quiz_sale", amount_kobo: creatorShare, bucket: "earnings", meta: { quiz_id: data.quiz_id, buyer: context.userId, gross_kobo: price, platform_fee_kobo: platformFee, fee_pct: feePct } },
     ]);
     if (platformFee > 0) {
-      await db.from("wallet_transactions").insert({
-        user_id: quiz.created_by, kind: "platform_fee", amount_kobo: -platformFee, bucket: "earnings",
-        meta: { quiz_id: data.quiz_id, reason: "quiz_purchase", fee_pct: feePct },
-      });
+      const { creditPlatformFee } = await import("./platform-wallet.server");
+      await creditPlatformFee(db, platformFee, { quiz_id: data.quiz_id, reason: "quiz_purchase", buyer: context.userId, creator_id: quiz.created_by, fee_pct: feePct });
     }
+    return { ok: true };
+  });
+
+/** Pay for an ad placement using spendable wallet balance. Activates the ad's paid_at
+ * stamp (still requires admin approval to go live) and routes full price to platform. */
+export const payAdFromWallet = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ ad_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { getAdPriceForPayment, activatePaidAd } = await import("./ads-settle.server");
+    const ad = await getAdPriceForPayment(data.ad_id);
+    if (ad.is_free || ad.price_kobo <= 0) throw new Error("This ad placement is free — no payment needed.");
+    const { data: wallet } = await db.from("wallets").select("balance_kobo").eq("user_id", context.userId).maybeSingle();
+    if (!wallet || wallet.balance_kobo < ad.price_kobo) throw new Error("Insufficient wallet balance.");
+
+    await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - ad.price_kobo }).eq("user_id", context.userId);
+    await db.from("wallet_transactions").insert({
+      user_id: context.userId, kind: "ad_purchase_wallet", amount_kobo: -ad.price_kobo, bucket: "earnings",
+      meta: { ad_id: ad.ad_id },
+    });
+    const { creditPlatformFee } = await import("./platform-wallet.server");
+    await creditPlatformFee(db, ad.price_kobo, { reason: "ad_purchase", ad_id: ad.ad_id, buyer: context.userId });
+    try { await activatePaidAd(ad.ad_id); } catch (e) { console.error("activatePaidAd failed", e); }
     return { ok: true };
   });
 
