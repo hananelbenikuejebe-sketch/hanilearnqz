@@ -269,7 +269,7 @@ export const generateNotificationDrafts = createServerFn({ method: "POST" })
         { role: "system", content: system },
         { role: "user", content: `Generate ${count} diverse notification drafts now.` },
       ], { json: true, max_tokens: 900 });
-      const parsed = parseJsonLoose(res.text, null);
+      const parsed = parseJsonLoose<Array<any> | null>(res.text, null);
       if (Array.isArray(parsed) && parsed.length) {
         return {
           drafts: parsed.slice(0, count).map((p: any, i: number) => ({
