@@ -157,12 +157,19 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
   const back = () => setStepIdx((i) => Math.max(0, i - 1));
 
   const cardStyle = useMemo(() => {
-    if (typeof window === "undefined") return {};
-    if (!rect) return {};
+    if (typeof window === "undefined" || !rect) return {};
     const width = 300;
-    const top = rect.bottom + 12 + width > window.innerHeight ? undefined : Math.min(window.innerHeight - 220, rect.bottom + 12);
+    const cardHeight = 180;
+    const spaceBelow = window.innerHeight - rect.bottom;
     const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
-    return top !== undefined ? { top, left } : { bottom: Math.max(80, window.innerHeight - rect.top + 12), left };
+    if (spaceBelow >= cardHeight + 16) {
+      return { top: rect.bottom + 12, left };
+    }
+    const spaceAbove = rect.top;
+    if (spaceAbove >= cardHeight + 16) {
+      return { top: Math.max(8, rect.top - cardHeight - 12), left };
+    }
+    return { top: Math.max(8, Math.min(window.innerHeight - cardHeight - 8, rect.bottom + 12)), left };
   }, [rect]);
 
   if (typeof document === "undefined" || !activeTour || !step) return null;

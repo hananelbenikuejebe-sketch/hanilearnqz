@@ -137,7 +137,19 @@ export async function sendWebPush(
       headers["Content-Type"] = "application/octet-stream";
     }
     const res = await fetch(sub.endpoint, { method: "POST", headers, body: body.length ? ab(body) : undefined });
-    if (res.status === 404 || res.status === 410) return { ok: false, status: res.status, expired: true };
+    if (res.status === 404 || res.status === 410) {
+      console.warn(`[sendWebPush] subscription gone (status ${res.status}) for ${new URL(sub.endpoint).host} — pruning`);
+      return { ok: false, status: res.status, expired: true };
+    }
+    if (!res.ok) {
+      // Non-201/2xx from the push service (FCM/Mozilla/etc): surface it instead of
+      // silently swallowing — most delivery failures are diagnosable from this alone
+      // (401/403 = bad VAPID, 400 = malformed payload, 413 = payload too large).
+      const bodyText = await res.text().catch(() => "");
+      console.error(`[sendWebPush] push service rejected message: status=${res.status} host=${new URL(sub.endpoint).host} body=${bodyText.slice(0, 300)}`);
+    } else {
+      console.info(`[sendWebPush] delivered: status=${res.status} host=${new URL(sub.endpoint).host}`);
+    }
     return { ok: res.ok, status: res.status };
   } catch (e: any) {
     return { ok: false, error: String(e?.message || e) };

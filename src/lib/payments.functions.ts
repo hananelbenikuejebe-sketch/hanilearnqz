@@ -200,12 +200,16 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
   await db.from("wallets").upsert({ user_id: intent.user_id }, { onConflict: "user_id" });
 
   // 3) Ledger the top-up (wallet_topup ledgered inside its own branch below, net of fee)
+  const isAdPurpose = intent.purpose === "ad_placement" || intent.purpose === "ad_boost";
   if (intent.purpose !== "wallet_topup") {
     await db.from("wallet_transactions").insert({
       user_id: intent.user_id,
-      kind: intent.purpose === "creator_access" ? "creator_purchase" : intent.purpose === "quiz_purchase" ? "quiz_purchase" : "ai_credit_topup",
+      kind: intent.purpose === "creator_access" ? "creator_purchase"
+        : intent.purpose === "quiz_purchase" ? "quiz_purchase"
+        : isAdPurpose ? "ad_purchase"
+        : "ai_credit_topup",
       amount_kobo: paidAmountKobo,
-      bucket: intent.purpose === "creator_access" ? "purchase" : intent.purpose === "quiz_purchase" ? "purchase" : "ai_credit",
+      bucket: intent.purpose === "creator_access" ? "purchase" : intent.purpose === "quiz_purchase" ? "purchase" : isAdPurpose ? "purchase" : "ai_credit",
       monnify_ref: intent.payment_reference,
       meta: { intent_id: intent.id },
     });
@@ -242,6 +246,10 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
           meta: { quiz_id: quizId, buyer: intent.user_id, gross_kobo: paidAmountKobo, platform_fee_kobo: platformFee, fee_pct: feePct },
         });
       }
+      if (platformFee > 0) {
+        const { creditPlatformFee } = await import("./platform-wallet.server");
+        await creditPlatformFee(db, platformFee, { reason: "quiz_platform_fee", quiz_id: quizId, buyer: intent.user_id, creator_id: creatorId, intent_id: intent.id, fee_pct: feePct });
+      }
     }
   } else if (intent.purpose === "wallet_topup") {
     const feePct = Number(settings.topup_fee_pct ?? 5);
@@ -254,11 +262,24 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
       monnify_ref: intent.payment_reference,
       meta: { intent_id: intent.id, gross_kobo: paidAmountKobo, fee_kobo: fee, fee_pct: feePct },
     });
-    await db.from("wallet_transactions").insert({
-      user_id: intent.user_id, kind: "platform_fee", amount_kobo: -fee, bucket: "earnings",
-      monnify_ref: intent.payment_reference,
-      meta: { intent_id: intent.id, reason: "wallet_topup", fee_pct: feePct },
-    });
+    if (fee > 0) {
+      const { creditPlatformFee } = await import("./platform-wallet.server");
+      await creditPlatformFee(db, fee, { reason: "topup_fee", intent_id: intent.id, user_id: intent.user_id, fee_pct: feePct });
+    }
+  } else if (isAdPurpose) {
+    // Ad purchases: the full price is platform revenue; the ad itself is
+    // stamped paid (still needs admin approval before it goes live).
+    const adId = (intent.meta ?? {}).ad_id;
+    if (adId) {
+      try {
+        const { activatePaidAd } = await import("@/lib/ads-settle.server");
+        await activatePaidAd(adId);
+      } catch (e) {
+        console.error("activatePaidAd failed (module may not be ready yet)", e);
+      }
+    }
+    const { creditPlatformFee } = await import("./platform-wallet.server");
+    await creditPlatformFee(db, paidAmountKobo, { reason: "ad_purchase", ad_id: adId, buyer: intent.user_id, intent_id: intent.id });
   } else {
     // AI credit top-up: extend expiry to X days from now; add to balance.
     const expires = new Date(Date.now() + settings.ai_credit_expiry_days * 24 * 60 * 60 * 1000).toISOString();
@@ -271,7 +292,7 @@ export async function settleIntent(db: any, intent: any, paidAmountKobo: number)
 
   // 5) Affiliate commission (only on real purchases, never on wallet top-ups per policy)
   // Quiz purchases exclude affiliate commission — the creator is already paid.
-  if (intent.affiliate_user_id && settings.affiliate_pct > 0 && intent.purpose !== "quiz_purchase" && intent.purpose !== "wallet_topup") {
+  if (intent.affiliate_user_id && settings.affiliate_pct > 0 && intent.purpose !== "quiz_purchase" && intent.purpose !== "wallet_topup" && !isAdPurpose) {
     const commission = Math.floor((paidAmountKobo * settings.affiliate_pct) / 100);
     if (commission > 0) {
       await db.from("wallets").upsert({ user_id: intent.affiliate_user_id }, { onConflict: "user_id" });
