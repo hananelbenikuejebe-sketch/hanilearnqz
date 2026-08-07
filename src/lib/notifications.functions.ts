@@ -236,6 +236,60 @@ export const adminSendTestPush = createServerFn({ method: "POST" })
     return result;
   });
 
+const STATIC_DRAFT_LIBRARY: Array<{ kind: string; title: string; body: string; link: string; audience: "all" | "creators" | "students" | "low_credit" | "inactive" }> = [
+  { kind: "tip", title: "Did you know? Instant quiz feedback", audience: "all", link: "/explore", body: "Tap any question after submitting to see the correct answer and explanation right away." },
+  { kind: "tip", title: "Track your progress", audience: "all", link: "/dashboard", body: "Your dashboard shows streaks, scores and weak topics — check it after every quiz." },
+  { kind: "trick", title: "Speed-run mode", audience: "students", link: "/explore", body: "Short on time? Filter quizzes by length under 5 minutes for a quick daily practice." },
+  { kind: "low_credit_nudge", title: "Your AI credit is running low", audience: "low_credit", link: "/wallet", body: "Top up now so AI-generated quizzes and grading never pause mid-session." },
+  { kind: "new_quiz_alert", title: "Fresh quizzes just dropped", audience: "all", link: "/explore", body: "New quizzes were just published by top creators — come see what's trending." },
+  { kind: "creator_upsell", title: "Turn your notes into a quiz", audience: "students", link: "/create", body: "Become a creator: publish your own quiz in minutes and earn from every attempt." },
+  { kind: "inactive_winback", title: "We miss you!", audience: "inactive", link: "/explore", body: "It's been a while — jump back in with a quick quiz and pick up where you left off." },
+  { kind: "creator_upsell", title: "Your quizzes could be earning", audience: "creators", link: "/wallet", body: "Check your creator earnings and share your quiz link to grow your audience." },
+];
+
+/** Batch AI-assisted notification drafts for the admin composer, with a static fallback so the feature works with no AI configured. */
+export const generateNotificationDrafts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ count: z.number().int().min(1).max(10).optional() }).parse(d ?? {}))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertAdmin(supabaseAdmin, context.userId);
+    const count = data.count ?? 6;
+    try {
+      const { aiChat, parseJsonLoose } = await import("@/lib/ai-provider.server");
+      const system = [
+        "You write a batch of short push/in-app notification drafts for a quiz platform called HaniLearn-QZ,",
+        "themed around teaching users app features (tips/tricks), nudging low-AI-credit users to top up,",
+        "announcing new quizzes, and upselling students into becoming quiz creators.",
+        `Reply with ONLY compact JSON: an array of exactly ${count} objects, each shaped:`,
+        '{"kind": "tip"|"trick"|"low_credit_nudge"|"new_quiz_alert"|"creator_upsell"|"inactive_winback", "title": string (max 60 chars), "body": string (max 160 chars), "link": string (relative app path), "audience": "all"|"creators"|"students"|"low_credit"|"inactive"}',
+        "Keep tone friendly, concrete, action-oriented. No markdown, no extra text outside the JSON array.",
+      ].join(" ");
+      const res = await aiChat("light", [
+        { role: "system", content: system },
+        { role: "user", content: `Generate ${count} diverse notification drafts now.` },
+      ], { json: true, max_tokens: 900 });
+      const parsed = parseJsonLoose(res.text, null);
+      if (Array.isArray(parsed) && parsed.length) {
+        return {
+          drafts: parsed.slice(0, count).map((p: any, i: number) => ({
+            id: `ai-${Date.now()}-${i}`,
+            kind: String(p.kind || "tip"),
+            title: String(p.title || "New update").slice(0, 60),
+            body: String(p.body || "").slice(0, 160),
+            link: String(p.link || "/explore"),
+            audience: (["all", "creators", "students", "low_credit", "inactive"].includes(p.audience) ? p.audience : "all") as any,
+          })),
+          source: "ai" as const,
+        };
+      }
+    } catch (e) {
+      console.warn("[generateNotificationDrafts] AI generation failed, using static fallback", e);
+    }
+    const shuffled = [...STATIC_DRAFT_LIBRARY].sort(() => Math.random() - 0.5).slice(0, count);
+    return { drafts: shuffled.map((d, i) => ({ ...d, id: `static-${Date.now()}-${i}` })), source: "fallback" as const };
+  });
+
 export const composeNotificationWithAi = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ prompt: z.string().trim().min(2).max(500) }).parse(d))
