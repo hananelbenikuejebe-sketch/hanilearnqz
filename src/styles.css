@@ -135,3 +135,12 @@
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
 }
+
+/* Bottom tab bar: taller hit area with tabs anchored to the top so the
+   floating Lovable edit badge (bottom-right) only ever overlaps the
+   safe-area padding below the controls, never a tappable control. */
+@layer utilities {
+  .nav-bar-safe {
+    min-height: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+}

@@ -21,9 +21,10 @@ export const getPaymentInstructions = createServerFn({ method: "GET" })
   });
 
 const SubmitInput = z.object({
-  purpose: z.enum(["creator_access", "ai_credit", "quiz_purchase"]),
+  purpose: z.enum(["creator_access", "ai_credit", "quiz_purchase", "wallet_topup", "ad_placement", "ad_boost"]),
   amount_kobo: z.number().int().min(100).max(50_000_000).optional(),
   quiz_id: z.string().uuid().optional(),
+  ad_id: z.string().uuid().optional(),
   months: z.union([z.literal(1), z.literal(3), z.literal(6), z.literal(12)]).optional(),
   file_path: z.string().min(4).max(400),
   file_size: z.number().int().min(0).max(30_000_000).optional(),
@@ -55,6 +56,8 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
     let quizId: string | null = null;
     let creatorId: string | null = null;
     let quizTitle: string | null = null;
+    let adId: string | null = null;
+    const isAdPurpose = data.purpose === "ad_placement" || data.purpose === "ad_boost";
     if (data.purpose === "creator_access") {
       const months = data.months ?? 1;
       const plans = (settings.creator_plan_prices ?? {}) as Record<string, number>;
@@ -64,6 +67,19 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
       expected = Number(data.amount_kobo ?? 0);
       if (expected < Number(settings.ai_credit_min_topup_kobo ?? 0)) {
         throw new Error(`Minimum AI credit top-up is ₦${(Number(settings.ai_credit_min_topup_kobo) / 100).toFixed(0)}`);
+      }
+    } else if (data.purpose === "wallet_topup") {
+      expected = Number(data.amount_kobo ?? 0);
+      if (expected < 10000) throw new Error("Minimum wallet top-up is ₦100");
+    } else if (isAdPurpose) {
+      if (!data.ad_id) throw new Error("Ad is required");
+      try {
+        const { getAdPriceForPayment } = await import("./ads-settle.server");
+        const ad = await getAdPriceForPayment(data.ad_id);
+        expected = ad.price_kobo;
+        adId = ad.ad_id;
+      } catch (e) {
+        throw new Error("Could not look up ad pricing. Please try again.");
       }
     } else {
       if (!data.quiz_id) throw new Error("Quiz is required");
@@ -107,6 +123,7 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
         name: profile?.full_name ?? null,
         email: profile?.email ?? null,
         ...(quizId ? { quiz_id: quizId, creator_id: creatorId, quiz_title: quizTitle } : {}),
+        ...(adId ? { ad_id: adId } : {}),
       },
     }).select().single();
     if (intentError) throw intentError;

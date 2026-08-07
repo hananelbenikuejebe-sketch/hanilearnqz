@@ -12,10 +12,8 @@ export const listConversations = createServerFn({ method: "GET" })
       .order("created_at", { ascending: false }).limit(300);
     if (error) throw error;
     const peerIds = Array.from(new Set((rows ?? []).map((m: any) => m.sender_id === context.userId ? m.recipient_id : m.sender_id)));
-    const { data: profiles } = peerIds.length
-      ? await db.from("profiles").select("id, full_name, handle, avatar_url").in("id", peerIds)
-      : { data: [] };
-    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+    const { fetchProfileMap } = await import("@/lib/profile-lookup.server");
+    const profileMap = await fetchProfileMap(db, peerIds as Array<string>);
     const seen = new Set<string>();
     return (rows ?? []).flatMap((message: any) => {
       const peerId = message.sender_id === context.userId ? message.recipient_id : message.sender_id;

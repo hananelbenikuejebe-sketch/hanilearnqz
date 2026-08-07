@@ -1,11 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Outlet, createRootRouteWithContext, useRouter, HeadContent, Scripts } from "@tanstack/react-router";
+import { Outlet, createRootRouteWithContext, useRouter, useRouterState, HeadContent, Scripts } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { CoachMarks } from "@/components/coach-marks";
+import { TourOverlay, replayTour } from "@/components/tour-overlay";
+import { findTourForPath } from "@/lib/tour-content";
+import { HelpCircle } from "lucide-react";
+
 
 function NotFoundComponent() {
   return (
@@ -88,6 +93,8 @@ const ORG_JSON_LD = {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const currentTour = findTourForPath(pathname);
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
@@ -103,6 +110,18 @@ function RootComponent() {
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(ORG_JSON_LD) }} />
         <Outlet />
         <Toaster richColors position="top-right" />
+        <CoachMarks />
+        {currentTour && <TourOverlay key={currentTour.key} tour={currentTour.key} />}
+        {currentTour && (
+          <button
+            type="button"
+            aria-label="Replay page tour"
+            onClick={() => replayTour(currentTour.key)}
+            className="fixed bottom-20 right-3 z-[60] flex h-10 w-10 items-center justify-center rounded-full border bg-primary text-primary-foreground shadow-lg active:scale-95 md:bottom-6"
+          >
+            <HelpCircle className="h-5 w-5" />
+          </button>
+        )}
       </QueryClientProvider>
     </ThemeProvider>
   );

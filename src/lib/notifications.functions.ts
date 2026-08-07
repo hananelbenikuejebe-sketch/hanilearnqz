@@ -90,6 +90,35 @@ export const markNotificationsRead = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Shared segment resolver for admin broadcast + the AI notification composer. */
+async function resolveAudience(db: any, audience: "all" | "creators" | "students" | "low_credit" | "inactive"): Promise<string[]> {
+  if (audience === "all") {
+    const { data: rows } = await db.from("profiles").select("id");
+    return (rows ?? []).map((r: any) => r.id);
+  }
+  if (audience === "creators") {
+    const { data: rows } = await db.from("quizzes").select("created_by");
+    return Array.from(new Set((rows ?? []).map((r: any) => r.created_by).filter(Boolean)));
+  }
+  if (audience === "students") {
+    const { data: creatorRows } = await db.from("quizzes").select("created_by");
+    const creatorIds = new Set((creatorRows ?? []).map((r: any) => r.created_by));
+    const { data: rows } = await db.from("profiles").select("id");
+    return (rows ?? []).map((r: any) => r.id).filter((id: string) => !creatorIds.has(id));
+  }
+  if (audience === "low_credit") {
+    // Nudge people whose AI credit wallet is nearly empty toward a top-up.
+    const { data: rows } = await db.from("wallets").select("user_id, ai_credit_balance_kobo").lt("ai_credit_balance_kobo", 5000);
+    return (rows ?? []).map((r: any) => r.user_id).filter(Boolean);
+  }
+  // inactive: signed up more than 14 days ago and no attempts in the last 14 days.
+  const cutoff = new Date(Date.now() - 14 * 86400000).toISOString();
+  const { data: profiles } = await db.from("profiles").select("id, created_at").lt("created_at", cutoff);
+  const { data: recentAttempts } = await db.from("attempts").select("student_id").gte("started_at", cutoff);
+  const recentIds = new Set((recentAttempts ?? []).map((r: any) => r.student_id));
+  return (profiles ?? []).map((r: any) => r.id).filter((id: string) => !recentIds.has(id));
+}
+
 export const adminBroadcast = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
@@ -98,27 +127,14 @@ export const adminBroadcast = createServerFn({ method: "POST" })
       body: z.string().trim().max(2000).optional(),
       link: z.string().trim().max(500).optional(),
       image_url: z.string().trim().max(1000).optional(),
-      audience: z.enum(["all", "creators", "students"]),
+      audience: z.enum(["all", "creators", "students", "low_credit", "inactive"]),
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await assertAdmin(supabaseAdmin, context.userId);
     const db = supabaseAdmin as any;
-
-    let userIds: string[] = [];
-    if (data.audience === "all") {
-      const { data: rows } = await db.from("profiles").select("id");
-      userIds = (rows ?? []).map((r: any) => r.id);
-    } else if (data.audience === "creators") {
-      const { data: rows } = await db.from("quizzes").select("created_by");
-      userIds = Array.from(new Set((rows ?? []).map((r: any) => r.created_by).filter(Boolean)));
-    } else {
-      const { data: creatorRows } = await db.from("quizzes").select("created_by");
-      const creatorIds = new Set((creatorRows ?? []).map((r: any) => r.created_by));
-      const { data: rows } = await db.from("profiles").select("id");
-      userIds = (rows ?? []).map((r: any) => r.id).filter((id: string) => !creatorIds.has(id));
-    }
+    const userIds = await resolveAudience(db, data.audience);
 
     const rows = userIds.map((user_id) => ({
       user_id,
@@ -218,6 +234,60 @@ export const adminSendTestPush = createServerFn({ method: "POST" })
       throw new Error(`Attempted ${result.attempted} device(s) but 0 succeeded. Check that the browser subscription is fresh (re-enable notifications) and VAPID keys match.`);
     }
     return result;
+  });
+
+const STATIC_DRAFT_LIBRARY: Array<{ kind: string; title: string; body: string; link: string; audience: "all" | "creators" | "students" | "low_credit" | "inactive" }> = [
+  { kind: "tip", title: "Did you know? Instant quiz feedback", audience: "all", link: "/explore", body: "Tap any question after submitting to see the correct answer and explanation right away." },
+  { kind: "tip", title: "Track your progress", audience: "all", link: "/dashboard", body: "Your dashboard shows streaks, scores and weak topics — check it after every quiz." },
+  { kind: "trick", title: "Speed-run mode", audience: "students", link: "/explore", body: "Short on time? Filter quizzes by length under 5 minutes for a quick daily practice." },
+  { kind: "low_credit_nudge", title: "Your AI credit is running low", audience: "low_credit", link: "/wallet", body: "Top up now so AI-generated quizzes and grading never pause mid-session." },
+  { kind: "new_quiz_alert", title: "Fresh quizzes just dropped", audience: "all", link: "/explore", body: "New quizzes were just published by top creators — come see what's trending." },
+  { kind: "creator_upsell", title: "Turn your notes into a quiz", audience: "students", link: "/create", body: "Become a creator: publish your own quiz in minutes and earn from every attempt." },
+  { kind: "inactive_winback", title: "We miss you!", audience: "inactive", link: "/explore", body: "It's been a while — jump back in with a quick quiz and pick up where you left off." },
+  { kind: "creator_upsell", title: "Your quizzes could be earning", audience: "creators", link: "/wallet", body: "Check your creator earnings and share your quiz link to grow your audience." },
+];
+
+/** Batch AI-assisted notification drafts for the admin composer, with a static fallback so the feature works with no AI configured. */
+export const generateNotificationDrafts = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ count: z.number().int().min(1).max(10).optional() }).parse(d ?? {}))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertAdmin(supabaseAdmin, context.userId);
+    const count = data.count ?? 6;
+    try {
+      const { aiChat, parseJsonLoose } = await import("@/lib/ai-provider.server");
+      const system = [
+        "You write a batch of short push/in-app notification drafts for a quiz platform called HaniLearn-QZ,",
+        "themed around teaching users app features (tips/tricks), nudging low-AI-credit users to top up,",
+        "announcing new quizzes, and upselling students into becoming quiz creators.",
+        `Reply with ONLY compact JSON: an array of exactly ${count} objects, each shaped:`,
+        '{"kind": "tip"|"trick"|"low_credit_nudge"|"new_quiz_alert"|"creator_upsell"|"inactive_winback", "title": string (max 60 chars), "body": string (max 160 chars), "link": string (relative app path), "audience": "all"|"creators"|"students"|"low_credit"|"inactive"}',
+        "Keep tone friendly, concrete, action-oriented. No markdown, no extra text outside the JSON array.",
+      ].join(" ");
+      const res = await aiChat("light", [
+        { role: "system", content: system },
+        { role: "user", content: `Generate ${count} diverse notification drafts now.` },
+      ], { json: true, max_tokens: 900 });
+      const parsed = parseJsonLoose<Array<any> | null>(res.text, null);
+      if (Array.isArray(parsed) && parsed.length) {
+        return {
+          drafts: parsed.slice(0, count).map((p: any, i: number) => ({
+            id: `ai-${Date.now()}-${i}`,
+            kind: String(p.kind || "tip"),
+            title: String(p.title || "New update").slice(0, 60),
+            body: String(p.body || "").slice(0, 160),
+            link: String(p.link || "/explore"),
+            audience: (["all", "creators", "students", "low_credit", "inactive"].includes(p.audience) ? p.audience : "all") as any,
+          })),
+          source: "ai" as const,
+        };
+      }
+    } catch (e) {
+      console.warn("[generateNotificationDrafts] AI generation failed, using static fallback", e);
+    }
+    const shuffled = [...STATIC_DRAFT_LIBRARY].sort(() => Math.random() - 0.5).slice(0, count);
+    return { drafts: shuffled.map((d, i) => ({ ...d, id: `static-${Date.now()}-${i}` })), source: "fallback" as const };
   });
 
 export const composeNotificationWithAi = createServerFn({ method: "POST" })

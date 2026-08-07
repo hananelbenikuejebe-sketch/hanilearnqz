@@ -137,7 +137,19 @@ export async function sendWebPush(
       headers["Content-Type"] = "application/octet-stream";
     }
     const res = await fetch(sub.endpoint, { method: "POST", headers, body: body.length ? ab(body) : undefined });
-    if (res.status === 404 || res.status === 410) return { ok: false, status: res.status, expired: true };
+    if (res.status === 404 || res.status === 410) {
+      console.warn(`[sendWebPush] subscription gone (status ${res.status}) for ${new URL(sub.endpoint).host} — pruning`);
+      return { ok: false, status: res.status, expired: true };
+    }
+    if (!res.ok) {
+      // Non-201/2xx from the push service (FCM/Mozilla/etc): surface it instead of
+      // silently swallowing — most delivery failures are diagnosable from this alone
+      // (401/403 = bad VAPID, 400 = malformed payload, 413 = payload too large).
+      const bodyText = await res.text().catch(() => "");
+      console.error(`[sendWebPush] push service rejected message: status=${res.status} host=${new URL(sub.endpoint).host} body=${bodyText.slice(0, 300)}`);
+    } else {
+      console.info(`[sendWebPush] delivered: status=${res.status} host=${new URL(sub.endpoint).host}`);
+    }
     return { ok: res.ok, status: res.status };
   } catch (e: any) {
     return { ok: false, error: String(e?.message || e) };
@@ -159,10 +171,14 @@ function getVapid() {
  */
 export async function pushToUsers(
   userIds: string[],
-  notif: { title: string; body?: string; link?: string; image_url?: string },
-): Promise<{ attempted: number; sent: number; pruned: number }> {
+  notif: { title: string; body?: string; link?: string; image_url?: string; kind?: string },
+): Promise<{ attempted: number; sent: number; pruned: number; statuses: number[]; configured: boolean }> {
   const vapid = getVapid();
-  if (!vapid || !userIds.length) return { attempted: 0, sent: 0, pruned: 0 };
+  if (!vapid) {
+    console.error("[pushToUsers] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY are not set — push is disabled server-wide.");
+    return { attempted: 0, sent: 0, pruned: 0, statuses: [], configured: false };
+  }
+  if (!userIds.length) return { attempted: 0, sent: 0, pruned: 0, statuses: [], configured: true };
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
@@ -170,6 +186,7 @@ export async function pushToUsers(
     const { data: subs } = await db.from("push_subscriptions").select("id, endpoint, p256dh, auth").in("user_id", uniq);
     const rows: any[] = subs ?? [];
     let sent = 0;
+    const statuses: number[] = [];
     const toPrune: string[] = [];
     await Promise.all(rows.map(async (s) => {
       const result = await sendWebPush(s, {
@@ -177,14 +194,17 @@ export async function pushToUsers(
         body: notif.body,
         link: notif.link || "/notifications",
         image_url: notif.image_url,
+        tag: notif.kind,
       }, vapid);
+      if (typeof result.status === "number") statuses.push(result.status);
       if (result.ok) sent++;
       if (result.expired) toPrune.push(s.id);
     }));
     if (toPrune.length) await db.from("push_subscriptions").delete().in("id", toPrune);
-    return { attempted: rows.length, sent, pruned: toPrune.length };
+    console.info(`[pushToUsers] attempted=${rows.length} sent=${sent} pruned=${toPrune.length} statuses=${JSON.stringify(statuses)}`);
+    return { attempted: rows.length, sent, pruned: toPrune.length, statuses, configured: true };
   } catch (e) {
     console.error("[pushToUsers] failed", e);
-    return { attempted: 0, sent: 0, pruned: 0 };
+    return { attempted: 0, sent: 0, pruned: 0, statuses: [], configured: true };
   }
 }

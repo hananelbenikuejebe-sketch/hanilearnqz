@@ -9,8 +9,16 @@ self.addEventListener("push", (event) => {
   const link = data.link || data.url || "/notifications";
   const options = {
     body: data.body || "",
-    icon: data.icon || data.image_url || "/favicon.ico",
-    badge: "/favicon.ico",
+    icon: data.icon || data.image_url || "/icon-192.png",
+    badge: "/icon-192.png",
+    image: data.image_url || undefined,
+    // Makes Android actually vibrate + ring like a real push instead of a silent tray entry.
+    vibrate: [200, 100, 200],
+    renotify: true,
+    requireInteraction: false,
+    // Stable tag per notification "kind" so repeated broadcasts stack/replace sanely
+    // instead of one silently overwriting another with the same tag by accident.
+    tag: data.tag || data.kind || "hlqz-notification",
     data: { url: link },
   };
   event.waitUntil(self.registration.showNotification(title, options));

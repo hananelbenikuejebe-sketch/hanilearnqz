@@ -20,6 +20,7 @@ import { Route as AuthenticatedNotificationsRouteImport } from './routes/_authen
 import { Route as AuthenticatedExploreRouteImport } from './routes/_authenticated/explore'
 import { Route as AuthenticatedExamsRouteImport } from './routes/_authenticated/exams'
 import { Route as AuthenticatedCreateRouteImport } from './routes/_authenticated/create'
+import { Route as AuthenticatedAdsRouteImport } from './routes/_authenticated/ads'
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile.index'
 import { Route as AuthenticatedMessagesIndexRouteImport } from './routes/_authenticated/messages.index'
@@ -105,6 +106,11 @@ const AuthenticatedExamsRoute = AuthenticatedExamsRouteImport.update({
 const AuthenticatedCreateRoute = AuthenticatedCreateRouteImport.update({
   id: '/create',
   path: '/create',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAdsRoute = AuthenticatedAdsRouteImport.update({
+  id: '/ads',
+  path: '/ads',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAdminRouteRoute = AuthenticatedAdminRouteRouteImport.update({
@@ -290,6 +296,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/ads': typeof AuthenticatedAdsRoute
   '/create': typeof AuthenticatedCreateRoute
   '/exams': typeof AuthenticatedExamsRoute
   '/explore': typeof AuthenticatedExploreRoute
@@ -331,6 +338,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/ads': typeof AuthenticatedAdsRoute
   '/create': typeof AuthenticatedCreateRoute
   '/exams': typeof AuthenticatedExamsRoute
   '/explore': typeof AuthenticatedExploreRoute
@@ -373,6 +381,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/admin': typeof AuthenticatedAdminRouteRouteWithChildren
+  '/_authenticated/ads': typeof AuthenticatedAdsRoute
   '/_authenticated/create': typeof AuthenticatedCreateRoute
   '/_authenticated/exams': typeof AuthenticatedExamsRoute
   '/_authenticated/explore': typeof AuthenticatedExploreRoute
@@ -419,6 +428,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/sitemap.xml'
     | '/admin'
+    | '/ads'
     | '/create'
     | '/exams'
     | '/explore'
@@ -460,6 +470,7 @@ export interface FileRouteTypes {
   to:
     | '/auth'
     | '/sitemap.xml'
+    | '/ads'
     | '/create'
     | '/exams'
     | '/explore'
@@ -501,6 +512,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/sitemap.xml'
     | '/_authenticated/admin'
+    | '/_authenticated/ads'
     | '/_authenticated/create'
     | '/_authenticated/exams'
     | '/_authenticated/explore'
@@ -626,6 +638,13 @@ declare module '@tanstack/react-router' {
       path: '/create'
       fullPath: '/create'
       preLoaderRoute: typeof AuthenticatedCreateRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ads': {
+      id: '/_authenticated/ads'
+      path: '/ads'
+      fullPath: '/ads'
+      preLoaderRoute: typeof AuthenticatedAdsRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin': {
@@ -942,6 +961,7 @@ const AuthenticatedQuizQuizIdRouteWithChildren =
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAdminRouteRoute: typeof AuthenticatedAdminRouteRouteWithChildren
+  AuthenticatedAdsRoute: typeof AuthenticatedAdsRoute
   AuthenticatedCreateRoute: typeof AuthenticatedCreateRoute
   AuthenticatedExamsRoute: typeof AuthenticatedExamsRoute
   AuthenticatedExploreRoute: typeof AuthenticatedExploreRoute
@@ -961,6 +981,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAdminRouteRoute: AuthenticatedAdminRouteRouteWithChildren,
+  AuthenticatedAdsRoute: AuthenticatedAdsRoute,
   AuthenticatedCreateRoute: AuthenticatedCreateRoute,
   AuthenticatedExamsRoute: AuthenticatedExamsRoute,
   AuthenticatedExploreRoute: AuthenticatedExploreRoute,

@@ -86,17 +86,40 @@ function summarise(qs: any[], per: PerQuestion) {
   };
 }
 
+const MARKER_SYSTEM_PROMPT = `You are a fair, experienced human teacher marking student answers. You are generous
+and pragmatic, not pedantic. Rules you must follow:
+- Award FULL marks when the answer is semantically correct, even if phrasing, spelling, case,
+  punctuation, word order or grammar differ from the model answer — unless the question is
+  specifically testing grammar or spelling.
+- Accept synonyms, abbreviations, common misspellings, and numerically equivalent answers
+  (e.g. "12" = "twelve", "5kg" = "5 kilograms").
+- Trivial factual answers (a name, an age, a date, a one-word fact) should be marked fully
+  correct if they match the expected fact, however briefly phrased.
+- If a model/sample answer is provided, treat it as the reference for what counts as correct,
+  but do not require an exact wording match to it.
+- For multi-part or longer answers, award PARTIAL credit proportional to how much of the
+  expected content is present — do not give all-or-nothing marks except on truly single-fact
+  questions.
+- Never penalise grammar, spelling or phrasing unless the question is explicitly about grammar
+  or spelling.
+- If you are unsure whether the answer is right, resolve the doubt in the student's favour.
+- Output ONLY strict JSON, no prose, no markdown fences: {"awarded": number, "max": number, "reason": "one short sentence explaining the mark"}.
+  "awarded" must be between 0 and "max" (inclusive) and may use halves.`;
+
 async function markOpenWithAi(q: any, studentAns: string, maxPts: number) {
   const r = await withTimeout(
     aiChat("heavy", [
-      { role: "system", content: 'You are a strict but fair exam marker. Return ONLY JSON: {"score":number,"feedback":"one short paragraph explaining the mark"}. score is between 0 and max_points and may use halves.' },
-      { role: "user", content: `Question: ${q.text}\nModel answer: ${q.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${studentAns}\nmax_points: ${maxPts}` },
-    ], { temperature: 0, max_tokens: 500, json: true }),
+      { role: "system", content: MARKER_SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: `Question: ${q.text}\nSample/model answer (reference only, not required verbatim): ${q.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${studentAns}\nmax: ${maxPts}`,
+      },
+    ], { temperature: 0, max_tokens: 400, json: true }),
     45000,
   );
-  const parsed = parseJsonLoose<{ score?: number; feedback?: string }>(r.text, {});
-  const score = Math.max(0, Math.min(maxPts, Number(parsed.score) || 0));
-  return { score, feedback: String(parsed.feedback ?? ""), meta: r };
+  const parsed = parseJsonLoose<{ awarded?: number; max?: number; reason?: string }>(r.text, {});
+  const score = Math.max(0, Math.min(maxPts, Number(parsed.awarded) || 0));
+  return { score, feedback: String(parsed.reason ?? ""), meta: r };
 }
 
 export const submitAttempt = createServerFn({ method: "POST" })
@@ -264,7 +287,7 @@ export const finalizeGrading = createServerFn({ method: "POST" })
         : "AI marking is not configured — open-ended answers scored 0.";
     }
 
-    await mapWithConcurrency(toMark, 3, async (id) => {
+    await mapWithConcurrency(toMark, 5, async (id) => {
       const q = byId.get(id);
       if (!q) return;
       const maxPts = pointsFor(q);

@@ -98,19 +98,22 @@ export function algorithmicVerify(input: {
 }
 
 
-/** AI vision read of the receipt. Returns null when AI is unavailable. */
+/**
+ * AI vision read of the receipt. Runs on Lovable AI (system/platform work) with
+ * automatic fallback to OpenRouter if Lovable errors, times out, or is
+ * unconfigured — see aiChat in ai-provider.server.ts. Returns null only when
+ * neither provider is configured; any in-flight failure is caught here and
+ * surfaced as an ungradable result so the caller can fall back to manual review
+ * instead of leaking a raw fetch error to the UI.
+ */
 export async function aiVerifyReceipt(args: {
   signedUrl: string;
   expected_kobo: number;
   claim: ProofClaim;
   settings: VerifySettings;
 }) {
-  const key = process.env['LOVABLE_API_KEY'];
-  if (!key) return null;
-  const { generateText } = await import("ai");
-  const { createLovableAiGatewayProvider } = await import("./ai-gateway.server");
-  const gateway = createLovableAiGatewayProvider(key);
-  const model = "google/gemini-3-flash-preview";
+  const { isAiConfigured, aiChat, parseJsonLoose } = await import("./ai-provider.server");
+  if (!isAiConfigured()) return null;
 
   const system = `You verify Nigerian bank transfer receipts. Be helpful and slightly lenient: a genuine receipt with poor image quality should still pass. Return ONLY JSON:
 {"is_receipt":true,"amount_naira":0,"date":"YYYY-MM-DD","recipient_account":"","recipient_name":"","sender_name":"","reference":"","tampering_risk":0,"confidence":0,"notes":""}
@@ -121,27 +124,29 @@ Expected recipient account: ${args.settings.pay_account_number ?? "(unknown)"} /
 User claims: amount NGN ${(args.claim.amount_kobo / 100).toFixed(2)}, date ${args.claim.paid_at}, sender ${args.claim.sender_name}, ref ${args.claim.bank_ref ?? "-"}
 Check the attached receipt image and report what you can actually read.`;
 
-  const result = await generateText({
-    model: gateway(model),
-    system,
-    messages: [{
-      role: "user",
-      content: [
-        { type: "text", text: prompt },
-        { type: "image", image: new URL(args.signedUrl) },
-      ],
-    }] as any,
-    temperature: 0,
-    maxOutputTokens: 500,
-  });
-
-  const usage = (result as any).usage ?? {};
-  let parsed: any = null;
+  let result;
   try {
-    const cleaned = result.text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-    const s = cleaned.indexOf("{"); const e = cleaned.lastIndexOf("}");
-    if (s !== -1 && e > s) parsed = JSON.parse(cleaned.slice(s, e + 1));
-  } catch { parsed = null; }
+    result = await aiChat(
+      "light",
+      [
+        { role: "system", content: system },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: args.signedUrl } },
+          ],
+        },
+      ],
+      { temperature: 0, max_tokens: 500, json: true },
+    );
+  } catch (e: any) {
+    return { model: "unavailable", usage: {}, extracted: null, score: null as number | null, reasons: [`Automatic image check failed: ${e?.message ?? "unknown error"}`] };
+  }
+
+  const model = result.model;
+  const usage = { inputTokens: result.input_tokens, outputTokens: result.output_tokens };
+  const parsed = parseJsonLoose<any>(result.text, null);
   if (!parsed) return { model, usage, extracted: null, score: null as number | null, reasons: ["AI could not read the receipt"] };
 
   const reasons: string[] = [];

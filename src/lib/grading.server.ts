@@ -25,13 +25,40 @@ export function pointsFor(q: any): number {
 export const isOpen = (q: any) => q?.type === "short" || q?.type === "essay";
 export const isObjective = (q: any) => q?.type === "mcq" || q?.type === "tf";
 
-/** Normalise text for tolerant comparison: case, punctuation and spacing insensitive. */
+/** Normalise text for tolerant comparison: case, accent, punctuation and spacing insensitive. */
 export function norm(s: unknown): string {
   return String(s ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "") // strip accents
     .toLowerCase()
     .replace(/[\u2018\u2019\u201c\u201d]/g, "")
     .replace(/[^a-z0-9]+/g, "")
     .trim();
+}
+
+/** Numeric value of a string, or null if it is not (purely) a number. */
+function asNumber(s: string): number | null {
+  const t = s.trim().replace(/,/g, "");
+  if (!t || !/^-?\d+(\.\d+)?$/.test(t)) return null;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** True when two free-text answers should be treated as equivalent by a fair human marker. */
+export function answersEquivalent(a: string, b: string): boolean {
+  const na = norm(a);
+  const nb = norm(b);
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const numA = asNumber(a.trim());
+  const numB = asNumber(b.trim());
+  if (numA !== null && numB !== null) return numA === numB;
+  // Tolerant substring match for short factual answers only (avoids false
+  // positives on long essay-style text).
+  if (na.length >= 3 && nb.length >= 3 && na.length <= 40 && nb.length <= 40) {
+    return na.includes(nb) || nb.includes(na);
+  }
+  return false;
 }
 
 /** Leading option label, e.g. "A", "b)", "(c)", "d." */
@@ -127,22 +154,21 @@ export function gradeObjective(q: any, ans: unknown): Verdict {
  */
 export function gradeShortDeterministically(q: any, answer: string): { score: number; feedback: string } | null {
   const max = pointsFor(q);
-  const student = norm(answer);
-  if (!student) return { score: 0, feedback: "No answer submitted." };
+  const rawStudent = String(answer ?? "").trim();
+  if (!rawStudent) return { score: 0, feedback: "No answer submitted." };
 
   const flagged = (q?.options ?? []).filter((o: any) => o.is_correct).map((o: any) => String(o.text));
-  const accepted: string[] = flagged.length ? flagged : [];
+  const accepted: string[] = flagged.length ? flagged.slice() : [];
   const key = q?.sample_answer ? String(q.sample_answer).trim() : "";
   // Only treat the model answer as an exact key when it is a short one-liner.
+  // Accept any of several accepted answers separated by / , or | in the key,
+  // so simple factual questions never need AI at all.
   if (!accepted.length && q?.type === "short" && key && key.length <= 80 && !key.includes("\n")) {
-    accepted.push(...key.split(/\s*(?:\/|,|;|\bor\b)\s*/i).filter(Boolean));
+    accepted.push(...key.split(/\s*(?:\/|,|\||;|\bor\b)\s*/i).filter(Boolean));
   }
   if (!accepted.length) return null;
 
-  const hit = accepted.some((a) => {
-    const n = norm(a);
-    return n.length > 0 && (n === student || (n.length >= 4 && (student.includes(n) || n.includes(student))));
-  });
+  const hit = accepted.some((a) => answersEquivalent(a, rawStudent));
   if (hit) return { score: max, feedback: `Correct — matches the expected answer${key ? ` (${key})` : ""}.` };
   return { score: 0, feedback: key ? `Incorrect. Expected: ${key}` : `Incorrect. Expected: ${accepted.join(" / ")}` };
 }
