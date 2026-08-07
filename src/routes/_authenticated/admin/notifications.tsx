@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { adminBroadcast, adminNotificationStats } from "@/lib/notifications.functions";
+import { adminBroadcast, adminNotificationStats, generateNotificationDrafts, adminSendTestPush } from "@/lib/notifications.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Send, Megaphone } from "lucide-react";
+import { Send, Megaphone, Sparkles, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/admin/notifications")({
   head: () => ({ meta: [
@@ -25,13 +25,19 @@ export const Route = createFileRoute("/_authenticated/admin/notifications")({
   component: AdminNotifications,
 });
 
+function BellTestIcon() { return <Megaphone className="h-3.5 w-3.5" />; }
+
 function AdminNotifications() {
   const qc = useQueryClient();
   const broadcastFn = useServerFn(adminBroadcast);
   const statsFn = useServerFn(adminNotificationStats);
   const { data: stats } = useQuery({ queryKey: ["admin-notification-stats"], queryFn: () => statsFn() });
 
-  const [form, setForm] = useState({ title: "", body: "", link: "", image_url: "", audience: "all" as "all" | "creators" | "students" });
+  type Audience = "all" | "creators" | "students" | "low_credit" | "inactive";
+  const [form, setForm] = useState({ title: "", body: "", link: "", image_url: "", audience: "all" as Audience });
+  const draftsFn = useServerFn(generateNotificationDrafts);
+  const testPushFn = useServerFn(adminSendTestPush);
+  const [drafts, setDrafts] = useState<any[]>([]);
 
   const send = useMutation({
     mutationFn: () => broadcastFn({ data: { ...form, body: form.body || undefined, link: form.link || undefined, image_url: form.image_url || undefined } }),
@@ -40,6 +46,28 @@ function AdminNotifications() {
       setForm({ title: "", body: "", link: "", image_url: "", audience: "all" });
       qc.invalidateQueries({ queryKey: ["admin-notification-stats"] });
     },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const generate = useMutation({
+    mutationFn: () => draftsFn({ data: { count: 6 } }),
+    onSuccess: (res: any) => { setDrafts(res.drafts); toast.success(res.source === "ai" ? "AI drafts ready" : "Loaded starter drafts (AI unavailable)"); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const sendDraft = useMutation({
+    mutationFn: (d: any) => broadcastFn({ data: { title: d.title, body: d.body, link: d.link, audience: d.audience } }),
+    onSuccess: (res: any, d: any) => {
+      toast.success(`Sent "${d.title}" to ${res.sent} user(s)`);
+      setDrafts((prev) => prev.filter((x) => x.id !== d.id));
+      qc.invalidateQueries({ queryKey: ["admin-notification-stats"] });
+    },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const testPush = useMutation({
+    mutationFn: () => testPushFn(),
+    onSuccess: (res: any) => toast.success(`Test push: attempted ${res.attempted}, delivered ${res.sent} (statuses: ${res.statuses?.join(", ") || "n/a"})`),
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -66,6 +94,8 @@ function AdminNotifications() {
                 <SelectItem value="all">Everyone</SelectItem>
                 <SelectItem value="creators">Creators</SelectItem>
                 <SelectItem value="students">Students (non-creators)</SelectItem>
+                <SelectItem value="low_credit">Low AI credit</SelectItem>
+                <SelectItem value="inactive">Inactive (14d+)</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -75,9 +105,46 @@ function AdminNotifications() {
             <div className="space-y-1"><Label className="text-xs">Link (optional)</Label><Input value={form.link} onChange={(e) => setForm((f) => ({ ...f, link: e.target.value }))} placeholder="/explore" /></div>
             <div className="space-y-1"><Label className="text-xs">Image URL (optional)</Label><Input value={form.image_url} onChange={(e) => setForm((f) => ({ ...f, image_url: e.target.value }))} placeholder="https://…" /></div>
           </div>
-          <Button className="gap-1" disabled={!form.title.trim() || send.isPending} onClick={() => send.mutate()}>
-            <Send className="h-4 w-4" /> Send broadcast
+          <div className="flex flex-wrap gap-2">
+            <Button className="gap-1" disabled={!form.title.trim() || send.isPending} onClick={() => send.mutate()}>
+              <Send className="h-4 w-4" /> Send broadcast
+            </Button>
+            <Button variant="outline" size="sm" className="gap-1" onClick={() => testPush.mutate()} disabled={testPush.isPending}>
+              {testPush.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <BellTestIcon />} Send test push to me
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm"><Sparkles className="h-4 w-4" /> AI notification composer</CardTitle>
+          <CardDescription className="text-xs">Generates tips, low-credit nudges, new-quiz alerts and creator upsells. Falls back to a static library if AI is unavailable.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button variant="secondary" size="sm" className="gap-1" onClick={() => generate.mutate()} disabled={generate.isPending}>
+            {generate.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} Generate batch
           </Button>
+          {!!drafts.length && (
+            <div className="space-y-2">
+              {drafts.map((d) => (
+                <div key={d.id} className="rounded-md border p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] uppercase">{d.kind.replace(/_/g, " ")}</Badge>
+                    <Badge variant="secondary" className="text-[10px]">{d.audience}</Badge>
+                  </div>
+                  <Input className="mb-2 h-8 text-sm font-medium" value={d.title} onChange={(e) => setDrafts((prev) => prev.map((x) => (x.id === d.id ? { ...x, title: e.target.value } : x)))} />
+                  <Textarea className="mb-2 text-xs" rows={2} value={d.body} onChange={(e) => setDrafts((prev) => prev.map((x) => (x.id === d.id ? { ...x, body: e.target.value } : x)))} />
+                  <div className="flex items-center justify-between gap-2">
+                    <Input className="h-8 max-w-40 text-xs" value={d.link} onChange={(e) => setDrafts((prev) => prev.map((x) => (x.id === d.id ? { ...x, link: e.target.value } : x)))} />
+                    <Button size="sm" className="gap-1" onClick={() => sendDraft.mutate(d)} disabled={sendDraft.isPending}>
+                      <Send className="h-3.5 w-3.5" /> Send now
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
