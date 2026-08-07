@@ -59,13 +59,20 @@ export type Database = {
           created_by: string | null
           cta_label: string | null
           cta_url: string | null
+          days: number
           end_at: string | null
           every_n: number
+          frequency_minutes: number
           id: string
           image_url: string | null
           impressions: number
+          is_free: boolean
+          paid_at: string | null
           placements: string[]
+          price_kobo: number
+          review_note: string | null
           start_at: string | null
+          status: string
           title: string
           updated_at: string
           weight: number
@@ -79,13 +86,20 @@ export type Database = {
           created_by?: string | null
           cta_label?: string | null
           cta_url?: string | null
+          days?: number
           end_at?: string | null
           every_n?: number
+          frequency_minutes?: number
           id?: string
           image_url?: string | null
           impressions?: number
+          is_free?: boolean
+          paid_at?: string | null
           placements?: string[]
+          price_kobo?: number
+          review_note?: string | null
           start_at?: string | null
+          status?: string
           title: string
           updated_at?: string
           weight?: number
@@ -99,13 +113,20 @@ export type Database = {
           created_by?: string | null
           cta_label?: string | null
           cta_url?: string | null
+          days?: number
           end_at?: string | null
           every_n?: number
+          frequency_minutes?: number
           id?: string
           image_url?: string | null
           impressions?: number
+          is_free?: boolean
+          paid_at?: string | null
           placements?: string[]
+          price_kobo?: number
+          review_note?: string | null
           start_at?: string | null
+          status?: string
           title?: string
           updated_at?: string
           weight?: number
@@ -775,6 +796,14 @@ export type Database = {
       }
       payment_settings: {
         Row: {
+          ad_base_day_kobo: number
+          ad_extra_placement_pct: number
+          ad_free_days: number
+          ad_free_monthly_limit: number
+          ad_free_placements: number
+          ad_free_tier_enabled: boolean
+          ad_frequency_pct: number
+          ad_weight_pct_per_10: number
           affiliate_pct: number
           ai_credit_expiry_days: number
           ai_credit_min_topup_kobo: number
@@ -819,6 +848,14 @@ export type Database = {
           withdrawal_whatsapp: string
         }
         Insert: {
+          ad_base_day_kobo?: number
+          ad_extra_placement_pct?: number
+          ad_free_days?: number
+          ad_free_monthly_limit?: number
+          ad_free_placements?: number
+          ad_free_tier_enabled?: boolean
+          ad_frequency_pct?: number
+          ad_weight_pct_per_10?: number
           affiliate_pct?: number
           ai_credit_expiry_days?: number
           ai_credit_min_topup_kobo?: number
@@ -863,6 +900,14 @@ export type Database = {
           withdrawal_whatsapp?: string
         }
         Update: {
+          ad_base_day_kobo?: number
+          ad_extra_placement_pct?: number
+          ad_free_days?: number
+          ad_free_monthly_limit?: number
+          ad_free_placements?: number
+          ad_free_tier_enabled?: boolean
+          ad_frequency_pct?: number
+          ad_weight_pct_per_10?: number
           affiliate_pct?: number
           ai_credit_expiry_days?: number
           ai_credit_min_topup_kobo?: number
@@ -1511,6 +1556,24 @@ export type Database = {
         }
         Relationships: []
       }
+      user_nav_prefs: {
+        Row: {
+          items: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          items?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          items?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -1528,6 +1591,24 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_tour_progress: {
+        Row: {
+          completed_at: string
+          tour_key: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string
+          tour_key: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string
+          tour_key?: string
           user_id?: string
         }
         Relationships: []
