@@ -114,12 +114,19 @@ export function AdSlot({ placement, className }: { placement: Placement; classNa
   const ads = useMemo(() => data.filter((a: any) => a.auto_show), [data]);
   const ad = useMemo(() => (ads.length ? ads[rotateIdx % ads.length] : null), [ads, rotateIdx]);
 
-  // Auto-rotate through eligible ads every 20s so a slot isn't static.
+  // Auto-rotate through eligible ads on an interval derived from the
+  // fastest `frequency_minutes` among active ads (min 20s, so it never spams).
+  const rotateMs = useMemo(() => {
+    if (ads.length < 2) return null;
+    const mins = Math.min(...ads.map((a: any) => Number(a.frequency_minutes ?? 5)));
+    return Math.max(20_000, Math.max(1, mins) * 60_000);
+  }, [ads]);
+
   useEffect(() => {
-    if (ads.length < 2) return;
-    const id = setInterval(() => setRotateIdx((i) => i + 1), 20_000);
+    if (!rotateMs) return;
+    const id = setInterval(() => setRotateIdx((i) => i + 1), rotateMs);
     return () => clearInterval(id);
-  }, [ads.length]);
+  }, [rotateMs]);
 
   useEffect(() => {
     setRecordedImpression(false);

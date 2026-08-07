@@ -90,9 +90,8 @@ export const getGroup = createServerFn({ method: "GET" })
     const memberIds = (members ?? []).map((m: any) => m.user_id);
     const senderIds = (messages ?? []).map((m: any) => m.user_id);
     const allProfileIds = Array.from(new Set([...memberIds, ...senderIds]));
-    const { data: profiles } = allProfileIds.length
-      ? await db.from("profiles").select("id, full_name, handle, avatar_url").in("id", allProfileIds)
-      : { data: [] };
+    const { fetchProfiles } = await import("@/lib/profile-lookup.server");
+    const profiles = await fetchProfiles(db, allProfileIds);
     const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
     const profilesRecord: Record<string, any> = {};
     for (const p of profiles ?? []) profilesRecord[p.id] = p;
@@ -163,7 +162,7 @@ export const searchUsersForGroup = createServerFn({ method: "GET" })
     let q = db.from("profiles").select("id, full_name, handle, avatar_url, is_guest")
       .neq("id", context.userId)
       .order("full_name", { ascending: true, nullsFirst: false })
-      .limit(100);
+      .limit(400);
     if (data.q) q = q.or(`full_name.ilike.%${data.q}%,handle.ilike.%${data.q}%`);
     const { data: rows, error } = await q;
     if (error) throw error;
