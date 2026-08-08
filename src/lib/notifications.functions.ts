@@ -51,8 +51,11 @@ export const uploadNotificationImage = createServerFn({ method: "POST" })
       .from("content-images")
       .upload(path, buf, { contentType: data.content_type, upsert: true });
     if (upErr) throw upErr;
-    const { data: pub } = (supabaseAdmin as any).storage.from("content-images").getPublicUrl(path);
-    return { path, url: pub?.publicUrl ?? null };
+    // Private bucket (public buckets are blocked by policy) → long-lived signed URL.
+    const { data: signed } = await (supabaseAdmin as any).storage
+      .from("content-images")
+      .createSignedUrl(path, 60 * 60 * 24 * 3650);
+    return { path, url: signed?.signedUrl ?? null };
   });
 
 export const listMyNotifications = createServerFn({ method: "GET" })
