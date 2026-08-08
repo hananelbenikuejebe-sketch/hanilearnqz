@@ -28,17 +28,6 @@ export const Route = createFileRoute("/_authenticated/explore")({
   component: Explore,
 });
 
-/** Compact relative timestamp so every card carries context. */
-function timeAgo(iso?: string | null) {
-  if (!iso) return "";
-  const secs = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-  const units: Array<[number, string]> = [[60, "s"], [3600, "m"], [86400, "h"], [604800, "d"], [2629800, "w"], [31557600, "mo"]];
-  if (secs < 60) return `${secs}s ago`;
-  for (let i = 1; i < units.length; i++) {
-    if (secs < units[i]![0]) return `${Math.floor(secs / units[i - 1]![0])}${units[i - 1]![1] === "s" ? "m" : units[i]![1]} ago`;
-  }
-  return `${Math.floor(secs / 31557600)}y ago`;
-}
 
 function Explore() {
   const fetchQuizzes = useServerFn(listPublishedQuizzes);
