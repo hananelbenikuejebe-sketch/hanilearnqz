@@ -11,7 +11,7 @@ export function NextStepsCard({ quizId, category }: { quizId?: string; category?
       <CardContent className="grid gap-2 sm:grid-cols-2">
         {quizId && (
           <Button asChild variant="outline" size="sm" className="justify-start gap-2">
-            <Link to="/quiz/$id" params={{ id: quizId }} search={{ retake: true } as any}>
+            <Link to="/quiz/$quizId" params={{ quizId }}>
               <RotateCcw className="h-4 w-4" /> Retake this quiz
             </Link>
           </Button>
