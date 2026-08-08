@@ -241,10 +241,12 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
             </SheetContent>
           </Sheet>
         </div>
-        {/* Safe-area padding lives below the tappable row, exactly where the
-            floating Lovable edit badge sits, so it never covers a control. */}
-        <div className="safe-bottom" aria-hidden />
+        </div>
+        {/* …and beneath it a blurred sliver of the page, which is exactly where
+            the floating Lovable edit badge sits, so nothing tappable is covered. */}
+        <div className="h-10 bg-background/30 backdrop-blur-md safe-bottom" aria-hidden />
       </nav>
+
 
       <NavEditor
         open={editorOpen}
