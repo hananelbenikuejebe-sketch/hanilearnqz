@@ -24,6 +24,85 @@ export type Tour = {
 
 export const TOURS: Tour[] = [
   {
+    // Deep, in-place walkthrough of the quiz builder. Must sit before the
+    // generic "/admin" tour because findTourForPath takes the first match.
+    key: "quiz-builder",
+    matches: ["/admin/quizzes/new", "/admin/quizzes/", "/edit"],
+    steps: [
+      {
+        title: "This is the quiz builder",
+        body: "Everything about one quiz lives here: its details, its questions, its settings and its prizes. Nothing is public until you publish.",
+        target: "text:Quiz",
+      },
+      {
+        title: "Start with the basics",
+        body: "Title, subject, category and difficulty. These decide where your quiz shows up in Explore — be specific, it gets you more attempts.",
+        target: "input[name='title'], #title",
+      },
+      {
+        title: "Banner image (optional)",
+        body: "Upload a banner to stand out. Skip it and we generate a clean colour banner for you automatically.",
+        target: "text:Banner",
+      },
+      {
+        title: "Add questions your way",
+        body: "Type them manually, paste/upload a document for the offline parser, or let AI generate a full set from a topic.",
+        target: "text:Questions",
+      },
+      {
+        title: "The paste parser — format matters",
+        body: "Paste questions as: question line, then options as A) B) C) D), then 'Answer: B' and optionally 'Reason:' or 'Explanation:'. The offline parser handles this instantly with no AI credit. Theory questions just need the question plus 'Answer:' as the model answer.",
+        target: "text:Paste",
+      },
+      {
+        title: "AI repair & review",
+        body: "If your document is messy, AI steps in to repair only what the offline parser couldn't read — so you spend the least possible credit.",
+        nudge: { label: "Check AI credit", to: "/wallet" },
+      },
+      {
+        title: "AI generator",
+        body: "No document at all? Describe a topic and how many questions you want, and AI writes them — with answers, explanations and points.",
+        nudge: { label: "Top up to generate", to: "/wallet" },
+      },
+      {
+        title: "Points, not just counts",
+        body: "Each question carries the points you set. Scores and percentages are calculated on total points, so a 10-point essay counts more than a 1-point MCQ.",
+        target: "text:Points",
+      },
+      {
+        title: "Sections & headers",
+        body: "Group questions into sections with their own headers and instructions — perfect for exam-style papers (Section A objectives, Section B theory).",
+        target: "text:Section",
+      },
+      {
+        title: "Settings, grouped",
+        body: "Timer, retakes, randomising, shuffling options, showing answers and explanations, comments, likes, sharing and the leaderboard — each group opens and closes so the page stays calm.",
+        target: "text:Settings",
+      },
+      {
+        title: "Timing & access",
+        body: "Set a duration (from 30 seconds up), enforce it or not, choose public / private with an access key, and schedule a start and end window.",
+        target: "text:Visibility",
+      },
+      {
+        title: "Price and prizes",
+        body: "Charge in Naira per attempt, and add cash prizes for top scorers. Prizes are paid straight into winners' wallets — they reliably pull in far more attempts.",
+        target: "text:Prize",
+        nudge: { label: "Fund prizes from Wallet", to: "/wallet" },
+      },
+      {
+        title: "Analytics after publishing",
+        body: "Once people start attempting, your analytics show attempts, average score, hardest questions and earnings per quiz.",
+      },
+      {
+        title: "Publish and share",
+        body: "Publish, then share the link everywhere — every share brings attempts, and attempts are how you earn.",
+        nudge: { label: "See your earnings", to: "/wallet" },
+      },
+    ],
+  },
+
+  {
     key: "explore",
     matches: ["/explore"],
     steps: [
