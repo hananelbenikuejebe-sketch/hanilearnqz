@@ -69,11 +69,12 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     const netKobo = data.amount_kobo - feeKobo;
     void feeKobo; // credited to platform when the withdrawal is marked paid (see resolveWithdrawal)
 
-    // Debit immediately (hold funds); refund on rejection.
-    await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - data.amount_kobo }).eq("user_id", context.userId);
+    // No immediate debit: the request only becomes a real debit once the super admin
+    // marks it paid. We log a zero-amount ledger marker so the user sees it as pending.
     await db.from("wallet_transactions").insert({
-      user_id: context.userId, kind: "withdrawal_request", amount_kobo: -data.amount_kobo, bucket: "earnings",
-      meta: { fee_kobo: feeKobo, fee_pct: feePct, net_kobo: netKobo },
+      user_id: context.userId, kind: "withdrawal_request", amount_kobo: 0, bucket: "earnings",
+      status: "pending",
+      meta: { fee_kobo: feeKobo, fee_pct: feePct, net_kobo: netKobo, requested_kobo: data.amount_kobo },
     });
     const { data: req, error } = await db.from("withdrawal_requests").insert({
       user_id: context.userId,
