@@ -77,7 +77,8 @@ function Profile() {
                     <h1 className="min-w-0 break-words text-xl md:text-2xl">{me?.name ?? "…"}</h1>
                     {me?.guest && <Badge variant="outline">Guest</Badge>}
                     {status?.is_super_admin && <Badge>Super admin</Badge>}
-                    {status?.can_create && !status?.is_super_admin && <Badge variant="secondary">Creator</Badge>}
+                    {/* Earned, not granted: the Creator title only appears after a first quiz. */}
+                    {!status?.is_super_admin && (status?.quizzes_created ?? 0) > 0 && <Badge variant="secondary">Creator</Badge>}
                   </div>
                   {pub?.profile?.handle && <p className="text-sm text-muted-foreground">@{pub.profile.handle}</p>}
                   <p className="break-all text-sm text-muted-foreground">{me?.email}</p>
