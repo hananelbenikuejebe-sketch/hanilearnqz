@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Check, X, Home, RotateCw, Loader2, AlertTriangle, Sparkles, Wallet } from "lucide-react";
 import { SocialPanel } from "@/components/social-panel";
 import { AdSlot } from "@/components/ad-slot";
+import { ShareButton } from "@/components/share-button";
+import { useQuizStartPushPrompt } from "@/components/push-prompt";
 
 export const Route = createFileRoute("/_authenticated/quiz/$quizId/result/$attemptId")({
   component: ResultPage,
@@ -20,6 +22,16 @@ function ResultPage() {
   const finalize = useServerFn(finalizeGrading);
   const qc = useQueryClient();
   const startedRef = useRef(false);
+  const promptPush = useQuizStartPushPrompt();
+  const pushedRef = useRef(false);
+
+  // End of a quiz is the highest-intent moment to ask for notifications.
+  useEffect(() => {
+    if (pushedRef.current) return;
+    pushedRef.current = true;
+    const t = setTimeout(() => { void promptPush(); }, 2500);
+    return () => clearTimeout(t);
+  }, [promptPush]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["attempt", attemptId],
@@ -97,6 +109,12 @@ function ResultPage() {
 
             <div className="flex flex-wrap justify-center gap-2">
               <Button variant="outline" asChild><Link to="/"><Home className="mr-1 h-4 w-4" />Home</Link></Button>
+              <ShareButton
+                url={`/share/quiz/${quizId}`}
+                title={`I scored ${pointsAwarded}/${pointsMax} on "${quiz?.title}"`}
+                text={`I just scored ${pointsAwarded}/${pointsMax} (${pct.toFixed(0)}%) on "${quiz?.title}" on HaniLearn-QZ. Think you can beat me?`}
+                label="Share my score"
+              />
               {quiz?.allow_retakes && (
                 <Button asChild><Link to="/quiz/$quizId" params={{ quizId }}><RotateCw className="mr-1 h-4 w-4" />Retake</Link></Button>
               )}

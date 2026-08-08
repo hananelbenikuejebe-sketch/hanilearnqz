@@ -10,6 +10,7 @@ import { CoachMarks } from "@/components/coach-marks";
 import { TourOverlay, replayTour } from "@/components/tour-overlay";
 import { findTourForPath } from "@/lib/tour-content";
 import { HelpCircle } from "lucide-react";
+import { PushPrompt } from "@/components/push-prompt";
 
 
 function NotFoundComponent() {
@@ -111,6 +112,7 @@ function RootComponent() {
         <Outlet />
         <Toaster richColors position="top-right" />
         <CoachMarks />
+        <PushPrompt />
         {currentTour && <TourOverlay key={currentTour.key} tour={currentTour.key} />}
         {currentTour && (
           <button
