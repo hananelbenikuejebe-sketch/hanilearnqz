@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getPublicProfile, toggleFollow } from "@/lib/profiles.functions";
+import { ShareButton } from "@/components/share-button";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { AppShell } from "@/components/app-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
