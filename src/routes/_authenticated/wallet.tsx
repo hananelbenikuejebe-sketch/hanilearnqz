@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from "sonner";
 import { Wallet as WalletIcon, ArrowUpRight, ArrowDownRight, Link2, Copy, Sparkles } from "lucide-react";
 import { getMyWallet, saveBankAccount, requestWithdrawal, buyAiCreditFromWallet, buyCreatorAccessFromWallet } from "@/lib/wallet.functions";
-import { getPaymentSettings, initiatePayment, verifyAndSettle } from "@/lib/payments.functions";
+import { getPaymentSettings, verifyAndSettle } from "@/lib/payments.functions";
 import { getOrCreateMyAffiliate } from "@/lib/affiliate.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { PayDialog } from "@/components/pay-dialog";
@@ -266,34 +266,21 @@ function ProPlans({ settings, status }: any) {
 
 function FundWalletCard({ settings }: any) {
   const [amount, setAmount] = useState(500000);
-  const initFn = useServerFn(initiatePayment);
   const feePct = Number(settings?.topup_fee_pct ?? 5);
   const fee = Math.floor((amount * feePct) / 100);
   const net = amount - fee;
-  const [busy, setBusy] = useState(false);
-
-  async function fund() {
-    setBusy(true);
-    try {
-      const r: any = await initFn({ data: { purpose: "wallet_topup", amount_kobo: amount } });
-      window.location.href = r.checkoutUrl;
-    } catch (e: any) {
-      toast.error(e?.message ?? "Could not start top-up");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Fund wallet</CardTitle>
-        <CardDescription>Top up your spendable balance via Monnify. A {feePct}% platform fee applies.</CardDescription>
+        <CardDescription>Transfer to our account, upload the receipt, and your wallet is credited once it's verified. A {feePct}% platform fee applies.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-end gap-2">
           <div><Label>Amount (₦)</Label><Input type="number" min={100} value={amount / 100 || ""} onChange={(e) => setAmount(Math.floor(parseFloat(e.target.value) * 100) || 0)} className="w-32" /></div>
-          <Button onClick={fund} disabled={busy || amount < 10000}>{busy ? "Starting…" : "Top up wallet"}</Button>
+          <PayDialog purpose="wallet_topup" amountKobo={amount} label="Pay with receipt" />
+          <ContactAdmin purpose="wallet top-up" amount={amount} />
         </div>
         <p className="text-xs text-muted-foreground">
           You pay {naira(amount)} · fee {naira(fee)} ({feePct}%) · credited to wallet <span className="font-semibold text-foreground">{naira(net)}</span>

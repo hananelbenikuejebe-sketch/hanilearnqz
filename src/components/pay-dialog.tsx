@@ -12,9 +12,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { getPaymentInstructions, submitPaymentProof } from "@/lib/proofs.functions";
 
 type Props = {
-  purpose: "creator_access" | "ai_credit" | "quiz_purchase";
+  purpose: "creator_access" | "ai_credit" | "quiz_purchase" | "wallet_topup" | "ad_placement";
   amountKobo?: number;
   quizId?: string;
+  adId?: string;
   label: string;
   months?: number;
   variant?: "default" | "outline" | "secondary";
@@ -23,7 +24,7 @@ type Props = {
 
 const naira = (k?: number) => `₦${((k ?? 0) / 100).toLocaleString("en-NG", { maximumFractionDigits: 2 })}`;
 
-export function PayDialog({ purpose, amountKobo, quizId, label, months, variant = "default", size = "default" }: Props) {
+export function PayDialog({ purpose, amountKobo, quizId, adId, label, months, variant = "default", size = "default" }: Props) {
   const qc = useQueryClient();
   const infoFn = useServerFn(getPaymentInstructions);
   const submitFn = useServerFn(submitPaymentProof);
@@ -58,6 +59,7 @@ export function PayDialog({ purpose, amountKobo, quizId, label, months, variant 
           purpose,
           amount_kobo: expected ?? 0,
           quiz_id: quizId,
+          ad_id: adId,
           months,
           file_path: path,
           file_size: file.size,
