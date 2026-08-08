@@ -6,6 +6,7 @@ import { listPublishedQuizzes } from "@/lib/quizzes.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { searchProfiles, getFollowingIds } from "@/lib/profiles.functions";
 import { getMyTasteProfile } from "@/lib/taste.functions";
+import { timeAgo } from "@/lib/time-ago";
 import { AppShell } from "@/components/app-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
