@@ -32,8 +32,12 @@ export const uploadAdImage = createServerFn({ method: "POST" })
       .from("ad-creatives")
       .upload(path, buf, { contentType: data.content_type, upsert: true });
     if (upErr) throw upErr;
-    const { data: pub } = (supabaseAdmin as any).storage.from("ad-creatives").getPublicUrl(path);
-    return { path, url: pub?.publicUrl ?? null };
+    // Bucket is private (workspace policy blocks public buckets), so hand back a
+    // long-lived signed URL instead of a public one.
+    const { data: signed } = await (supabaseAdmin as any).storage
+      .from("ad-creatives")
+      .createSignedUrl(path, 60 * 60 * 24 * 3650);
+    return { path, url: signed?.signedUrl ?? null };
   });
 
 
