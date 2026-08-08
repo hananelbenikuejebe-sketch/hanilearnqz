@@ -3,7 +3,9 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { getQuizAbout } from "@/lib/quizzes.functions";
-import { initiateQuizPurchase, verifyAndSettle } from "@/lib/payments.functions";
+import { verifyAndSettle } from "@/lib/payments.functions";
+import { payQuizFromWallet } from "@/lib/wallet.functions";
+import { PayDialog } from "@/components/pay-dialog";
 import { SocialPanel } from "@/components/social-panel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -27,7 +29,7 @@ function QuizAbout() {
   const { ref, key: keyFromUrl } = useSearch({ from: Route.id });
   const nav = useNavigate();
   const fetchQuiz = useServerFn(getQuizAbout);
-  const buyFn = useServerFn(initiateQuizPurchase);
+  const buyFn = useServerFn(payQuizFromWallet);
   const verifyFn = useServerFn(verifyAndSettle);
   const { data: quiz, isLoading, refetch } = useQuery({
     queryKey: ["quiz-about", quizId],
@@ -50,9 +52,11 @@ function QuizAbout() {
     return () => { cancelled = true; };
   }, [ref]);
 
+  // Paying from the wallet balance unlocks instantly; the receipt flow below is
+  // for people who'd rather transfer for this one quiz.
   const buy = useMutation({
     mutationFn: () => buyFn({ data: { quiz_id: quizId } }),
-    onSuccess: (r: any) => { window.location.href = r.checkoutUrl; },
+    onSuccess: async () => { toast.success("Paid from wallet. Quiz unlocked."); await refetch(); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -139,10 +143,11 @@ function QuizAbout() {
               <CardContent className="p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-semibold"><Sparkles className="h-4 w-4 text-amber-500" />Paid quiz</div>
                 <p className="text-sm text-muted-foreground">This quiz costs <span className="font-semibold text-foreground">₦{((quiz as any).price_kobo/100).toLocaleString()}</span>. After payment your access unlocks automatically.</p>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <Button onClick={() => buy.mutate()} disabled={buy.isPending} className="flex-1">
-                    {buy.isPending ? "Redirecting…" : `Pay & unlock — ₦${((quiz as any).price_kobo/100).toLocaleString()}`}
+                    {buy.isPending ? "Paying…" : `Pay from wallet — ₦${((quiz as any).price_kobo/100).toLocaleString()}`}
                   </Button>
+                  <PayDialog purpose="quiz_purchase" quizId={quizId} amountKobo={(quiz as any).price_kobo} label="Pay with receipt" variant="outline" />
                   <Button variant="outline" asChild><Link to="/wallet">Fund wallet</Link></Button>
                 </div>
               </CardContent>

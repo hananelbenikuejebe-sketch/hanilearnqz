@@ -5,6 +5,8 @@ import { useState, useMemo } from "react";
 import { listPublishedQuizzes } from "@/lib/quizzes.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { searchProfiles, getFollowingIds } from "@/lib/profiles.functions";
+import { getMyTasteProfile } from "@/lib/taste.functions";
+import { timeAgo } from "@/lib/time-ago";
 import { AppShell } from "@/components/app-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -27,19 +29,22 @@ export const Route = createFileRoute("/_authenticated/explore")({
   component: Explore,
 });
 
+
 function Explore() {
   const fetchQuizzes = useServerFn(listPublishedQuizzes);
   const fetchStatus = useServerFn(getMyCreatorStatus);
   const searchPeople = useServerFn(searchProfiles);
   const followingFn = useServerFn(getFollowingIds);
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState("recent");
+  const [sort, setSort] = useState("relevance");
   const [cat, setCat] = useState("all");
   const [feed, setFeed] = useState<"all" | "following">("all");
   const [view, setView] = useState<"grid" | "list" | "compact">("grid");
   const { data: quizzes, isLoading } = useQuery({ queryKey: ["published-quizzes"], queryFn: () => fetchQuizzes() });
   const { data: status } = useQuery({ queryKey: ["creator-status"], queryFn: () => fetchStatus() });
   const { data: followingIds } = useQuery({ queryKey: ["following-ids"], queryFn: () => followingFn() });
+  const tasteFn = useServerFn(getMyTasteProfile);
+  const { data: taste } = useQuery({ queryKey: ["my-taste"], queryFn: () => tasteFn() });
   const { data: people } = useQuery({ queryKey: ["profile-search", q], queryFn: () => searchPeople({ data: { q } }), enabled: q.trim().length > 1 });
   const feedAds = useActiveAds("explore").filter((a: any) => a.auto_show);
 
@@ -62,11 +67,33 @@ function Explore() {
     }
     if (cat !== "all") list = list.filter((x: any) => x.category === cat);
     if (feed === "following") list = list.filter((x: any) => (followingIds ?? []).includes(x.created_by));
+    if (sort === "relevance") {
+      // Relevance = what you already like (same category / subject / creator,
+      // plus people you follow) balanced against what's viral and what's new.
+      const weight = (rows: Array<{ value: string; count: number }> | undefined, v: string | null) =>
+        rows?.find((r) => r.value === v)?.count ?? 0;
+      const now = Date.now();
+      const score = (x: any) => {
+        let s = 0;
+        s += weight(taste?.categories, x.category) * 6;
+        s += weight(taste?.subjects, x.subject) * 5;
+        s += weight(taste?.creators, x.created_by) * 7;
+        if ((followingIds ?? []).includes(x.created_by)) s += 8;
+        s += Math.min(20, (x.social_counts?.likes ?? 0) * 2);
+        s += Math.min(20, (x.social_counts?.attempts ?? 0));
+        if (x.prize_pool_kobo > 0) s += 5;
+        const ageDays = (now - new Date(x.created_at).getTime()) / 86_400_000;
+        s += Math.max(0, 12 - ageDays);
+        if ((taste?.taken_quiz_ids ?? []).includes(x.id)) s -= 15; // already done
+        return s;
+      };
+      list.sort((a: any, b: any) => score(b) - score(a));
+    }
     if (sort === "popular") list.sort((a: any, b: any) => (b.social_counts?.likes ?? 0) - (a.social_counts?.likes ?? 0));
     if (sort === "shortest") list.sort((a: any, b: any) => a.duration_min - b.duration_min);
     if (sort === "longest") list.sort((a: any, b: any) => b.duration_min - a.duration_min);
     return list;
-  }, [quizzes, q, sort, cat, feed, followingIds]);
+  }, [quizzes, q, sort, cat, feed, followingIds, taste]);
 
   return (
     <AppShell isSuperAdmin={status?.is_super_admin}>
@@ -88,6 +115,7 @@ function Explore() {
           <Select value={sort} onValueChange={setSort}>
             <SelectTrigger className="md:w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="relevance">For you</SelectItem>
               <SelectItem value="recent">Recent</SelectItem>
               <SelectItem value="popular">Most liked</SelectItem>
               <SelectItem value="shortest">Shortest</SelectItem>
@@ -135,6 +163,7 @@ function Explore() {
                   <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{quiz.duration_min}m</span>
                   <span className="flex items-center gap-1"><Heart className="h-3.5 w-3.5" />{quiz.social_counts?.likes ?? 0}</span>
                   <span className="flex items-center gap-1"><MessageSquare className="h-3.5 w-3.5" />{quiz.social_counts?.comments ?? 0}</span>
+                  <span className="flex items-center gap-1" title={new Date(quiz.created_at).toLocaleString()}>{timeAgo(quiz.created_at)}</span>
                   {quiz.total_marks > 0 && <span className="flex items-center gap-1">{quiz.total_marks} marks</span>}
                   {quiz.prize_pool_kobo > 0 && (
                     <Badge className="gap-1 bg-amber-500 text-black hover:bg-amber-600 text-[10px]"><Trophy className="h-3 w-3" />₦{(quiz.prize_pool_kobo / 100).toLocaleString()}</Badge>

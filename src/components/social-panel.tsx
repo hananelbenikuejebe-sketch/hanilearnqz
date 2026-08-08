@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Heart, MessageCircle, Share2, Trophy, EyeOff, Eye, Trash2, Crown, Medal } from "lucide-react";
 import { Link } from "@tanstack/react-router";
+import { timeAgo } from "@/lib/time-ago";
 import { toast } from "sonner";
 
 export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; quizTitle?: string; shareUrl?: string }) {
@@ -116,6 +117,7 @@ export function SocialPanel({ quizId, quizTitle, shareUrl }: { quizId: string; q
                 <div key={c.id} className={`p-2 rounded border text-sm ${c.is_hidden ? "opacity-60 bg-muted" : ""}`}>
                   <div className="flex items-center justify-between gap-2 mb-1">
                     <Link to="/profile/$userId" params={{ userId: c.user_id }} className="font-medium text-xs hover:underline">{c.author_name}{c.is_hidden && " · hidden"}</Link>
+                    <span className="text-[10px] text-muted-foreground" title={new Date(c.created_at).toLocaleString()}>{timeAgo(c.created_at)}</span>
                     <div className="flex gap-1">
                       {is_admin && (
                         <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => hide.mutate({ id: c.id, hidden: !c.is_hidden })} title={c.is_hidden ? "Unhide" : "Hide"}>

@@ -96,8 +96,12 @@ export const getGroup = createServerFn({ method: "GET" })
     const profilesRecord: Record<string, any> = {};
     for (const p of profiles ?? []) profilesRecord[p.id] = p;
 
-    const membersWithProfile = (members ?? []).map((m: any) => ({ ...m, profile: profileMap.get(m.user_id) ?? null }));
-    const messagesWithSender = (messages ?? []).slice().reverse().map((m: any) => ({ ...m, sender: profileMap.get(m.user_id) ?? null }));
+    // Always hand back at least `{ id }` so the UI can render a stable
+    // "Learner ab12cd" label instead of collapsing everyone into "Learner".
+    const profileFor = (id: string) => profileMap.get(id) ?? { id, full_name: null, handle: null, avatar_url: null };
+    const membersWithProfile = (members ?? []).map((m: any) => ({ ...m, profile: profileFor(m.user_id) }));
+    const messagesWithSender = (messages ?? []).slice().reverse().map((m: any) => ({ ...m, sender: profileFor(m.user_id) }));
+    for (const id of allProfileIds) if (!profilesRecord[id]) profilesRecord[id] = profileFor(id);
 
     return { group, members: membersWithProfile, messages: messagesWithSender, profiles: profilesRecord, my_id: context.userId };
   });

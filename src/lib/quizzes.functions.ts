@@ -416,6 +416,7 @@ export const updateQuiz = createServerFn({ method: "POST" })
         data.patch = { ...data.patch, is_published: false };
       }
     }
+    const { data: before } = await context.supabase.from("quizzes").select("is_published").eq("id", data.id).maybeSingle();
     const { data: row, error } = await context.supabase
       .from("quizzes")
       .update(data.patch)
@@ -423,6 +424,11 @@ export const updateQuiz = createServerFn({ method: "POST" })
       .select()
       .single();
     if (error) throw error;
+    // First time this quiz goes live → tell followers and past takers.
+    if (!before?.is_published && row?.is_published) {
+      const { announceQuizPublished } = await import("./quiz-announce.server");
+      await announceQuizPublished(data.id);
+    }
     return row;
   });
 

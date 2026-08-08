@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getPublicProfile, toggleFollow } from "@/lib/profiles.functions";
+import { ShareButton } from "@/components/share-button";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { AppShell } from "@/components/app-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,11 +62,19 @@ function PublicProfile() {
                 <span><b className="text-foreground">{data.following}</b> following</span>
               </div>
             </div>
+            <div className="flex flex-wrap gap-2">
+            <ShareButton
+              url={`/profile/${userId}`}
+              title={`${p.full_name || p.handle || "This creator"} on HaniLearn-QZ`}
+              text={`Check out ${p.full_name || p.handle || "this profile"} on HaniLearn-QZ — quizzes, scores and milestones.`}
+              label="Share profile"
+            />
             {!data.is_self && (
               <div className="flex gap-2"><Button size="sm" variant={data.i_follow ? "outline" : "default"} onClick={() => follow.mutate()} disabled={follow.isPending}>
                 {data.i_follow ? <><UserCheck className="h-4 w-4 mr-1" />Following</> : <><UserPlus className="h-4 w-4 mr-1" />Follow</>}
               </Button><Button asChild size="sm" variant="outline"><Link to="/messages/$userId" params={{ userId }}><MessageCircle className="mr-1 h-4 w-4"/>Message</Link></Button></div>
             )}
+            </div>
           </CardContent>
         </Card>
 

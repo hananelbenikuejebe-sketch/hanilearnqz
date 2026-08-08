@@ -179,14 +179,23 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
 
   return createPortal(
     <div className="fixed inset-0 z-[100]" data-testid="tour-overlay">
-      {/* dim backdrop, clickable to skip */}
-      <div className="absolute inset-0 bg-background/70 backdrop-blur-[1px]" />
-      {rect && (
-        <div
-          className="pointer-events-none absolute rounded-lg ring-4 ring-primary ring-offset-2 ring-offset-background transition-all duration-300"
-          style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }}
-        />
+      {/* Spotlight: when we have a target we blur/dim everything AROUND it with
+          four panels, so the highlighted control itself stays perfectly sharp. */}
+      {rect ? (
+        <>
+          <div className="absolute inset-x-0 top-0 bg-background/70 backdrop-blur-sm" style={{ height: Math.max(0, rect.top - 6) }} />
+          <div className="absolute inset-x-0 bottom-0 bg-background/70 backdrop-blur-sm" style={{ top: rect.bottom + 6 }} />
+          <div className="absolute left-0 bg-background/70 backdrop-blur-sm" style={{ top: Math.max(0, rect.top - 6), height: rect.height + 12, width: Math.max(0, rect.left - 6) }} />
+          <div className="absolute right-0 bg-background/70 backdrop-blur-sm" style={{ top: Math.max(0, rect.top - 6), height: rect.height + 12, left: rect.right + 6 }} />
+          <div
+            className="pointer-events-none absolute rounded-lg ring-4 ring-primary ring-offset-2 ring-offset-transparent transition-all duration-300"
+            style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }}
+          />
+        </>
+      ) : (
+        <div className="absolute inset-0 bg-background/70 backdrop-blur-[1px]" />
       )}
+
       <div
         className={rect ? "absolute w-[300px] max-w-[calc(100vw-16px)] rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl" : "absolute left-1/2 top-1/2 w-[calc(100vw-32px)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border bg-popover p-4 text-popover-foreground shadow-xl"}
         style={rect ? cardStyle : undefined}

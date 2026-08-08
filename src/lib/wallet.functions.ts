@@ -69,11 +69,12 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     const netKobo = data.amount_kobo - feeKobo;
     void feeKobo; // credited to platform when the withdrawal is marked paid (see resolveWithdrawal)
 
-    // Debit immediately (hold funds); refund on rejection.
-    await db.from("wallets").update({ balance_kobo: wallet.balance_kobo - data.amount_kobo }).eq("user_id", context.userId);
+    // No immediate debit: the request only becomes a real debit once the super admin
+    // marks it paid. We log a zero-amount ledger marker so the user sees it as pending.
     await db.from("wallet_transactions").insert({
-      user_id: context.userId, kind: "withdrawal_request", amount_kobo: -data.amount_kobo, bucket: "earnings",
-      meta: { fee_kobo: feeKobo, fee_pct: feePct, net_kobo: netKobo },
+      user_id: context.userId, kind: "withdrawal_request", amount_kobo: 0, bucket: "earnings",
+      status: "pending",
+      meta: { fee_kobo: feeKobo, fee_pct: feePct, net_kobo: netKobo, requested_kobo: data.amount_kobo },
     });
     const { data: req, error } = await db.from("withdrawal_requests").insert({
       user_id: context.userId,
@@ -115,8 +116,13 @@ export const resolveWithdrawal = createServerFn({ method: "POST" })
     const { data: req } = await db.from("withdrawal_requests").select("*").eq("id", data.id).single();
     if (!req || req.status !== "requested") throw new Error("Already resolved");
     if (data.action === "paid") {
+      // Funds are debited HERE (approval time), not when the user requested.
+      const { data: w } = await db.from("wallets").select("balance_kobo").eq("user_id", req.user_id).single();
+      const balance = Number(w?.balance_kobo ?? 0);
+      if (balance < req.amount_kobo) throw new Error("User's balance no longer covers this payout — reject it instead.");
+      await db.from("wallets").update({ balance_kobo: balance - req.amount_kobo }).eq("user_id", req.user_id);
       await db.from("withdrawal_requests").update({ status: "paid", resolved_at: new Date().toISOString(), admin_note: data.note ?? null }).eq("id", data.id);
-      await db.from("wallet_transactions").insert({ user_id: req.user_id, kind: "withdrawal_paid", amount_kobo: 0, bucket: "earnings", meta: { withdrawal_id: req.id } });
+      await db.from("wallet_transactions").insert({ user_id: req.user_id, kind: "withdrawal_paid", amount_kobo: -req.amount_kobo, bucket: "earnings", meta: { withdrawal_id: req.id } });
       const { data: settings } = await db.from("payment_settings").select("withdrawal_fee_pct").eq("id", "default").maybeSingle();
       const feePct = Number(settings?.withdrawal_fee_pct ?? 5);
       const feeKobo = Math.floor((req.amount_kobo * feePct) / 100);
@@ -125,10 +131,8 @@ export const resolveWithdrawal = createServerFn({ method: "POST" })
         await creditPlatformFee(db, feeKobo, { reason: "withdrawal_fee", withdrawal_id: req.id, user_id: req.user_id, fee_pct: feePct });
       }
     } else {
-      // Refund
-      const { data: w } = await db.from("wallets").select("balance_kobo").eq("user_id", req.user_id).single();
-      await db.from("wallets").update({ balance_kobo: (w?.balance_kobo ?? 0) + req.amount_kobo }).eq("user_id", req.user_id);
-      await db.from("wallet_transactions").insert({ user_id: req.user_id, kind: "adjustment", amount_kobo: req.amount_kobo, bucket: "earnings", meta: { reason: "withdrawal_rejected", withdrawal_id: req.id } });
+      // Nothing to refund — the balance was never debited at request time.
+      await db.from("wallet_transactions").insert({ user_id: req.user_id, kind: "adjustment", amount_kobo: 0, bucket: "earnings", meta: { reason: "withdrawal_rejected", withdrawal_id: req.id } });
       await db.from("withdrawal_requests").update({ status: "rejected", resolved_at: new Date().toISOString(), admin_note: data.note ?? null }).eq("id", data.id);
     }
     return { ok: true };

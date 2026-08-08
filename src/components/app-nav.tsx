@@ -183,11 +183,14 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
           so the badge (bottom-right) only ever overlaps empty padding. */}
       <nav
         className={cn(
-          "fixed inset-x-0 bottom-0 z-30 h-20 border-t bg-card/95 backdrop-blur transition-transform duration-300 ease-out md:hidden",
+          "fixed inset-x-0 bottom-0 z-30 md:hidden transition-transform duration-300 ease-out",
           visible ? "translate-y-0" : "translate-y-full",
         )}
       >
-        <div className="flex h-full items-start justify-around pt-2">
+        {/* Solid "hanging" bar holding every control… */}
+        <div className="h-14 rounded-t-2xl border-t bg-card/95 shadow-[0_-4px_16px_rgba(0,0,0,0.08)] backdrop-blur">
+        <div className="flex h-full items-center justify-around">
+
           {primaryItems.map((it) => (
             <TabLink key={it.to} to={it.to} icon={it.icon} label={it.label} active={isActive(path, it.to)} />
           ))}
@@ -238,10 +241,12 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
             </SheetContent>
           </Sheet>
         </div>
-        {/* Safe-area padding lives below the tappable row, exactly where the
-            floating Lovable edit badge sits, so it never covers a control. */}
-        <div className="safe-bottom" aria-hidden />
+        </div>
+        {/* …and beneath it a blurred sliver of the page, which is exactly where
+            the floating Lovable edit badge sits, so nothing tappable is covered. */}
+        <div className="h-10 bg-background/30 backdrop-blur-md safe-bottom" aria-hidden />
       </nav>
+
 
       <NavEditor
         open={editorOpen}
