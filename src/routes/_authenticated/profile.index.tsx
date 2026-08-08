@@ -6,6 +6,7 @@ import { getStudentAnalytics, generateStudentAiSummary } from "@/lib/analytics.f
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { getPublicProfile } from "@/lib/profiles.functions";
 import { supabase } from "@/integrations/supabase/client";
+import { ShareButton } from "@/components/share-button";
 import { AppShell } from "@/components/app-nav";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,6 +86,11 @@ function Profile() {
                   {me?.joined && <p className="text-xs text-muted-foreground">Joined {new Date(me.joined).toLocaleDateString()}</p>}
                   {status?.effective?.tier === "free" && (
                     <p className="mt-1 text-xs text-muted-foreground">Free creator · {status.effective.max_quizzes} quizzes/month · {status.effective.max_questions_per_quiz} questions/quiz</p>
+                  )}
+                  {me?.id && (
+                    <div className="mt-2">
+                      <ShareButton url={`/profile/${me.id}`} title={`${me.name} on HaniLearn-QZ`} text={`This is my HaniLearn-QZ profile — my quizzes, scores and milestones.`} label="Share my profile" />
+                    </div>
                   )}
                   {pub && (
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
