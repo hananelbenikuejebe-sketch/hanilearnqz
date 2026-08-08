@@ -52,7 +52,6 @@ function WalletPage() {
   const settingsFn = useServerFn(getPaymentSettings);
   const affFn = useServerFn(getOrCreateMyAffiliate);
   const statusFn = useServerFn(getMyCreatorStatus);
-  const initFn = useServerFn(initiatePayment);
   const verifyFn = useServerFn(verifyAndSettle);
   const saveBank = useServerFn(saveBankAccount);
   const withdrawFn = useServerFn(requestWithdrawal);
