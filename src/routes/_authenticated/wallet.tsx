@@ -107,7 +107,7 @@ function WalletPage() {
             <CardContent><WithdrawDialog wallet={wallet} settings={settings} onSave={saveBank} onWithdraw={withdrawFn} /></CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2"><CardDescription>AI credit</CardDescription>
+            <CardHeader className="pb-2"><CardDescription data-coach="wallet">AI credit</CardDescription>
               <CardTitle className="text-3xl tabular-nums">{naira(wallet?.wallet?.ai_credit_balance_kobo ?? 0)}</CardTitle>
               <p className="text-xs text-muted-foreground">{formatExpiry("AI credit", wallet?.wallet?.ai_credit_expires_at)}</p>
             </CardHeader>
@@ -235,7 +235,7 @@ function ContactAdmin({ purpose, amount }: { purpose: string; amount?: number })
   if (contact?.user_id) {
     return (
       <Button size="sm" variant="outline" asChild>
-        <Link to="/messages/$userId" params={{ userId: contact.user_id }} search={{ draft: text } as any}>
+        <Link to="/messages/$userId" params={{ userId: contact.user_id }}>
           <MessageSquare className="mr-1 h-4 w-4" />Message admin
         </Link>
       </Button>

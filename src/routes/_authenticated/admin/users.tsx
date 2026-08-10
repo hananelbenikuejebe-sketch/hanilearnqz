@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Infinity as InfinityIcon, Coins } from "lucide-react";
 import { toast } from "sonner";
+import { BehaviorInsightsPanel } from "@/components/behavior-insights";
 
 export const Route = createFileRoute("/_authenticated/admin/users")({
   component: Users,
@@ -119,6 +120,8 @@ function Users() {
           </div>
         </CardContent>
       </Card>
+
+      <BehaviorInsightsPanel />
 
       <Card>
         <CardHeader><CardTitle className="text-base">Recent money movement</CardTitle></CardHeader>
