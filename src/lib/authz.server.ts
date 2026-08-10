@@ -74,6 +74,78 @@ export async function getEffectivePerms(supabase: any, userId: string): Promise<
   };
 }
 
+export type EffectiveEntitlements = {
+  canUseAI: boolean;
+  canSeeAnalytics: boolean;
+  quizCap: number | null;
+  aiCreditKobo: number;
+  expiresAt: string | null;
+  source: "admin" | "creator_access" | "creator_permissions" | "free";
+};
+
+/**
+ * Single source of truth for "what can this user actually do right now".
+ * A PAID creator_access subscription unlocks AI + analytics for everything,
+ * regardless of the `creator_permissions.ai_enabled` flag — that flag only
+ * governs the free/manually-granted creator tier. Every gate (routes, server
+ * functions) must call this instead of re-deriving access locally.
+ *
+ * Self-healing: this is also where auto-revoke happens. A subscription past
+ * its `expires_at`, or a wallet whose AI credit has expired, is simply not
+ * counted here on read — no separate cron/job is needed to "revoke" it.
+ */
+export async function getEffectiveEntitlements(userId: string): Promise<EffectiveEntitlements> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const db = supabaseAdmin as any;
+  const roles = await getActorRoles(db, userId);
+  const [{ data: sub }, { data: perms }, { data: wallet }] = await Promise.all([
+    db.from("subscriptions").select("expires_at, active").eq("user_id", userId).eq("kind", "creator_access").eq("active", true).order("expires_at", { ascending: false }).limit(1).maybeSingle(),
+    db.from("creator_permissions").select("*").eq("user_id", userId).maybeSingle(),
+    db.from("wallets").select("ai_credit_balance_kobo, ai_credit_expires_at").eq("user_id", userId).maybeSingle(),
+  ]);
+
+  const walletExpired = !!wallet?.ai_credit_expires_at && new Date(wallet.ai_credit_expires_at).getTime() < Date.now();
+  const aiCreditKobo = walletExpired ? 0 : Number(wallet?.ai_credit_balance_kobo ?? 0);
+
+  if (roles.includes("admin") || roles.includes("super_admin")) {
+    return { canUseAI: true, canSeeAnalytics: true, quizCap: null, aiCreditKobo, expiresAt: null, source: "admin" };
+  }
+
+  // Lazily "revoke" an expired subscription so nothing needs a separate sweep.
+  const subActive = !!sub?.active && new Date(sub.expires_at).getTime() > Date.now();
+  if (subActive) {
+    return {
+      canUseAI: true, // paid creator access unlocks AI regardless of creator_permissions.ai_enabled
+      canSeeAnalytics: true,
+      quizCap: perms?.max_quizzes ?? null,
+      aiCreditKobo,
+      expiresAt: sub!.expires_at,
+      source: "creator_access",
+    };
+  }
+
+  if (perms) {
+    return {
+      canUseAI: perms.ai_enabled !== false,
+      canSeeAnalytics: perms.analytics_enabled !== false,
+      quizCap: perms.max_quizzes ?? null,
+      aiCreditKobo,
+      expiresAt: null,
+      source: "creator_permissions",
+    };
+  }
+
+  const settings = await getPlatformSettings();
+  return {
+    canUseAI: settings.free_ai_parse === true,
+    canSeeAnalytics: true,
+    quizCap: Number(settings.free_max_quizzes_per_month ?? 3),
+    aiCreditKobo,
+    expiresAt: null,
+    source: "free",
+  };
+}
+
 export async function canCreate(supabase: any, userId: string): Promise<{ ok: boolean; reason?: string; roles: string[]; perms?: any; effective?: EffectivePerms }> {
   const roles = await getActorRoles(supabase, userId);
   const effective = await getEffectivePerms(supabase, userId);
@@ -107,19 +179,15 @@ export async function assertAdmin(supabase: any, userId: string) {
 }
 
 /** Assert AI feature availability for a user. Admins always allowed. */
-export async function assertAiAllowed(supabase: any, userId: string) {
-  const roles = await getActorRoles(supabase, userId);
-  if (roles.includes("admin") || roles.includes("super_admin")) return;
-  const effective = await getEffectivePerms(supabase, userId);
-  if (!effective.ai_enabled) throw new Error("AI tools are a Pro Creator feature on your account. Upgrade or ask an admin to enable them.");
+export async function assertAiAllowed(_supabase: any, userId: string) {
+  const ent = await getEffectiveEntitlements(userId);
+  if (!ent.canUseAI) throw new Error("AI tools are a Pro Creator feature on your account. Upgrade or ask an admin to enable them.");
 }
 
 /** Assert analytics allowed. */
-export async function assertAnalyticsAllowed(supabase: any, userId: string) {
-  const roles = await getActorRoles(supabase, userId);
-  if (roles.includes("admin") || roles.includes("super_admin")) return;
-  const perms = await getCreatorPerms(supabase, userId);
-  if (perms && perms.analytics_enabled === false) throw new Error("Analytics are disabled for your account.");
+export async function assertAnalyticsAllowed(_supabase: any, userId: string) {
+  const ent = await getEffectiveEntitlements(userId);
+  if (!ent.canSeeAnalytics) throw new Error("Analytics are disabled for your account.");
 }
 
 /** Log an AI usage entry (best-effort, never throws). */
@@ -183,22 +251,27 @@ export async function getAiBalance(db: any, userId: string) {
 }
 
 /** Gate before doing an AI call. Throws with a user-friendly message if blocked. */
-export async function checkAiAccess(supabase: any, userId: string, feature: AiFeature) {
-  const roles = await getActorRoles(supabase, userId);
-  if (roles.includes("admin") || roles.includes("super_admin")) return { free: true as const, balance_kobo: Infinity };
+export async function checkAiAccess(_supabase: any, userId: string, feature: AiFeature) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const db = supabaseAdmin as any;
+  const roles = await getActorRoles(db, userId);
+  if (roles.includes("admin") || roles.includes("super_admin")) return { free: true as const, balance_kobo: Infinity };
+
   const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
   if (settings?.feature_locks?.[feature]) throw new Error("This AI feature is currently disabled by the platform admin.");
 
-  const effective = await getEffectivePerms(supabase, userId);
-  if (!effective.ai_enabled) {
+  // Centralised: an active paid creator_access subscription unlocks AI
+  // regardless of creator_permissions.ai_enabled.
+  const effective = await getEffectiveEntitlements(userId);
+  if (!effective.canUseAI) {
     const err: any = new Error("AI tools are locked on your current tier. Upgrade to Pro Creator or ask an admin to enable them.");
     err.code = "AI_DISABLED";
     throw err;
   }
 
   await ensureFreeMonthlyCredit(db, userId);
+  // Hard gate: balance must be > 0 and not expired BEFORE any paid AI call is
+  // attempted — this is the choke point that closes the ₦0-balance leak.
   const bal = await getAiBalance(db, userId);
   if (bal <= 0) {
     const err: any = new Error("You have no AI credit left. Top up your AI credit to keep using AI features.");
