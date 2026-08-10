@@ -100,7 +100,8 @@ export const getGroup = createServerFn({ method: "GET" })
     // "Learner ab12cd" label instead of collapsing everyone into "Learner".
     const profileFor = (id: string) => profileMap.get(id) ?? { id, full_name: null, handle: null, avatar_url: null };
     const membersWithProfile = (members ?? []).map((m: any) => ({ ...m, profile: profileFor(m.user_id) }));
-    const messagesWithSender = (messages ?? []).slice().reverse().map((m: any) => ({ ...m, sender: profileFor(m.user_id) }));
+    const messagesWithSenderRaw = (messages ?? []).slice().reverse().map((m: any) => ({ ...m, sender: profileFor(m.user_id) }));
+    const messagesWithSender = await Promise.all(messagesWithSenderRaw.map(async (m: any) => ({ ...m, attachment_url: await signAttachment(db, m.attachment_path) })));
     for (const id of allProfileIds) if (!profilesRecord[id]) profilesRecord[id] = profileFor(id);
 
     return { group, members: membersWithProfile, messages: messagesWithSender, profiles: profilesRecord, my_id: context.userId };
@@ -108,14 +109,29 @@ export const getGroup = createServerFn({ method: "GET" })
 
 export const sendGroupMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ group_id: z.string().uuid(), body: z.string().trim().min(1).max(2000) }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({
+      group_id: z.string().uuid(),
+      body: z.string().trim().max(2000).optional(),
+      attachment_path: z.string().max(300).optional(),
+      attachment_type: z.enum(["image", "audio"]).optional(),
+      attachment_mime: z.string().max(80).optional(),
+      attachment_duration_sec: z.number().int().positive().max(3600).optional(),
+    }).refine((v) => (v.body && v.body.length > 0) || !!v.attachment_path, { message: "Message cannot be empty." }).parse(d),
+  )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
     await assertMember(db, data.group_id, context.userId);
 
     const { data: row, error } = await db.from("group_messages").insert({
-      group_id: data.group_id, user_id: context.userId, body: data.body,
+      group_id: data.group_id,
+      user_id: context.userId,
+      body: data.body || null,
+      attachment_path: data.attachment_path ?? null,
+      attachment_type: data.attachment_type ?? null,
+      attachment_mime: data.attachment_mime ?? null,
+      attachment_duration_sec: data.attachment_duration_sec ?? null,
     }).select("*").single();
     if (error) throw error;
 
@@ -124,7 +140,7 @@ export const sendGroupMessage = createServerFn({ method: "POST" })
       db.from("group_members").select("user_id").eq("group_id", data.group_id).limit(51),
     ]);
     const recipients = (members ?? []).map((m: any) => m.user_id).filter((id: string) => id !== context.userId).slice(0, 50);
-    await notifyUsers(recipients, { kind: "group_message", title: group?.name ?? "New group message", body: data.body.slice(0, 140), link: `/messages/group/${data.group_id}` });
+    await notifyUsers(recipients, { kind: "group_message", title: group?.name ?? "New group message", body: (data.body || "Sent an attachment").slice(0, 140), link: `/messages/group/${data.group_id}` });
 
     return row;
   });
@@ -171,4 +187,57 @@ export const searchUsersForGroup = createServerFn({ method: "GET" })
     const { data: rows, error } = await q;
     if (error) throw error;
     return rows ?? [];
+  });
+
+const CHAT_BUCKET = "chat-media";
+
+async function signAttachment(db: any, path?: string | null) {
+  if (!path) return null;
+  const { data } = await db.storage.from(CHAT_BUCKET).createSignedUrl(path, 60 * 60);
+  return data?.signedUrl ?? null;
+}
+
+export const createGroupInvite = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ group_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    await assertMember(db, data.group_id, context.userId);
+    const { data: row, error } = await db.from("group_invites").insert({ group_id: data.group_id, created_by: context.userId }).select("*").single();
+    if (error) throw error;
+    return row;
+  });
+
+export const getGroupInvitePreview = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ token: z.string().min(8).max(120) }).parse(d))
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: invite } = await db.from("group_invites").select("*, group:groups(id, name, description, is_community)").eq("token", data.token).maybeSingle();
+    if (!invite) throw new Error("This invite link is invalid or has expired.");
+    if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) throw new Error("This invite link has expired.");
+    if (invite.max_uses && invite.use_count >= invite.max_uses) throw new Error("This invite link has reached its usage limit.");
+    return { group: invite.group };
+  });
+
+export const joinGroupViaInvite = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ token: z.string().min(8).max(120) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const { data: invite } = await db.from("group_invites").select("*").eq("token", data.token).maybeSingle();
+    if (!invite) throw new Error("This invite link is invalid or has expired.");
+    if (invite.expires_at && new Date(invite.expires_at).getTime() < Date.now()) throw new Error("This invite link has expired.");
+    if (invite.max_uses && invite.use_count >= invite.max_uses) throw new Error("This invite link has reached its usage limit.");
+
+    const { data: existing } = await db.from("group_members").select("user_id").eq("group_id", invite.group_id).eq("user_id", context.userId).maybeSingle();
+    if (!existing) {
+      const { error } = await db.from("group_members").insert({ group_id: invite.group_id, user_id: context.userId, role: "member" });
+      if (error) throw error;
+      await db.from("group_invites").update({ use_count: invite.use_count + 1 }).eq("id", invite.id);
+    }
+    return { group_id: invite.group_id };
   });

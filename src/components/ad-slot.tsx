@@ -119,7 +119,7 @@ export function AdSlot({ placement, className }: { placement: Placement; classNa
   const rotateMs = useMemo(() => {
     if (ads.length < 2) return null;
     const mins = Math.min(...ads.map((a: any) => Number(a.frequency_minutes ?? 5)));
-    return Math.max(20_000, Math.max(1, mins) * 60_000);
+    return Math.max(15_000, Math.max(1, mins) * 60_000);
   }, [ads]);
 
   useEffect(() => {

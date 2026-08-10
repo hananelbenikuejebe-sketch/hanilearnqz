@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useState } from "react";
 import { submitAd, previewAdPrice, listMyAds, uploadAdImage, PLACEMENTS } from "@/lib/ads.functions";
+import { payAdFromWallet } from "@/lib/wallet.functions";
+import { PayDialog } from "@/components/pay-dialog";
 import { fileToBase64, ImageUploadField } from "@/components/image-upload-field";
 import { AdSettingsGuide } from "@/routes/_authenticated/admin/ads";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -53,6 +55,7 @@ function CreatorAdsPage() {
   const previewFn = useServerFn(previewAdPrice);
   const listFn = useServerFn(listMyAds);
   const uploadFn = useServerFn(uploadAdImage);
+  const payFn = useServerFn(payAdFromWallet);
 
   const [form, setForm] = useState<FormState>(emptyForm);
   const [preview, setPreview] = useState<{ price_kobo: number; breakdown: { label: string; amount_kobo: number }[]; is_free: boolean; eligible_for_free: boolean } | null>(null);
@@ -100,6 +103,19 @@ function CreatorAdsPage() {
     },
     onError: (e: any) => toast.error(e.message ?? "Failed to submit ad"),
   });
+
+  const payFromWallet = useMutation({
+    mutationFn: (adId: string) => payFn({ data: { ad_id: adId } }),
+    onSuccess: () => { toast.success("Paid from wallet — awaiting admin approval."); qc.invalidateQueries({ queryKey: ["my-ads"] }); },
+    onError: (e: any) => toast.error(e.message ?? "Payment failed"),
+  });
+
+  function remainingDays(ad: any): number | null {
+    if (!ad.paid_at && !ad.is_free) return null;
+    const start = ad.start_at ? new Date(ad.start_at).getTime() : new Date(ad.paid_at ?? ad.created_at).getTime();
+    const end = start + Number(ad.days ?? 1) * 86_400_000;
+    return Math.max(0, Math.ceil((end - Date.now()) / 86_400_000));
+  }
 
   function togglePlacement(p: string) {
     setForm((f) => ({ ...f, placements: f.placements.includes(p) ? f.placements.filter((x) => x !== p) : [...f.placements, p] }));
@@ -222,8 +238,21 @@ function CreatorAdsPage() {
                   <span>{ad.is_free ? "Free" : naira(ad.price_kobo)}</span>
                   <span>·</span>
                   <span>{ad.is_free ? "N/A" : ad.paid_at ? "Payment received" : "Awaiting payment"}</span>
+                  {ad.status === "approved" && remainingDays(ad) != null && (<><span>·</span><span>{remainingDays(ad)} day{remainingDays(ad) === 1 ? "" : "s"} left</span></>)}
+                  <span>·</span>
+                  <span>{ad.impressions ?? 0} impressions</span>
+                  <span>·</span>
+                  <span>{ad.clicks ?? 0} clicks</span>
                   {ad.review_note && <><span>·</span><span>Note: {ad.review_note}</span></>}
                 </div>
+                {!ad.is_free && !ad.paid_at && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button size="sm" variant="outline" disabled={payFromWallet.isPending} onClick={() => payFromWallet.mutate(ad.id)}>
+                      {payFromWallet.isPending ? "Paying…" : `Pay ${naira(ad.price_kobo)} from wallet`}
+                    </Button>
+                    <PayDialog purpose="ad_placement" amountKobo={ad.price_kobo} adId={ad.id} label="Pay by transfer receipt" variant="secondary" size="sm" />
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))}

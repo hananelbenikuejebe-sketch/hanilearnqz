@@ -1,11 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import * as React from "react";
 import { useState, useMemo } from "react";
 import { listPublishedQuizzes } from "@/lib/quizzes.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
 import { searchProfiles, getFollowingIds } from "@/lib/profiles.functions";
-import { getMyTasteProfile } from "@/lib/taste.functions";
+import { getMyTasteProfile, getForYouFeed } from "@/lib/taste.functions";
+import { trackEvent } from "@/lib/behavior.functions";
 import { timeAgo } from "@/lib/time-ago";
 import { AppShell } from "@/components/app-nav";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -36,17 +38,35 @@ function Explore() {
   const searchPeople = useServerFn(searchProfiles);
   const followingFn = useServerFn(getFollowingIds);
   const [q, setQ] = useState("");
-  const [sort, setSort] = useState("relevance");
+  const [sort, setSort] = useState("recent");
   const [cat, setCat] = useState("all");
-  const [feed, setFeed] = useState<"all" | "following">("all");
+  const [feed, setFeed] = useState<"foryou" | "all" | "following">("foryou");
+  const [visitSeed] = useState(() => `${Date.now()}:${Math.random()}`);
   const [view, setView] = useState<"grid" | "list" | "compact">("grid");
   const { data: quizzes, isLoading } = useQuery({ queryKey: ["published-quizzes"], queryFn: () => fetchQuizzes() });
   const { data: status } = useQuery({ queryKey: ["creator-status"], queryFn: () => fetchStatus() });
   const { data: followingIds } = useQuery({ queryKey: ["following-ids"], queryFn: () => followingFn() });
   const tasteFn = useServerFn(getMyTasteProfile);
   const { data: taste } = useQuery({ queryKey: ["my-taste"], queryFn: () => tasteFn() });
+  const forYouFn = useServerFn(getForYouFeed);
+  const trackFn = useServerFn(trackEvent);
+  const { data: forYou, isLoading: forYouLoading } = useQuery({
+    queryKey: ["for-you-feed", visitSeed],
+    queryFn: () => forYouFn({ data: { seed: visitSeed } }),
+    enabled: feed === "foryou",
+    staleTime: Infinity,
+  });
   const { data: people } = useQuery({ queryKey: ["profile-search", q], queryFn: () => searchPeople({ data: { q } }), enabled: q.trim().length > 1 });
   const feedAds = useActiveAds("explore").filter((a: any) => a.auto_show);
+
+  React.useEffect(() => {
+    if (feed !== "foryou" || !forYou?.quizzes?.length) return;
+    const events = forYou.quizzes.slice(0, 15).map((quiz: any) => ({ kind: "impression" as const, quiz_id: quiz.id, creator_id: quiz.created_by, category: quiz.category }));
+    const t = setTimeout(() => { trackFn({ data: { events } }).catch(() => {}); }, 800);
+    return () => clearTimeout(t);
+  }, [feed, forYou]);
+
+  const trackOpen = (quiz: any) => { trackFn({ data: { events: [{ kind: "open" as const, quiz_id: quiz.id, creator_id: quiz.created_by, category: quiz.category }] } }).catch(() => {}); };
 
   const cats = useMemo(() => {
     const s = new Set<string>();
@@ -55,7 +75,7 @@ function Explore() {
   }, [quizzes]);
 
   const filtered = useMemo(() => {
-    let list = [...(quizzes ?? [])];
+    let list = feed === "foryou" ? [...(forYou?.quizzes ?? [])] : [...(quizzes ?? [])];
     if (q.trim()) {
       const needle = q.toLowerCase();
       list = list.filter((x: any) =>
@@ -67,6 +87,7 @@ function Explore() {
     }
     if (cat !== "all") list = list.filter((x: any) => x.category === cat);
     if (feed === "following") list = list.filter((x: any) => (followingIds ?? []).includes(x.created_by));
+    if (feed === "foryou") return list; // server already ranked + seeded-shuffled this
     if (sort === "relevance") {
       // Relevance = what you already like (same category / subject / creator,
       // plus people you follow) balanced against what's viral and what's new.
@@ -93,7 +114,7 @@ function Explore() {
     if (sort === "shortest") list.sort((a: any, b: any) => a.duration_min - b.duration_min);
     if (sort === "longest") list.sort((a: any, b: any) => b.duration_min - a.duration_min);
     return list;
-  }, [quizzes, q, sort, cat, feed, followingIds, taste]);
+  }, [quizzes, forYou, q, sort, cat, feed, followingIds, taste]);
 
   return (
     <AppShell isSuperAdmin={status?.is_super_admin}>
@@ -102,7 +123,7 @@ function Explore() {
           <div><h1 className="text-3xl font-bold tracking-tight">Explore</h1><p className="text-muted-foreground">Discover quizzes and people in the community.</p></div>
           <div className="flex rounded-md border p-1"><Button size="icon" variant={view === "grid" ? "secondary" : "ghost"} onClick={() => setView("grid")} title="Grid"><Grid2X2 className="h-4 w-4"/></Button><Button size="icon" variant={view === "list" ? "secondary" : "ghost"} onClick={() => setView("list")} title="List"><List className="h-4 w-4"/></Button><Button size="icon" variant={view === "compact" ? "secondary" : "ghost"} onClick={() => setView("compact")} title="Compact"><Rows3 className="h-4 w-4"/></Button></div>
         </div>
-        <div className="mb-4 flex gap-2"><Button size="sm" variant={feed === "all" ? "default" : "outline"} onClick={() => setFeed("all")}>All quizzes</Button><Button size="sm" variant={feed === "following" ? "default" : "outline"} onClick={() => setFeed("following")}>Following</Button><Button asChild size="sm" variant="ghost"><Link to="/messages"><MessageSquare className="mr-1 h-4 w-4"/>Messages</Link></Button></div>
+        <div className="mb-4 flex flex-wrap gap-2"><Button size="sm" variant={feed === "foryou" ? "default" : "outline"} onClick={() => setFeed("foryou")}>For you</Button><Button size="sm" variant={feed === "all" ? "default" : "outline"} onClick={() => setFeed("all")}>All quizzes</Button><Button size="sm" variant={feed === "following" ? "default" : "outline"} onClick={() => setFeed("following")}>Following</Button><Button asChild size="sm" variant="ghost"><Link to="/messages"><MessageSquare className="mr-1 h-4 w-4"/>Messages</Link></Button></div>
         <div className="flex flex-col md:flex-row gap-2 mb-6">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -112,21 +133,25 @@ function Explore() {
             <SelectTrigger className="md:w-44"><SelectValue placeholder="Category" /></SelectTrigger>
             <SelectContent>{cats.map((c) => <SelectItem key={c} value={c}>{c === "all" ? "All categories" : c}</SelectItem>)}</SelectContent>
           </Select>
+          {feed !== "foryou" && (
           <Select value={sort} onValueChange={setSort}>
             <SelectTrigger className="md:w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="relevance">For you</SelectItem>
               <SelectItem value="recent">Recent</SelectItem>
               <SelectItem value="popular">Most liked</SelectItem>
               <SelectItem value="shortest">Shortest</SelectItem>
               <SelectItem value="longest">Longest</SelectItem>
             </SelectContent>
           </Select>
+          )}
         </div>
         {q.trim().length > 1 && (people ?? []).length > 0 && <div className="mb-6"><div className="mb-2 flex items-center gap-2 text-sm font-semibold"><Users className="h-4 w-4"/>People</div><div className="flex gap-2 overflow-x-auto pb-2">{(people ?? []).map((p: any) => <Button key={p.id} asChild variant="outline" className="h-auto shrink-0 justify-start px-3 py-2"><Link to="/profile/$userId" params={{ userId: p.id }}><span className="grid h-8 w-8 place-items-center rounded-full bg-muted">{(p.full_name || p.handle || "?").slice(0,1).toUpperCase()}</span><span className="ml-2 text-left"><span className="block text-sm">{p.full_name || p.handle}</span>{p.handle && <span className="block text-xs text-muted-foreground">@{p.handle}</span>}</span></Link></Button>)}</div></div>}
         <AdSlot placement="explore" className="mb-4" />
-        {isLoading && <p className="text-muted-foreground">Loading…</p>}
-        {!isLoading && filtered.length === 0 && (
+        {(feed === "foryou" ? forYouLoading : isLoading) && <p className="text-muted-foreground">Loading…</p>}
+        {!(feed === "foryou" ? forYouLoading : isLoading) && filtered.length === 0 && (
+          feed === "foryou" ? (
+            <Card><CardContent className="py-12 text-center text-muted-foreground">No tailored picks yet — like, follow or take a few quizzes and check back.</CardContent></Card>
+          ) :
           <Card><CardContent className="py-12 text-center text-muted-foreground">No quizzes match your filters.</CardContent></Card>
         )}
         <div className={view === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-2"}>
@@ -170,7 +195,7 @@ function Explore() {
                   )}
                 </div>
                 <Button asChild className={view === "grid" ? "w-full" : "w-fit"} size="sm">
-                  <Link to="/quiz/$quizId" params={{ quizId: quiz.id }}><Play className="h-3.5 w-3.5 mr-1" />Start</Link>
+                  <Link to="/quiz/$quizId" params={{ quizId: quiz.id }} onClick={() => trackOpen(quiz)}><Play className="h-3.5 w-3.5 mr-1" />Start</Link>
                 </Button>
               </CardContent></div>
             </Card>

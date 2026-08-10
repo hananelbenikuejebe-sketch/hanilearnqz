@@ -1,321 +1,128 @@
 /**
- * All guided-tour content lives here. Each tour is a short, ordered list of steps.
- * `target` is either:
- *   - a plain CSS selector (e.g. `[data-coach="wallet"]`, `nav a[href="/wallet"]`)
- *   - `text:Some Label` which finds the first heading/button/link whose visible text
- *     contains "Some Label" (case-insensitive) — used when no stable selector/hook exists.
- * If nothing resolves, TourOverlay falls back to a centered card automatically.
+ * All guided-tour content lives here. Tours are short (3-6 steps), contextual,
+ * and grounded in real selectors from the actual routes under
+ * src/routes/_authenticated. Each tour only auto-triggers on the page it's about.
+ *
+ * `target` resolution (see tour-overlay.tsx):
+ *   - a plain CSS selector (e.g. `[data-tour="wallet-balance"]`, `nav a[href="/wallet"]`)
+ *   - `text:Some Label` fuzzy-matches the first visible heading/button/link/tab
+ *     whose text contains "Some Label" (case-insensitive)
+ * A step may also declare:
+ *   - `route`: navigate here before this step is shown (tour survives page changes)
+ *   - `action`: a target to click first (e.g. a tab or collapsible trigger) so the
+ *     real target becomes visible before we spotlight it
+ *   - `waitMs`: extra settle time after an action/route change before measuring
+ * Steps whose target never resolves are skipped automatically instead of
+ * blurring the whole screen.
  */
 
 export type TourStep = {
   title: string;
   body: string;
   target?: string;
+  /** Selector to click before resolving `target` (opens a tab/accordion/etc). */
+  action?: string;
+  /** Navigate to this route before showing the step. */
+  route?: string;
+  /** Extra ms to wait after route/action before measuring the target. */
+  waitMs?: number;
   /** Optional monetisation nudge shown as a small link under the body. */
   nudge?: { label: string; to: string };
 };
 
 export type Tour = {
   key: string;
-  /** Route path prefixes that should auto-trigger this tour on first visit. */
+  title: string;
+  /** Route path substrings that should auto-trigger this tour on first visit. */
   matches: string[];
   steps: TourStep[];
 };
 
 export const TOURS: Tour[] = [
   {
-    // Deep, in-place walkthrough of the quiz builder. Must sit before the
-    // generic "/admin" tour because findTourForPath takes the first match.
-    key: "quiz-builder",
-    matches: ["/admin/quizzes/new", "/admin/quizzes/", "/edit"],
-    steps: [
-      {
-        title: "This is the quiz builder",
-        body: "Everything about one quiz lives here: its details, its questions, its settings and its prizes. Nothing is public until you publish.",
-        target: "text:Quiz",
-      },
-      {
-        title: "Start with the basics",
-        body: "Title, subject, category and difficulty. These decide where your quiz shows up in Explore — be specific, it gets you more attempts.",
-        target: "input[name='title'], #title",
-      },
-      {
-        title: "Banner image (optional)",
-        body: "Upload a banner to stand out. Skip it and we generate a clean colour banner for you automatically.",
-        target: "text:Banner",
-      },
-      {
-        title: "Add questions your way",
-        body: "Type them manually, paste/upload a document for the offline parser, or let AI generate a full set from a topic.",
-        target: "text:Questions",
-      },
-      {
-        title: "The paste parser — format matters",
-        body: "Paste questions as: question line, then options as A) B) C) D), then 'Answer: B' and optionally 'Reason:' or 'Explanation:'. The offline parser handles this instantly with no AI credit. Theory questions just need the question plus 'Answer:' as the model answer.",
-        target: "text:Paste",
-      },
-      {
-        title: "AI repair & review",
-        body: "If your document is messy, AI steps in to repair only what the offline parser couldn't read — so you spend the least possible credit.",
-        nudge: { label: "Check AI credit", to: "/wallet" },
-      },
-      {
-        title: "AI generator",
-        body: "No document at all? Describe a topic and how many questions you want, and AI writes them — with answers, explanations and points.",
-        nudge: { label: "Top up to generate", to: "/wallet" },
-      },
-      {
-        title: "Points, not just counts",
-        body: "Each question carries the points you set. Scores and percentages are calculated on total points, so a 10-point essay counts more than a 1-point MCQ.",
-        target: "text:Points",
-      },
-      {
-        title: "Sections & headers",
-        body: "Group questions into sections with their own headers and instructions — perfect for exam-style papers (Section A objectives, Section B theory).",
-        target: "text:Section",
-      },
-      {
-        title: "Settings, grouped",
-        body: "Timer, retakes, randomising, shuffling options, showing answers and explanations, comments, likes, sharing and the leaderboard — each group opens and closes so the page stays calm.",
-        target: "text:Settings",
-      },
-      {
-        title: "Timing & access",
-        body: "Set a duration (from 30 seconds up), enforce it or not, choose public / private with an access key, and schedule a start and end window.",
-        target: "text:Visibility",
-      },
-      {
-        title: "Price and prizes",
-        body: "Charge in Naira per attempt, and add cash prizes for top scorers. Prizes are paid straight into winners' wallets — they reliably pull in far more attempts.",
-        target: "text:Prize",
-        nudge: { label: "Fund prizes from Wallet", to: "/wallet" },
-      },
-      {
-        title: "Analytics after publishing",
-        body: "Once people start attempting, your analytics show attempts, average score, hardest questions and earnings per quiz.",
-      },
-      {
-        title: "Publish and share",
-        body: "Publish, then share the link everywhere — every share brings attempts, and attempts are how you earn.",
-        nudge: { label: "See your earnings", to: "/wallet" },
-      },
-    ],
-  },
-
-  {
-    key: "explore",
+    key: "home-explore",
+    title: "Getting around",
     matches: ["/explore"],
     steps: [
-      {
-        title: "Welcome to Explore",
-        body: "Browse quizzes made by other creators — JAMB, WAEC, NECO and custom sets. Tap any card to preview it.",
-        target: "text:Explore",
-      },
-      {
-        title: "Filter fast",
-        body: "Narrow down by subject, difficulty and price so you find the right quiz in seconds.",
-        target: "[data-coach='explore']",
-      },
-      {
-        title: "Some quizzes cost credit",
-        body: "Priced quizzes are set by their creators. Keep AI credit topped up so you're never blocked mid-search.",
-        target: "nav a[href='/wallet']",
-        nudge: { label: "Top up AI credit", to: "/wallet" },
-      },
-      {
-        title: "Like what you see?",
-        body: "You can build quizzes just like these — upload notes or a past question and let AI do the work.",
-        target: "nav a[href='/create']",
-        nudge: { label: "Start creating", to: "/create" },
-      },
-    ],
-  },
-  {
-    key: "create",
-    matches: ["/create"],
-    steps: [
-      {
-        title: "Three ways to build a quiz",
-        body: "Type questions manually, paste/upload a document for AI parsing, or ask AI to generate fresh questions from a topic.",
-        target: "text:Create",
-      },
-      {
-        title: "The quiz builder",
-        body: "Add sections and questions, set the correct answers, and preview as you go.",
-        target: "[data-coach='create']",
-      },
-      {
-        title: "AI parsing saves hours",
-        body: "Upload a PDF or image of past questions and AI will extract clean, structured questions automatically. This uses AI credit.",
-      },
-      {
-        title: "AI generation",
-        body: "No document? Describe a topic and let AI generate a full set of questions for you in seconds.",
-      },
-      {
-        title: "Price your quiz",
-        body: "Once published, you can charge a small credit fee per attempt — this is how creators earn on HaniLearn.",
-        target: "nav a[href='/wallet']",
-        nudge: { label: "See earnings in Wallet", to: "/wallet" },
-      },
-      {
-        title: "Low on credit?",
-        body: "Parsing and AI generation both use AI credit. Top up any time so you're never interrupted while building.",
-        nudge: { label: "Buy AI credit", to: "/wallet" },
-      },
-    ],
-  },
-  {
-    key: "wallet",
-    matches: ["/wallet"],
-    steps: [
-      {
-        title: "Your Wallet",
-        body: "This is where your AI credit, earnings and payment history live.",
-        target: "text:Wallet",
-      },
-      {
-        title: "AI credit",
-        body: "AI credit powers document parsing, AI question generation, and AI-graded theory answers. It runs out — keep an eye on the balance.",
-        target: "[data-coach='wallet']",
-        nudge: { label: "Buy AI credit now", to: "/wallet" },
-      },
-      {
-        title: "Top up by receipt",
-        body: "Pay via bank transfer and upload your receipt — it's verified automatically, usually within minutes.",
-      },
-      {
-        title: "Go Pro",
-        body: "A Pro / creator-access plan unlocks unlimited or discounted AI usage and creator tools — great value if you create or take a lot of quizzes.",
-        nudge: { label: "Compare plans", to: "/wallet" },
-      },
-      {
-        title: "Withdraw your earnings",
-        body: "Earned from selling quizzes or affiliate links? Add your bank account here and request a withdrawal any time.",
-      },
-    ],
-  },
-  {
-    key: "messages",
-    matches: ["/messages"],
-    steps: [
-      {
-        title: "Messages & Groups",
-        body: "Chat 1:1 with other users, or join/create groups for class discussions and quiz help.",
-        target: "text:Messages",
-      },
-      {
-        title: "Groups",
-        body: "Groups are great for study circles — share quizzes, discuss results and coordinate with classmates.",
-        target: "[data-coach='messages']",
-      },
-      {
-        title: "Share a quiz in chat",
-        body: "You can drop a link to any quiz straight into a conversation — a fast way for creators to get more attempts.",
-        nudge: { label: "Create a quiz to share", to: "/create" },
-      },
-    ],
-  },
-  {
-    key: "profile",
-    matches: ["/profile"],
-    steps: [
-      {
-        title: "Your Profile",
-        body: "Track your milestones, badges and activity here.",
-        target: "text:Profile",
-      },
-      {
-        title: "Milestones & badges",
-        body: "Complete quizzes, create content and refer friends to unlock badges that show up on your public profile.",
-      },
-      {
-        title: "Share your profile",
-        body: "Your public profile link is a great way to promote quizzes you've created and grow your audience.",
-        nudge: { label: "Become a creator", to: "/create" },
-      },
+      { title: "Welcome to Explore", body: "Browse quizzes made by other creators — JAMB, WAEC, NECO and custom sets. Tap any card to preview it.", target: "text:Explore" },
+      { title: "Filter fast", body: "Narrow down by subject, difficulty and price so you find the right quiz in seconds.", target: "[data-tour='explore-filters'], [data-coach='explore']" },
+      { title: "Create", body: "You can build quizzes just like these — upload notes or a past question and let AI do the work.", target: "nav a[href='/create']", nudge: { label: "Start creating", to: "/create" } },
+      { title: "Wallet & credit", body: "Priced quizzes and AI features use credit from your wallet — keep it topped up.", target: "nav a[href='/wallet']", nudge: { label: "Open wallet", to: "/wallet" } },
     ],
   },
   {
     key: "quiz-take",
+    title: "Taking a quiz",
     matches: ["/quiz/", "/take"],
     steps: [
-      {
-        title: "Taking a quiz",
-        body: "Choose Paged mode to answer one question at a time, or Continuous to scroll through all questions freely.",
-      },
-      {
-        title: "Theory questions",
-        body: "Open-ended theory answers are graded by AI against the model answer — this uses a small amount of AI credit per attempt.",
-        nudge: { label: "Check your AI credit", to: "/wallet" },
-      },
-      {
-        title: "Credit deduction",
-        body: "Priced quizzes deduct credit when you start; AI-graded sections may use a little more. Your balance is always shown before you begin.",
-      },
+      { title: "Paged or continuous", body: "Choose Paged mode to answer one question at a time, or Continuous to scroll through all questions freely.", target: "text:Paged" },
+      { title: "Theory questions", body: "Open-ended theory answers are graded by AI against the model answer — this uses a small amount of AI credit per attempt." },
+      { title: "Credit deduction", body: "Priced quizzes deduct credit when you start. Your balance is always shown before you begin.", nudge: { label: "Check your credit", to: "/wallet" } },
+      { title: "Submit when ready", body: "Answer at your own pace, then submit to see your score and full corrections.", target: "text:Submit" },
     ],
   },
   {
-    key: "results",
-    matches: ["/results", "/result"],
+    key: "quiz-builder",
+    title: "Building a quiz",
+    matches: ["/admin/quizzes/new", "/admin/quizzes/", "/edit"],
     steps: [
-      {
-        title: "Results & corrections",
-        body: "See your score, review each question, and read corrections with explanations for anything you missed.",
-        target: "text:Result",
-      },
-      {
-        title: "Turn mistakes into mastery",
-        body: "Retake the quiz, or explore similar quizzes on the same topic to keep improving.",
-        nudge: { label: "Explore similar quizzes", to: "/explore" },
-      },
-      {
-        title: "Enjoyed it?",
-        body: "You could be on the other side of this — creators earn credit every time someone takes their quiz.",
-        nudge: { label: "Create your own quiz", to: "/create" },
-      },
+      // Basics
+      { title: "This is the quiz builder", body: "Everything about one quiz lives here across four tabs: Settings, Questions, Sections, and Import & generate.", target: "text:Settings", action: "[data-tour='tab-settings']" },
+      { title: "Start with the basics", body: "Title, subject, category and difficulty decide where your quiz shows up in Explore — be specific, it gets you more attempts.", target: "input[name='title'], #title", action: "[data-tour='tab-settings']" },
+      // Questions / parser + AI generator
+      { title: "Add questions your way", body: "Switch to the Questions tab to type them manually, or use Import & generate to paste a document or ask AI.", target: "[data-tour='tab-questions']", action: "[data-tour='tab-questions']" },
+      { title: "Paste parser — format matters", body: "Paste: the question line, options as A) B) C) D), then 'Answer: B' and optionally 'Reason:'. The offline parser reads this instantly, no AI credit needed.", target: "[data-tour='tab-ai']", action: "[data-tour='tab-ai']" },
+      { title: "AI generator", body: "No document at all? Describe a topic and how many questions you want and AI writes them — with answers, explanations and points. Uses AI credit.", target: "[data-tour='tab-ai']", nudge: { label: "Check AI credit", to: "/wallet" } },
+      // Sections
+      { title: "Sections & headers", body: "Group questions into sections with their own headers and marks — perfect for exam-style papers (Section A objectives, Section B theory).", target: "[data-tour='tab-sections']", action: "[data-tour='tab-sections']" },
+      // Prizes / pricing / toggles
+      { title: "Price and prizes", body: "Charge per attempt and add cash prizes for top scorers, paid straight into winners' wallets. Toggles below control timer, retakes, shuffling, comments and the leaderboard.", target: "text:Prize", action: "[data-tour='tab-settings']" },
+      // Publish
+      { title: "Publish and share", body: "Flip Published on when you're ready, then share the link everywhere — every share brings attempts, and attempts are how you earn.", target: "text:Publish", action: "[data-tour='tab-settings']", nudge: { label: "See your earnings", to: "/wallet" } },
     ],
   },
   {
-    key: "creators-dashboard",
-    matches: ["/creator", "/dashboard", "/analytics"],
+    key: "analytics",
+    title: "Quiz analytics",
+    matches: ["/results", "/admin/quizzes/", "quizzes/$id/results"],
     steps: [
-      {
-        title: "Creator dashboard",
-        body: "Track attempts, scores and earnings across every quiz you've published.",
-      },
-      {
-        title: "Pricing tricks",
-        body: "Quizzes priced slightly below round numbers (e.g. 45 instead of 50 credit) tend to convert better — try small experiments.",
-      },
-      {
-        title: "Prizes drive attempts",
-        body: "Adding a prize or leaderboard reward for top scorers noticeably increases how many people take a quiz.",
-      },
-      {
-        title: "Run an ad",
-        body: "Boost visibility for a new quiz with a small in-app ad spend — early attempts help your quiz rank higher in Explore.",
-        nudge: { label: "Promote a quiz", to: "/wallet" },
-      },
-      {
-        title: "Affiliate links",
-        body: "Share your affiliate link — you earn credit when people you refer top up or buy Pro, on top of quiz sales.",
-        nudge: { label: "Get your affiliate link", to: "/wallet" },
-      },
+      { title: "Attempts & scores", body: "See every attempt on this quiz, average score, and how each question performed.", target: "text:Result" },
+      { title: "Hardest questions", body: "Spot which questions trip people up most — a sign to clarify wording or adjust points.", target: "text:Question" },
+      { title: "Earnings per quiz", body: "If this quiz is priced, your earnings from it show up here and in your Wallet.", nudge: { label: "See wallet", to: "/wallet" } },
     ],
   },
   {
-    key: "admin",
-    matches: ["/admin"],
+    key: "wallet",
+    title: "Wallet & monetisation",
+    matches: ["/wallet"],
     steps: [
-      {
-        title: "Admin basics",
-        body: "From here you can moderate quizzes, manage users, review payment receipts and broadcast notifications.",
-      },
-      {
-        title: "Payments & settings",
-        body: "Configure pricing defaults, AI provider routing and platform-wide settings under Settings.",
-      },
+      { title: "Your Wallet", body: "This is where your AI credit, earnings and payment history live.", target: "text:Wallet" },
+      { title: "AI credit", body: "AI credit powers document parsing, AI question generation and AI-graded theory answers. It runs out — keep an eye on the balance.", target: "[data-coach='wallet']", nudge: { label: "Buy AI credit now", to: "/wallet" } },
+      { title: "Top up by receipt", body: "Pay via bank transfer and upload your receipt — it's verified automatically, usually within minutes.", target: "text:Bank" },
+      { title: "Go Pro / creator access", body: "Unlocks unlimited or discounted AI usage and creator tools — great value if you create or take a lot of quizzes.", target: "text:Creator" },
+      { title: "Withdraw earnings", body: "Earned from selling quizzes or affiliate links? Add your bank account here and request a withdrawal any time.", target: "text:Withdraw" },
+    ],
+  },
+  {
+    key: "messaging",
+    title: "Messages & groups",
+    matches: ["/messages"],
+    steps: [
+      { title: "Messages & Groups", body: "Chat 1:1 with other users, or join/create groups for class discussions and quiz help.", target: "text:Messages" },
+      { title: "Groups", body: "Groups are great for study circles — share quizzes, discuss results and coordinate with classmates.", target: "[role='tab']" },
+      { title: "Start a chat", body: "Search for anyone to start a new conversation or add them to a group.", target: "text:New" },
+      { title: "Share a quiz in chat", body: "Drop a link to any quiz straight into a conversation — a fast way for creators to get more attempts.", nudge: { label: "Create a quiz to share", to: "/create" } },
+    ],
+  },
+  {
+    key: "ads",
+    title: "Promoting with ads",
+    matches: ["/ads"],
+    steps: [
+      { title: "Promote your quiz", body: "Submit a sponsored ad card to reach more learners across Explore, results and wallet screens.", target: "text:Promote" },
+      { title: "Pick placements", body: "Choose where your ad shows up and for how long — price scales with reach and duration.", target: "text:Placement" },
+      { title: "Live price preview", body: "See the exact cost before you submit, including any free-tier discount you qualify for.", target: "text:price" },
+      { title: "Track your ads", body: "Approved, pending and rejected ads all show here with performance once live.", target: "text:My ads" },
     ],
   },
 ];
