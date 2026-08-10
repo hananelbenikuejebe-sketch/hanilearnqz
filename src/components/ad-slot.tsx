@@ -198,15 +198,16 @@ export function AdSlot({ placement, className }: { placement: Placement; classNa
 }
 
 /** Native ad card meant to be interleaved directly into a scrolling feed. */
-export function FeedAdCard({ ad, placement = "explore" as Placement, className }: { ad: any; placement?: Placement; className?: string }) {
+export function FeedAdCard({ ad, placement = "explore" as Placement, className, view = "grid" }: { ad: any; placement?: Placement; className?: string; view?: "grid" | "list" | "compact" }) {
   const { impression, click } = useAdEvents();
   useEffect(() => {
     if (ad?.id) impression(ad.id, placement);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ad?.id]);
   if (!ad) return null;
-  return <NativeAdCard ad={ad} className={className} onClick={() => click(ad.id, placement)} />;
+  return <NativeAdCard ad={ad} view={view} className={className} onClick={() => click(ad.id, placement)} />;
 }
+
 
 /**
  * Builds a feed array with a native ad card injected every `every` items,
