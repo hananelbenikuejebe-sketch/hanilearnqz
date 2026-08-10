@@ -124,7 +124,7 @@ function Explore() {
           <div className="flex rounded-md border p-1"><Button size="icon" variant={view === "grid" ? "secondary" : "ghost"} onClick={() => setView("grid")} title="Grid"><Grid2X2 className="h-4 w-4"/></Button><Button size="icon" variant={view === "list" ? "secondary" : "ghost"} onClick={() => setView("list")} title="List"><List className="h-4 w-4"/></Button><Button size="icon" variant={view === "compact" ? "secondary" : "ghost"} onClick={() => setView("compact")} title="Compact"><Rows3 className="h-4 w-4"/></Button></div>
         </div>
         <div className="mb-4 flex flex-wrap gap-2"><Button size="sm" variant={feed === "foryou" ? "default" : "outline"} onClick={() => setFeed("foryou")}>For you</Button><Button size="sm" variant={feed === "all" ? "default" : "outline"} onClick={() => setFeed("all")}>All quizzes</Button><Button size="sm" variant={feed === "following" ? "default" : "outline"} onClick={() => setFeed("following")}>Following</Button><Button asChild size="sm" variant="ghost"><Link to="/messages"><MessageSquare className="mr-1 h-4 w-4"/>Messages</Link></Button></div>
-        <div className="flex flex-col md:flex-row gap-2 mb-6">
+        <div className="flex flex-col md:flex-row gap-2 mb-6" data-tour="explore-filters" data-coach="explore">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search by title, subject, category…" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
