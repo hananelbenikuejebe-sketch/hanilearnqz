@@ -100,12 +100,12 @@ export const getForYouFeed = createServerFn({ method: "GET" })
       // seeded jitter keeps ordering fresh each visit without abandoning relevance
       const rand = mulberry32(hashToUint32(`${visitSeed}:${q.id}`))();
       score += rand * 8;
-      return { quiz: q, score };
+      return { quiz: q, score } as { quiz: any; score: number };
     });
 
-    scored.sort((a, b) => b.score - a.score);
+    scored.sort((a: { score: number }, b: { score: number }) => b.score - a.score);
     const count = Math.min(15, Math.max(5, Math.min(15, scored.length)));
-    const picked = scored.slice(0, count).map((s) => s.quiz);
+    const picked = scored.slice(0, count).map((s: { quiz: any }) => s.quiz);
 
     // Persist impressions so future visits demote these (best-effort).
     if (picked.length) {

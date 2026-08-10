@@ -4,7 +4,7 @@ import { useRouterState, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { generateAmbientTip } from "@/lib/tours.functions";
+import { generateAmbientTip, listSeenTips, markTipSeen, rankTipsByInterest } from "@/lib/tours.functions";
 import { supabase } from "@/integrations/supabase/client";
 
 type Tip = { id: string; target: string; title: string; body: string; nudgeTo?: string; nudgeLabel?: string };
@@ -48,7 +48,27 @@ export function CoachMarks() {
   const [active, setActive] = useState<Tip | null>(null);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const generateTip = useServerFn(generateAmbientTip);
+  const listSeenFn = useServerFn(listSeenTips);
+  const markSeenFn = useServerFn(markTipSeen);
+  const rankFn = useServerFn(rankTipsByInterest);
   const aiTipCache = useRef<Map<string, string>>(new Map());
+  const remoteSeen = useRef<Set<string> | null>(null);
+  const rankedOrder = useRef<string[] | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (!data.session) return;
+        const r = await listSeenFn();
+        remoteSeen.current = new Set(r?.tipIds ?? []);
+        try {
+          const ranked = await rankFn({ data: { tipIds: TIPS.map((t) => t.id) } });
+          rankedOrder.current = ranked?.tipIds ?? null;
+        } catch { /* ranking is optional */ }
+      } catch { /* stay on local-only rotation */ }
+    })();
+  }, [listSeenFn, rankFn]);
 
   const isQuizInProgress = /\/(quiz|attempt|exam)s?\/[^/]+\/(take|play|attempt)/.test(pathname) || pathname.includes("/take");
 
@@ -57,11 +77,17 @@ export function CoachMarks() {
     if (sessionCount() >= MAX_PER_SESSION) return;
     const store = loadStore();
     if (store.dismissedForever) return;
-    const seen = new Set(store.seen ?? []);
-    const candidates = TIPS.filter((t) => document.querySelector(`[data-coach="${t.target}"]`));
+    const seen = new Set([...(store.seen ?? []), ...(remoteSeen.current ?? [])]);
+    let candidates = TIPS.filter((t) => document.querySelector(`[data-coach="${t.target}"]`));
     if (!candidates.length) return;
+    if (rankedOrder.current) {
+      const order = rankedOrder.current;
+      candidates = [...candidates].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    }
     const unseen = candidates.filter((t) => !seen.has(t.id));
-    const tip = (unseen.length ? unseen : candidates)[Math.floor(Math.random() * (unseen.length ? unseen.length : candidates.length))];
+    // Rotate: always prefer a fresh tip so returning users see something new.
+    const pool = unseen.length ? unseen : candidates;
+    const tip = rankedOrder.current ? pool[0] : pool[Math.floor(Math.random() * pool.length)];
     const el = document.querySelector(`[data-coach="${tip.target}"]`) as HTMLElement | null;
     if (!el) return;
     setActive(tip);
@@ -105,6 +131,8 @@ export function CoachMarks() {
       const seen = new Set(store.seen ?? []);
       seen.add(active.id);
       saveStore({ dismissedForever: forever, seen: Array.from(seen) });
+      remoteSeen.current = new Set([...(remoteSeen.current ?? []), active.id]);
+      markSeenFn({ data: { tipId: active.id } }).catch(() => { /* best-effort */ });
     }
     try { localStorage.setItem(NEXT_SHOW_KEY, String(Date.now() + INTERVAL_MS)); } catch { /* noop */ }
     setActive(null);

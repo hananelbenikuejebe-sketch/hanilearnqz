@@ -15,10 +15,14 @@ export const listGuides = createServerFn({ method: "GET" })
       q,
       db.from("payment_settings").select("support_whatsapp").eq("id", "default").maybeSingle(),
     ]);
+    const { getSupportContact } = await import("./profiles.functions");
+    let support_contact: any = null;
+    try { support_contact = await getSupportContact(); } catch { support_contact = null; }
     return {
       guides: guides ?? [],
       is_admin: admin,
       support_whatsapp: settings?.support_whatsapp ?? "+2349071829295",
+      support_contact,
     };
   });
 

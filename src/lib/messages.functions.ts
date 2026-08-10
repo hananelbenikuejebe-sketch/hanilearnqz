@@ -109,7 +109,7 @@ export const sendMessage = createServerFn({ method: "POST" })
       void notifyUsers([data.recipient_id], {
         kind: "new_message",
         title: "New message",
-        body: data.body.slice(0, 140),
+        body: (data.body ?? "").slice(0, 140),
         link: `/messages/${context.userId}`,
       });
     } catch { /* best-effort, never blocks sending */ }
