@@ -178,6 +178,33 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_notification_log: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          sent_on: string
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind?: string
+          sent_on?: string
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          sent_on?: string
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_usage_log: {
         Row: {
           created_at: string
@@ -370,7 +397,11 @@ export type Database = {
       }
       direct_messages: {
         Row: {
-          body: string
+          attachment_duration_sec: number | null
+          attachment_mime: string | null
+          attachment_path: string | null
+          attachment_type: string | null
+          body: string | null
           created_at: string
           id: string
           read_at: string | null
@@ -378,7 +409,11 @@ export type Database = {
           sender_id: string
         }
         Insert: {
-          body: string
+          attachment_duration_sec?: number | null
+          attachment_mime?: string | null
+          attachment_path?: string | null
+          attachment_type?: string | null
+          body?: string | null
           created_at?: string
           id?: string
           read_at?: string | null
@@ -386,7 +421,11 @@ export type Database = {
           sender_id: string
         }
         Update: {
-          body?: string
+          attachment_duration_sec?: number | null
+          attachment_mime?: string | null
+          attachment_path?: string | null
+          attachment_type?: string | null
+          body?: string | null
           created_at?: string
           id?: string
           read_at?: string | null
@@ -491,6 +530,54 @@ export type Database = {
         }
         Relationships: []
       }
+      group_invites: {
+        Row: {
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          group_id: string
+          id: string
+          max_uses: number | null
+          token: string
+          use_count: number
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          group_id: string
+          id?: string
+          max_uses?: number | null
+          token?: string
+          use_count?: number
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          group_id?: string
+          id?: string
+          max_uses?: number | null
+          token?: string
+          use_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "group_invites_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "group_invites_group_id_fkey"
+            columns: ["group_id"]
+            isOneToOne: false
+            referencedRelation: "groups"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       group_members: {
         Row: {
           created_at: string
@@ -522,21 +609,33 @@ export type Database = {
       }
       group_messages: {
         Row: {
-          body: string
+          attachment_duration_sec: number | null
+          attachment_mime: string | null
+          attachment_path: string | null
+          attachment_type: string | null
+          body: string | null
           created_at: string
           group_id: string
           id: string
           user_id: string
         }
         Insert: {
-          body: string
+          attachment_duration_sec?: number | null
+          attachment_mime?: string | null
+          attachment_path?: string | null
+          attachment_type?: string | null
+          body?: string | null
           created_at?: string
           group_id: string
           id?: string
           user_id: string
         }
         Update: {
-          body?: string
+          attachment_duration_sec?: number | null
+          attachment_mime?: string | null
+          attachment_path?: string | null
+          attachment_type?: string | null
+          body?: string | null
           created_at?: string
           group_id?: string
           id?: string
@@ -964,6 +1063,10 @@ export type Database = {
           handle: string | null
           id: string
           is_guest: boolean
+          level: string | null
+          school: string | null
+          social_links: Json
+          whatsapp_number: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -975,6 +1078,10 @@ export type Database = {
           handle?: string | null
           id: string
           is_guest?: boolean
+          level?: string | null
+          school?: string | null
+          social_links?: Json
+          whatsapp_number?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -986,6 +1093,10 @@ export type Database = {
           handle?: string | null
           id?: string
           is_guest?: boolean
+          level?: string | null
+          school?: string | null
+          social_links?: Json
+          whatsapp_number?: string | null
         }
         Relationships: []
       }
@@ -1538,6 +1649,61 @@ export type Database = {
         }
         Relationships: []
       }
+      user_events: {
+        Row: {
+          category: string | null
+          created_at: string
+          creator_id: string | null
+          id: string
+          kind: string
+          meta: Json
+          quiz_id: string | null
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          creator_id?: string | null
+          id?: string
+          kind: string
+          meta?: Json
+          quiz_id?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          creator_id?: string | null
+          id?: string
+          kind?: string
+          meta?: Json
+          quiz_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_events_creator_id_fkey"
+            columns: ["creator_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_events_quiz_id_fkey"
+            columns: ["quiz_id"]
+            isOneToOne: false
+            referencedRelation: "quizzes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_follows: {
         Row: {
           created_at: string
@@ -1591,6 +1757,24 @@ export type Database = {
           created_at?: string
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_seen_tips: {
+        Row: {
+          seen_at: string
+          tip_id: string
+          user_id: string
+        }
+        Insert: {
+          seen_at?: string
+          tip_id: string
+          user_id: string
+        }
+        Update: {
+          seen_at?: string
+          tip_id?: string
           user_id?: string
         }
         Relationships: []
@@ -1717,6 +1901,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      debit_ai_credit: {
+        Args: { _amount_kobo: number; _user_id: string }
+        Returns: boolean
+      }
       has_active_creator_subscription: {
         Args: { _user_id: string }
         Returns: boolean
