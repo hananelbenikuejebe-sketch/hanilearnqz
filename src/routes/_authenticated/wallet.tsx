@@ -220,16 +220,34 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
   );
 }
 
+/**
+ * Support hand-off. Prefers an in-app DM to the platform admin; falls back to
+ * WhatsApp only when no admin account can be resolved.
+ */
 function ContactAdmin({ purpose, amount }: { purpose: string; amount?: number }) {
+  const contactFn = useServerFn(getSupportContact);
+  const { data: contact } = useQuery({ queryKey: ["support-contact"], queryFn: () => contactFn(), staleTime: 300_000 });
   const amt = amount ? `₦${(amount / 100).toLocaleString("en-NG")}` : "";
-  const msg = encodeURIComponent(`Hi, I'd like to pay for ${purpose}${amt ? ` (${amt})` : ""} manually on HaniLearn-QZ. My account email is:`);
-  const url = `https://wa.me/2349071829295?text=${msg}`;
+  const text = `Hi, I'd like to pay for ${purpose}${amt ? ` (${amt})` : ""} manually on HaniLearn-QZ.`;
+
+  if (contact?.user_id) {
+    return (
+      <Button size="sm" variant="outline" asChild>
+        <Link to="/messages/$userId" params={{ userId: contact.user_id }} search={{ draft: text } as any}>
+          <MessageSquare className="mr-1 h-4 w-4" />Message admin
+        </Link>
+      </Button>
+    );
+  }
+
+  const fallback = contact?.whatsapp?.replace(/[^\d]/g, "") || "2349071829295";
   return (
     <Button size="sm" variant="outline" asChild>
-      <a href={url} target="_blank" rel="noopener noreferrer">Contact on WhatsApp</a>
+      <a href={`https://wa.me/${fallback}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">Contact support</a>
     </Button>
   );
 }
+
 
 function ProPlans({ settings, status }: any) {
   const base = settings?.creator_access_price_kobo ?? 0;
