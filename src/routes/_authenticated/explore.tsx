@@ -157,7 +157,8 @@ function Explore() {
         <div className={view === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3" : "space-y-2"}>
           {interleaveAds(filtered, feedAds, 4).map((entry) => {
             if (entry.type === "ad") {
-              return <FeedAdCard key={entry.key} ad={entry.ad} placement="explore" className={view === "grid" ? undefined : "sm:max-w-md"} />;
+              return <FeedAdCard key={entry.key} ad={entry.ad} placement="explore" view={view} className={view === "grid" ? undefined : "sm:max-w-md"} />;
+
             }
             const quiz = entry.item;
             return (
