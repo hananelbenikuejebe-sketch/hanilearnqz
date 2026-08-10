@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sparkles, TrendingUp, LogOut, Lock, ListChecks } from "lucide-react";
 import { toast } from "sonner";
+import { ProfileEditDialog } from "@/components/profile-edit-dialog";
 
 export const Route = createFileRoute("/_authenticated/profile/")({
   head: () => ({ meta: [
@@ -92,6 +93,17 @@ function Profile() {
                       <ShareButton url={`/profile/${me.id}`} title={`${me.name} on HaniLearn-QZ`} text={`This is my HaniLearn-QZ profile — my quizzes, scores and milestones.`} label="Share my profile" />
                     </div>
                   )}
+                  {pub?.profile?.bio && <p className="mt-2 whitespace-pre-wrap text-sm">{pub.profile.bio}</p>}
+                  {(pub?.profile?.school || pub?.profile?.level) && (
+                    <p className="mt-1 text-xs text-muted-foreground">{[pub.profile.school, pub.profile.level].filter(Boolean).join(" · ")}</p>
+                  )}
+                  {pub?.profile?.social_links && Object.entries(pub.profile.social_links as Record<string, string>).filter(([, v]) => !!v).length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                      {Object.entries(pub.profile.social_links as Record<string, string>).filter(([, v]) => !!v).map(([k, v]) => (
+                        <a key={k} href={v} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{k}</a>
+                      ))}
+                    </div>
+                  )}
                   {pub && (
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                       <span className="tabular-nums"><b className="text-foreground">{pub.quizzes.length}</b> quizzes created</span>
@@ -103,6 +115,7 @@ function Profile() {
               </div>
               <div className="flex shrink-0 flex-wrap gap-2">
                 {me?.guest && <Button size="sm" onClick={() => navigate({ to: "/auth" })}>Sign up</Button>}
+                {!me?.guest && <ProfileEditDialog profile={pub?.profile} />}
                 <Button size="sm" variant="outline" onClick={async () => { await supabase.auth.signOut(); navigate({ to: "/auth" }); }}>
                   <LogOut className="mr-1 h-4 w-4" />Sign out
                 </Button>

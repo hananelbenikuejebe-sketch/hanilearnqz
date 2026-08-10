@@ -49,56 +49,97 @@ export function useAdEvents() {
   };
 }
 
-/** Polished native ad card look, shared by feed cards and slot cards. */
+/**
+ * Polished native ad card. `view` mirrors the Explore feed layouts so a
+ * sponsored card sits in the grid/list/compact feed looking like a quiz card.
+ */
 export function NativeAdCard({
   ad,
   onClick,
   onDismiss,
   className,
+  view = "grid",
 }: {
   ad: any;
   onClick?: () => void;
   onDismiss?: () => void;
   className?: string;
+  view?: "grid" | "list" | "compact";
 }) {
+  const sponsored = (
+    <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+      <Sparkles className="h-2.5 w-2.5 text-primary" /> Sponsored
+    </span>
+  );
+  const dismissBtn = onDismiss ? (
+    <button
+      type="button"
+      aria-label="Dismiss"
+      onClick={onDismiss}
+      className="absolute right-2 top-2 z-10 rounded-full bg-background/80 p-1 text-muted-foreground backdrop-blur hover:text-foreground"
+    >
+      <X className="h-3.5 w-3.5" />
+    </button>
+  ) : null;
+  const cta = ad.cta_url ? (
+    <Button asChild size="sm" className={view === "grid" ? "mt-2 w-full" : "mt-2 w-fit"} onClick={onClick}>
+      <a href={ad.cta_url} target="_blank" rel="noopener noreferrer">{ad.cta_label || "Learn more"}</a>
+    </Button>
+  ) : null;
+
+  if (view === "compact") {
+    return (
+      <Card className={`relative overflow-hidden border-primary/10 ${className ?? ""}`}>
+        {dismissBtn}
+        <CardContent className="space-y-1 p-3">
+          {sponsored}
+          <div className="text-sm font-semibold leading-tight">{ad.title}</div>
+          {ad.body && <p className="line-clamp-1 text-xs text-muted-foreground">{ad.body}</p>}
+          {cta}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (view === "list") {
+    return (
+      <Card className={`relative flex overflow-hidden border-primary/10 ${className ?? ""}`}>
+        {dismissBtn}
+        <div className="w-36 shrink-0 overflow-hidden bg-muted">
+          {ad.image_url
+            ? <img src={ad.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
+            : <div className="grid h-full w-full place-items-center"><Sparkles className="h-5 w-5 text-primary" /></div>}
+        </div>
+        <CardContent className="min-w-0 flex-1 space-y-1 p-4">
+          {sponsored}
+          <div className="text-sm font-semibold leading-tight">{ad.title}</div>
+          {ad.body && <p className="line-clamp-2 text-xs text-muted-foreground">{ad.body}</p>}
+          {cta}
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className={`relative overflow-hidden border-primary/10 shadow-sm transition hover:shadow-md ${className ?? ""}`}>
-      {onDismiss && (
-        <button
-          type="button"
-          aria-label="Dismiss"
-          onClick={onDismiss}
-          className="absolute right-2 top-2 z-10 rounded-full bg-background/80 p-1 text-muted-foreground backdrop-blur hover:text-foreground"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      )}
+      {dismissBtn}
       {ad.image_url ? (
         <div className="relative aspect-video w-full overflow-hidden bg-muted">
           <img src={ad.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-          <span className="absolute left-2 top-2 flex items-center gap-1 rounded-full bg-background/85 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground backdrop-blur">
-            <Sparkles className="h-2.5 w-2.5 text-primary" /> Sponsored
-          </span>
+          <span className="absolute left-2 top-2 rounded-full bg-background/85 px-2 py-0.5 backdrop-blur">{sponsored}</span>
         </div>
       ) : (
-        <div className="flex items-center gap-1 px-4 pt-3 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          <Sparkles className="h-2.5 w-2.5 text-primary" /> Sponsored
-        </div>
+        <div className="px-4 pt-3">{sponsored}</div>
       )}
       <CardContent className="space-y-1.5 p-4">
         <div className="text-sm font-semibold leading-tight">{ad.title}</div>
         {ad.body && <p className="line-clamp-2 text-xs leading-snug text-muted-foreground">{ad.body}</p>}
-        {ad.cta_url && (
-          <Button asChild size="sm" className="mt-2 w-full" onClick={onClick}>
-            <a href={ad.cta_url} target="_blank" rel="noopener noreferrer">
-              {ad.cta_label || "Learn more"}
-            </a>
-          </Button>
-        )}
+        {cta}
       </CardContent>
     </Card>
   );
 }
+
 
 /** Compact promo card for a fixed placement. Renders nothing if no eligible ad, or once dismissed for the session. */
 export function AdSlot({ placement, className }: { placement: Placement; className?: string }) {
@@ -157,15 +198,16 @@ export function AdSlot({ placement, className }: { placement: Placement; classNa
 }
 
 /** Native ad card meant to be interleaved directly into a scrolling feed. */
-export function FeedAdCard({ ad, placement = "explore" as Placement, className }: { ad: any; placement?: Placement; className?: string }) {
+export function FeedAdCard({ ad, placement = "explore" as Placement, className, view = "grid" }: { ad: any; placement?: Placement; className?: string; view?: "grid" | "list" | "compact" }) {
   const { impression, click } = useAdEvents();
   useEffect(() => {
     if (ad?.id) impression(ad.id, placement);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ad?.id]);
   if (!ad) return null;
-  return <NativeAdCard ad={ad} className={className} onClick={() => click(ad.id, placement)} />;
+  return <NativeAdCard ad={ad} view={view} className={className} onClick={() => click(ad.id, placement)} />;
 }
+
 
 /**
  * Builds a feed array with a native ad card injected every `every` items,

@@ -1,4 +1,4 @@
-import { createFileRoute, useSearch } from "@tanstack/react-router";
+import { createFileRoute, useSearch, Link } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState, useEffect } from "react";
@@ -12,8 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Wallet as WalletIcon, ArrowUpRight, ArrowDownRight, Link2, Copy, Sparkles } from "lucide-react";
+import { Wallet as WalletIcon, ArrowUpRight, ArrowDownRight, Link2, Copy, Sparkles, MessageSquare } from "lucide-react";
 import { getMyWallet, saveBankAccount, requestWithdrawal, buyAiCreditFromWallet, buyCreatorAccessFromWallet } from "@/lib/wallet.functions";
+import { getSupportContact } from "@/lib/profiles.functions";
+
 import { getPaymentSettings, verifyAndSettle } from "@/lib/payments.functions";
 import { getOrCreateMyAffiliate } from "@/lib/affiliate.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
@@ -105,7 +107,7 @@ function WalletPage() {
             <CardContent><WithdrawDialog wallet={wallet} settings={settings} onSave={saveBank} onWithdraw={withdrawFn} /></CardContent>
           </Card>
           <Card>
-            <CardHeader className="pb-2"><CardDescription>AI credit</CardDescription>
+            <CardHeader className="pb-2"><CardDescription data-coach="wallet">AI credit</CardDescription>
               <CardTitle className="text-3xl tabular-nums">{naira(wallet?.wallet?.ai_credit_balance_kobo ?? 0)}</CardTitle>
               <p className="text-xs text-muted-foreground">{formatExpiry("AI credit", wallet?.wallet?.ai_credit_expires_at)}</p>
             </CardHeader>
@@ -220,16 +222,34 @@ function WithdrawDialog({ wallet, settings, onSave, onWithdraw }: any) {
   );
 }
 
+/**
+ * Support hand-off. Prefers an in-app DM to the platform admin; falls back to
+ * WhatsApp only when no admin account can be resolved.
+ */
 function ContactAdmin({ purpose, amount }: { purpose: string; amount?: number }) {
+  const contactFn = useServerFn(getSupportContact);
+  const { data: contact } = useQuery({ queryKey: ["support-contact"], queryFn: () => contactFn(), staleTime: 300_000 });
   const amt = amount ? `₦${(amount / 100).toLocaleString("en-NG")}` : "";
-  const msg = encodeURIComponent(`Hi, I'd like to pay for ${purpose}${amt ? ` (${amt})` : ""} manually on HaniLearn-QZ. My account email is:`);
-  const url = `https://wa.me/2349071829295?text=${msg}`;
+  const text = `Hi, I'd like to pay for ${purpose}${amt ? ` (${amt})` : ""} manually on HaniLearn-QZ.`;
+
+  if (contact?.user_id) {
+    return (
+      <Button size="sm" variant="outline" asChild>
+        <Link to="/messages/$userId" params={{ userId: contact.user_id }}>
+          <MessageSquare className="mr-1 h-4 w-4" />Message admin
+        </Link>
+      </Button>
+    );
+  }
+
+  const fallback = contact?.whatsapp?.replace(/[^\d]/g, "") || "2349071829295";
   return (
     <Button size="sm" variant="outline" asChild>
-      <a href={url} target="_blank" rel="noopener noreferrer">Contact on WhatsApp</a>
+      <a href={`https://wa.me/${fallback}?text=${encodeURIComponent(text)}`} target="_blank" rel="noopener noreferrer">Contact support</a>
     </Button>
   );
 }
+
 
 function ProPlans({ settings, status }: any) {
   const base = settings?.creator_access_price_kobo ?? 0;

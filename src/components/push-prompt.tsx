@@ -27,6 +27,11 @@ export function PushPrompt() {
   // browsers require an active SW registration before pushManager.subscribe works.
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    // Never register in dev or the Lovable preview iframe — the SW is only
+    // served (and only useful) on the published app.
+    const host = window.location.hostname;
+    const inPreview = window.self !== window.top || /^(id-)?preview--/.test(host) || host.endsWith(".lovableproject.com");
+    if (!import.meta.env.PROD || inPreview) return;
     navigator.serviceWorker.register("/sw.js").catch((e) => {
       console.warn("[PushPrompt] service worker registration failed", e);
     });
