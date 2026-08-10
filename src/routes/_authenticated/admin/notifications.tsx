@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
-import { adminBroadcast, adminNotificationStats, generateNotificationDrafts, adminSendTestPush } from "@/lib/notifications.functions";
+import { adminBroadcast, adminNotificationStats, generateNotificationDrafts, adminSendTestPush, pushDiagnostics, adminRunDailyAiNotifyNow, getAiNotificationImages, setAiNotificationImages } from "@/lib/notifications.functions";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -147,6 +147,50 @@ function AdminNotifications() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm"><Sparkles className="h-4 w-4" /> Automatic daily AI notifications</CardTitle>
+          <CardDescription className="text-xs">
+            Runs itself every day — each user gets their own tailored message with a link into the app. No button needed; the button below is only a manual backup.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <div className="rounded-lg border p-2"><p className="text-muted-foreground">Push configured</p><p className="font-semibold">{diag ? (diag.vapid_configured ? "Yes" : "No") : "…"}</p></div>
+            <div className="rounded-lg border p-2"><p className="text-muted-foreground">Your devices</p><p className="font-semibold">{diag?.my_subscription_count ?? "…"}</p></div>
+            <div className="rounded-lg border p-2"><p className="text-muted-foreground">All devices</p><p className="font-semibold">{diag?.total_subscription_count ?? "…"}</p></div>
+            <div className="rounded-lg border p-2"><p className="text-muted-foreground">Daily job key</p><p className="font-semibold">{diag ? (diag.cron_secret_configured ? "Set" : "Missing") : "…"}</p></div>
+          </div>
+          {diag && diag.my_subscription_count === 0 && (
+            <p className="rounded-lg bg-muted p-2 text-xs text-muted-foreground">
+              This device has no push subscription yet — open Notifications and allow notifications on this phone, then test again.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => testPush.mutate()} disabled={testPush.isPending}>
+              <BellTestIcon /> Test push to me
+            </Button>
+            <Button size="sm" variant="secondary" className="gap-1" onClick={() => runDaily.mutate()} disabled={runDaily.isPending}>
+              {runDaily.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />} Run today's batch now
+            </Button>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Motivation image rotation (one URL per line)</Label>
+            <Textarea
+              rows={3}
+              value={imagesText}
+              onChange={(e) => setImagesText(e.target.value)}
+              placeholder="https://…/study-motivation.jpg"
+            />
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[10px] text-muted-foreground">Curated list, rotated automatically. Pinterest scraping isn't used — paste any image links you like.</p>
+              <Button size="sm" variant="ghost" onClick={() => saveImages.mutate()} disabled={saveImages.isPending}>Save</Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
 
       <Card>
         <CardHeader className="pb-2"><CardTitle className="text-sm">Recent broadcasts</CardTitle><CardDescription className="text-xs">Deduplicated view — one row per send.</CardDescription></CardHeader>
