@@ -201,7 +201,7 @@ function AdminNotifications() {
             <Label className="text-xs">Motivation image rotation (one URL per line)</Label>
             <Textarea
               rows={3}
-              value={imagesText}
+              value={imagesValue}
               onChange={(e) => setImagesText(e.target.value)}
               placeholder="https://…/study-motivation.jpg"
             />
