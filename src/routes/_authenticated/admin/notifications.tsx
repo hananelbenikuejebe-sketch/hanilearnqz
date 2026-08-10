@@ -71,6 +71,28 @@ function AdminNotifications() {
     onError: (e: any) => toast.error(e.message),
   });
 
+  const diagFn = useServerFn(pushDiagnostics);
+  const runDailyFn = useServerFn(adminRunDailyAiNotifyNow);
+  const imagesFn = useServerFn(getAiNotificationImages);
+  const saveImagesFn = useServerFn(setAiNotificationImages);
+  const { data: diag } = useQuery({ queryKey: ["push-diagnostics"], queryFn: () => diagFn() });
+  const { data: imagesData } = useQuery({ queryKey: ["ai-notif-images"], queryFn: () => imagesFn() });
+  const [imagesText, setImagesText] = useState<string | null>(null);
+  const imagesValue = imagesText ?? (imagesData?.images ?? []).join("\n");
+
+  const runDaily = useMutation({
+    mutationFn: () => runDailyFn(),
+    onSuccess: (res: any) => toast.success(`Daily batch: ${res?.sent ?? res?.processed ?? 0} tailored notification(s) sent`),
+    onError: (e: any) => toast.error(e.message),
+  });
+
+  const saveImages = useMutation({
+    mutationFn: () => saveImagesFn({ data: { images: imagesValue.split("\n").map((s) => s.trim()).filter(Boolean) } }),
+    onSuccess: () => { toast.success("Image rotation saved"); qc.invalidateQueries({ queryKey: ["ai-notif-images"] }); },
+    onError: (e: any) => toast.error(e.message),
+  });
+
+
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
