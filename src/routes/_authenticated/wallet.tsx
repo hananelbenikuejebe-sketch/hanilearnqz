@@ -12,8 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Wallet as WalletIcon, ArrowUpRight, ArrowDownRight, Link2, Copy, Sparkles } from "lucide-react";
+import { Wallet as WalletIcon, ArrowUpRight, ArrowDownRight, Link2, Copy, Sparkles, MessageSquare } from "lucide-react";
 import { getMyWallet, saveBankAccount, requestWithdrawal, buyAiCreditFromWallet, buyCreatorAccessFromWallet } from "@/lib/wallet.functions";
+import { getSupportContact } from "@/lib/profiles.functions";
+
 import { getPaymentSettings, verifyAndSettle } from "@/lib/payments.functions";
 import { getOrCreateMyAffiliate } from "@/lib/affiliate.functions";
 import { getMyCreatorStatus } from "@/lib/creators.functions";
