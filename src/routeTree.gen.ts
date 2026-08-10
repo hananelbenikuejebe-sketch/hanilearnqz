@@ -45,6 +45,7 @@ import { Route as AuthenticatedQuizQuizIdIndexRouteImport } from './routes/_auth
 import { Route as AuthenticatedAdminQuizzesIndexRouteImport } from './routes/_authenticated/admin/quizzes.index'
 import { Route as AuthenticatedAdminExamsIndexRouteImport } from './routes/_authenticated/admin/exams.index'
 import { Route as ApiPublicHooksMonnifyRouteImport } from './routes/api/public/hooks/monnify'
+import { Route as ApiPublicCronDailyNotifyRouteImport } from './routes/api/public/cron/daily-notify'
 import { Route as AuthenticatedQuizQuizIdTakeRouteImport } from './routes/_authenticated/quiz.$quizId.take'
 import { Route as AuthenticatedMessagesGroupGroupIdRouteImport } from './routes/_authenticated/messages.group.$groupId'
 import { Route as AuthenticatedAdminQuizzesNewRouteImport } from './routes/_authenticated/admin/quizzes.new'
@@ -248,6 +249,12 @@ const ApiPublicHooksMonnifyRoute = ApiPublicHooksMonnifyRouteImport.update({
   path: '/api/public/hooks/monnify',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicCronDailyNotifyRoute =
+  ApiPublicCronDailyNotifyRouteImport.update({
+    id: '/api/public/cron/daily-notify',
+    path: '/api/public/cron/daily-notify',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedQuizQuizIdTakeRoute =
   AuthenticatedQuizQuizIdTakeRouteImport.update({
     id: '/take',
@@ -326,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/messages/group/$groupId': typeof AuthenticatedMessagesGroupGroupIdRoute
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
+  '/api/public/cron/daily-notify': typeof ApiPublicCronDailyNotifyRoute
   '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
   '/admin/exams/': typeof AuthenticatedAdminExamsIndexRoute
   '/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
@@ -366,6 +374,7 @@ export interface FileRoutesByTo {
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/messages/group/$groupId': typeof AuthenticatedMessagesGroupGroupIdRoute
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
+  '/api/public/cron/daily-notify': typeof ApiPublicCronDailyNotifyRoute
   '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
   '/admin/exams': typeof AuthenticatedAdminExamsIndexRoute
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesIndexRoute
@@ -412,6 +421,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
   '/_authenticated/messages/group/$groupId': typeof AuthenticatedMessagesGroupGroupIdRoute
   '/_authenticated/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
+  '/api/public/cron/daily-notify': typeof ApiPublicCronDailyNotifyRoute
   '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
   '/_authenticated/admin/exams/': typeof AuthenticatedAdminExamsIndexRoute
   '/_authenticated/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
@@ -458,6 +468,7 @@ export interface FileRouteTypes {
     | '/admin/quizzes/new'
     | '/messages/group/$groupId'
     | '/quiz/$quizId/take'
+    | '/api/public/cron/daily-notify'
     | '/api/public/hooks/monnify'
     | '/admin/exams/'
     | '/admin/quizzes/'
@@ -498,6 +509,7 @@ export interface FileRouteTypes {
     | '/admin/quizzes/new'
     | '/messages/group/$groupId'
     | '/quiz/$quizId/take'
+    | '/api/public/cron/daily-notify'
     | '/api/public/hooks/monnify'
     | '/admin/exams'
     | '/admin/quizzes'
@@ -543,6 +555,7 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/quizzes/new'
     | '/_authenticated/messages/group/$groupId'
     | '/_authenticated/quiz/$quizId/take'
+    | '/api/public/cron/daily-notify'
     | '/api/public/hooks/monnify'
     | '/_authenticated/admin/exams/'
     | '/_authenticated/admin/quizzes/'
@@ -558,6 +571,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   ShareQuizQuizIdRoute: typeof ShareQuizQuizIdRoute
+  ApiPublicCronDailyNotifyRoute: typeof ApiPublicCronDailyNotifyRoute
   ApiPublicHooksMonnifyRoute: typeof ApiPublicHooksMonnifyRoute
 }
 
@@ -815,6 +829,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicHooksMonnifyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/cron/daily-notify': {
+      id: '/api/public/cron/daily-notify'
+      path: '/api/public/cron/daily-notify'
+      fullPath: '/api/public/cron/daily-notify'
+      preLoaderRoute: typeof ApiPublicCronDailyNotifyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/quiz/$quizId/take': {
       id: '/_authenticated/quiz/$quizId/take'
       path: '/take'
@@ -1008,6 +1029,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   ShareQuizQuizIdRoute: ShareQuizQuizIdRoute,
+  ApiPublicCronDailyNotifyRoute: ApiPublicCronDailyNotifyRoute,
   ApiPublicHooksMonnifyRoute: ApiPublicHooksMonnifyRoute,
 }
 export const routeTree = rootRouteImport

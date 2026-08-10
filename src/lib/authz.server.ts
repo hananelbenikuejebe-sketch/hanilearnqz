@@ -164,7 +164,8 @@ export async function ensureFreeMonthlyCredit(db: any, userId: string) {
   const currentExpiry = w?.ai_credit_expires_at ? new Date(w.ai_credit_expires_at).getTime() : 0;
   const expired = currentExpiry > 0 && currentExpiry < now;
   const base = expired ? 0 : Number(w?.ai_credit_balance_kobo ?? 0);
-  const endOfNextMonth = new Date(now + 45 * 86_400_000).getTime();
+  const expiryDays = Number(settings?.ai_credit_expiry_days ?? 30);
+  const endOfNextMonth = new Date(now + expiryDays * 86_400_000).getTime();
   await db.from("wallets").update({
     ai_credit_balance_kobo: base + amount,
     ai_credit_expires_at: new Date(Math.max(currentExpiry, endOfNextMonth)).toISOString(),
@@ -236,6 +237,58 @@ const priceFor = priceForFeature;
  * Admins are never billed. Every other account is billed — `creator_permissions.ai_enabled`
  * grants *permission* to use AI, it does not make AI free.
  */
+/**
+ * Atomic debit via a SECURITY DEFINER SQL function (`debit_ai_credit`). This is
+ * the ONLY code path allowed to mutate `wallets.ai_credit_balance_kobo` for AI
+ * usage — it row-locks the wallet for the duration of the check-and-decrement,
+ * so concurrent calls for the same user can never overdraw the balance (the
+ * previous read-then-write pattern was the root cause of the ₦0-balance
+ * overdraft leak: two concurrent requests could both read the same balance
+ * before either write landed).
+ */
+async function atomicDebit(db: any, userId: string, amountKobo: number): Promise<boolean> {
+  if (amountKobo <= 0) return true;
+  await db.from("wallets").upsert({ user_id: userId }, { onConflict: "user_id" });
+  const { data, error } = await db.rpc("debit_ai_credit", { _user_id: userId, _amount_kobo: amountKobo });
+  if (error) throw error;
+  return data === true;
+}
+
+/**
+ * Reserve credit for a feature whose price is known BEFORE the paid AI call is
+ * made (ai_essay, ai_result, ai_generate, ai_review). This must be called
+ * before invoking the model — if it returns `ok: false`, the caller MUST NOT
+ * make the AI call at all, so a ₦0/expired balance can never consume paid
+ * inference again.
+ */
+export async function reserveAiCredit(userId: string, feature: AiFeature, opts: {
+  input_tokens?: number; output_tokens?: number;
+} = {}) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const db = supabaseAdmin as any;
+  const roles = await getActorRoles(db, userId);
+  const isAdmin = roles.includes("admin") || roles.includes("super_admin");
+  const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
+  const cost = isAdmin ? 0 : priceFor(feature, settings, opts);
+  if (cost === 0) return { ok: true as const, cost };
+  const ok = await atomicDebit(db, userId, cost);
+  if (!ok) return { ok: false as const, cost };
+  await db.from("wallet_transactions").insert({
+    user_id: userId, kind: "ai_usage", amount_kobo: -cost, bucket: "ai_credit",
+    meta: { feature, reserved: true },
+  });
+  return { ok: true as const, cost };
+}
+
+/**
+ * Debit AI credit after usage and always log it. Used for token-priced
+ * features (e.g. ai_parser) where the exact cost is only known once the model
+ * has responded. The decrement itself is still atomic (via `debit_ai_credit`),
+ * closing the race that let concurrent calls spend credit the wallet did not
+ * have. Admins are never billed. `creator_permissions.ai_enabled` /
+ * an active creator_access subscription grants *permission* to use AI, it
+ * does not make AI free — usage still consumes credit.
+ */
 export async function billAiUsage(userId: string, feature: AiFeature, opts: {
   input_tokens?: number; output_tokens?: number; quiz_id?: string | null; model?: string; provider?: string; meta?: any;
 }) {
@@ -246,25 +299,24 @@ export async function billAiUsage(userId: string, feature: AiFeature, opts: {
   const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
 
   const cost = isAdmin ? 0 : priceFor(feature, settings, opts);
-  let remaining: number | null = null;
+  let debited = 0;
   if (cost > 0) {
-    await db.from("wallets").upsert({ user_id: userId }, { onConflict: "user_id" });
-    const current = await getAiBalance(db, userId);
-    remaining = Math.max(0, current - cost);
-    await db.from("wallets").update({ ai_credit_balance_kobo: remaining }).eq("user_id", userId);
+    const ok = await atomicDebit(db, userId, cost);
+    debited = ok ? cost : 0;
     await db.from("wallet_transactions").insert({
-      user_id: userId, kind: "ai_usage", amount_kobo: -cost, bucket: "ai_credit",
-      meta: { feature, model: opts.model ?? null, provider: opts.provider ?? null, input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0 },
+      user_id: userId, kind: "ai_usage", amount_kobo: -debited, bucket: "ai_credit",
+      meta: { feature, model: opts.model ?? null, provider: opts.provider ?? null, input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0, insufficient: !ok },
     });
   }
+  const remaining = await getAiBalance(db, userId);
 
   try {
     await db.from("ai_usage_log").insert({
       user_id: userId, feature, model: opts.model ?? null, provider: opts.provider ?? null,
       input_tokens: opts.input_tokens ?? 0, output_tokens: opts.output_tokens ?? 0,
-      credits_cost: cost, quiz_id: opts.quiz_id ?? null, meta: opts.meta ?? {},
+      credits_cost: debited, quiz_id: opts.quiz_id ?? null, meta: opts.meta ?? {},
     });
   } catch { /* non-fatal */ }
 
-  return { debited_kobo: cost, balance_kobo: remaining };
+  return { debited_kobo: debited, balance_kobo: remaining };
 }

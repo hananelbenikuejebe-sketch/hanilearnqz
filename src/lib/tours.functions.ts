@@ -57,3 +57,53 @@ export const generateAmbientTip = createServerFn({ method: "POST" })
     }
     return { tip: null };
   });
+
+
+/** List tip_ids the current user has already seen, so we can rotate to fresh ones. */
+export const listSeenTips = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await (supabaseAdmin as any)
+      .from("user_seen_tips")
+      .select("tip_id")
+      .eq("user_id", context.userId);
+    return { tipIds: (data ?? []).map((r: { tip_id: string }) => r.tip_id) };
+  });
+
+/** Mark an ambient coach-mark tip as seen (idempotent) for the current user. */
+export const markTipSeen = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ tipId: z.string().min(1).max(60) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await (supabaseAdmin as any)
+      .from("user_seen_tips")
+      .upsert({ user_id: context.userId, tip_id: data.tipId }, { onConflict: "user_id,tip_id" });
+    return { ok: true };
+  });
+
+/**
+ * Best-effort: rank tip ids by relevance using the user's interest profile, if
+ * the behavior module is available. Falls back to the given order untouched.
+ */
+export const rankTipsByInterest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ tipIds: z.array(z.string()).max(20) }).parse(d))
+  .handler(async ({ context, data }) => {
+    try {
+      const mod: any = await import("@/lib/behavior.server").catch(() => null);
+      if (!mod?.getUserInterestProfile) return { tipIds: data.tipIds };
+      const profile = await mod.getUserInterestProfile(context.userId);
+      if (!profile) return { tipIds: data.tipIds };
+      // Simple heuristic: if the profile mentions a tip id/topic keyword, float it up.
+      const text = JSON.stringify(profile).toLowerCase();
+      const ranked = [...data.tipIds].sort((a, b) => {
+        const score = (id: string) => (text.includes(id.toLowerCase()) ? 1 : 0);
+        return score(b) - score(a);
+      });
+      return { tipIds: ranked };
+    } catch {
+      return { tipIds: data.tipIds };
+    }
+  });
