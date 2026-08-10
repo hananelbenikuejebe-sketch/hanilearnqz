@@ -318,3 +318,49 @@ export const composeNotificationWithAi = createServerFn({ method: "POST" })
       audience: (["all", "creators", "students"].includes(parsed.audience) ? parsed.audience : "all") as "all" | "creators" | "students",
     };
   });
+
+
+/** Admin diagnostics: is push configured server-wide, how many devices does the caller have, recent send outcomes. */
+export const pushDiagnostics = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  await assertAdmin(supabaseAdmin, context.userId);
+  const db = supabaseAdmin as any;
+  const configured = !!(process.env["VAPID_PUBLIC_KEY"] && process.env["VAPID_PRIVATE_KEY"]);
+  const { count: mySubs } = await db.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", context.userId);
+  const { count: totalSubs } = await db.from("push_subscriptions").select("id", { count: "exact", head: true });
+  return {
+    vapid_configured: configured,
+    vapid_subject: process.env["VAPID_SUBJECT"] ?? null,
+    my_subscription_count: mySubs ?? 0,
+    total_subscription_count: totalSubs ?? 0,
+    cron_secret_configured: !!process.env["CRON_SECRET"],
+  };
+});
+
+/** Admin "run now" backup for the daily AI notification batch (the real trigger is the pg_cron job). */
+export const adminRunDailyAiNotifyNow = createServerFn({ method: "POST" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  await assertAdmin(supabaseAdmin, context.userId);
+  const { runDailyAiNotifyBatch } = await import("@/lib/ai-notify.server");
+  return runDailyAiNotifyBatch({ limit: 500 });
+});
+
+/** Admin-editable curated rotation of motivational/educational images used by AI notifications (no Pinterest scraping). */
+export const getAiNotificationImages = createServerFn({ method: "GET" }).middleware([requireSupabaseAuth]).handler(async ({ context }) => {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  await assertAdmin(supabaseAdmin, context.userId);
+  const db = supabaseAdmin as any;
+  const { data } = await db.from("app_settings").select("value").eq("key", "ai_notification_images").maybeSingle();
+  return { images: Array.isArray(data?.value) ? (data.value as string[]) : [] };
+});
+
+export const setAiNotificationImages = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ images: z.array(z.string().trim().url()).max(30) }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await assertAdmin(supabaseAdmin, context.userId);
+    const db = supabaseAdmin as any;
+    await db.from("app_settings").upsert({ key: "ai_notification_images", value: data.images, updated_at: new Date().toISOString() });
+    return { ok: true };
+  });

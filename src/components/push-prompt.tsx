@@ -22,6 +22,16 @@ export function PushPrompt() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Register the service worker unconditionally and idempotently on every mount
+  // (production AND preview) so it's ready before permission is ever granted —
+  // browsers require an active SW registration before pushManager.subscribe works.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch((e) => {
+      console.warn("[PushPrompt] service worker registration failed", e);
+    });
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined" || typeof Notification === "undefined") return;
     if (Notification.permission !== "default") return;

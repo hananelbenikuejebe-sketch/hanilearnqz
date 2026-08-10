@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowRight, ArrowLeft, X, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ function resolveTarget(target: string | undefined): HTMLElement | null {
   if (target.startsWith("text:")) {
     const needle = target.slice(5).trim().toLowerCase();
     const candidates = Array.from(
-      document.querySelectorAll("h1, h2, h3, button, a, [role='tab']"),
+      document.querySelectorAll("h1, h2, h3, button, a, [role='tab'], label"),
     ) as HTMLElement[];
     return (
       candidates.find(
@@ -50,6 +50,8 @@ export function replayTour(key: string) {
 export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
   const listCompletedFn = useServerFn(listCompletedTours);
   const markCompleteFn = useServerFn(markTourComplete);
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const [authed, setAuthed] = useState(false);
   const [completed, setCompleted] = useState<Set<string>>(() => loadLocalCompleted());
@@ -57,6 +59,7 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
   const [stepIdx, setStepIdx] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
   const [ready, setReady] = useState(false);
+  const skipGuard = useRef(0);
 
   useEffect(() => {
     let mounted = true;
@@ -113,26 +116,16 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
     return () => window.removeEventListener("hlqz-tour-replay", handler);
   }, [openTour]);
 
-  const step = activeTour?.steps[stepIdx];
-
+  // Escape key closes the tour.
   useEffect(() => {
-    if (!step) { setRect(null); return; }
-    const update = () => {
-      const el = resolveTarget(step.target);
-      setRect(el ? el.getBoundingClientRect() : null);
-      if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
-    };
-    update();
-    const onResize = () => update();
-    window.addEventListener("resize", onResize);
-    window.addEventListener("scroll", onResize, true);
-    const raf = requestAnimationFrame(update);
-    return () => {
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("scroll", onResize, true);
-      cancelAnimationFrame(raf);
-    };
-  }, [step]);
+    if (!activeTour) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") void finish(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTour]);
+
+  const step = activeTour?.steps[stepIdx];
 
   const finish = useCallback(async () => {
     if (!activeTour) return;
@@ -144,22 +137,90 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
     externalCompletedCache = next;
     setActiveTour(null);
     setRect(null);
+    setStepIdx(0);
     if (authed) {
       try { await markCompleteFn({ data: { tourKey: key } }); } catch { /* best-effort */ }
     }
   }, [activeTour, completed, authed, markCompleteFn]);
 
-  const next = () => {
+  const goToStep = useCallback((idx: number) => {
     if (!activeTour) return;
-    if (stepIdx >= activeTour.steps.length - 1) { void finish(); return; }
-    setStepIdx((i) => i + 1);
-  };
-  const back = () => setStepIdx((i) => Math.max(0, i - 1));
+    if (idx < 0) { setStepIdx(0); return; }
+    if (idx >= activeTour.steps.length) { void finish(); return; }
+    setStepIdx(idx);
+  }, [activeTour, finish]);
+
+  // Navigate/act/measure on every step change. Recomputed live via
+  // ResizeObserver + scroll/resize listeners so exactly the current target
+  // is ever highlighted.
+  useEffect(() => {
+    if (!step || !activeTour) { setRect(null); return; }
+    let cancelled = false;
+    let ro: ResizeObserver | null = null;
+    let raf = 0;
+    const mySkipToken = ++skipGuard.current;
+
+    const measure = () => {
+      if (cancelled) return;
+      const el = resolveTarget(step.target);
+      if (el) {
+        setRect(el.getBoundingClientRect());
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        if (ro) ro.disconnect();
+        ro = new ResizeObserver(() => {
+          const fresh = resolveTarget(step.target);
+          if (fresh) setRect(fresh.getBoundingClientRect());
+        });
+        ro.observe(el);
+      } else if (step.target) {
+        // Target never resolved — don't blur the whole screen; skip forward.
+        setRect(null);
+        if (mySkipToken === skipGuard.current) {
+          const idx = activeTour.steps.indexOf(step);
+          if (idx === stepIdx) goToStep(idx + 1);
+        }
+      } else {
+        setRect(null);
+      }
+    };
+
+    const run = async () => {
+      if (step.route && pathname !== step.route) {
+        navigate({ to: step.route });
+        await new Promise((r) => setTimeout(r, 260));
+      }
+      if (step.action) {
+        const actionEl = resolveTarget(step.action);
+        actionEl?.click();
+        await new Promise((r) => setTimeout(r, 180));
+      }
+      if (step.waitMs) await new Promise((r) => setTimeout(r, step.waitMs));
+      if (cancelled) return;
+      measure();
+    };
+    void run();
+
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize);
+    window.addEventListener("scroll", onResize, true);
+    raf = requestAnimationFrame(measure);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("scroll", onResize, true);
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, activeTour, stepIdx]);
+
+  const next = () => goToStep(stepIdx + 1);
+  const back = () => goToStep(stepIdx - 1);
 
   const cardStyle = useMemo(() => {
     if (typeof window === "undefined" || !rect) return {};
     const width = 300;
-    const cardHeight = 180;
+    const cardHeight = 200;
     const spaceBelow = window.innerHeight - rect.bottom;
     const left = Math.min(Math.max(8, rect.left), window.innerWidth - width - 8);
     if (spaceBelow >= cardHeight + 16) {
@@ -183,10 +244,10 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
           four panels, so the highlighted control itself stays perfectly sharp. */}
       {rect ? (
         <>
-          <div className="absolute inset-x-0 top-0 bg-background/70 backdrop-blur-sm" style={{ height: Math.max(0, rect.top - 6) }} />
-          <div className="absolute inset-x-0 bottom-0 bg-background/70 backdrop-blur-sm" style={{ top: rect.bottom + 6 }} />
-          <div className="absolute left-0 bg-background/70 backdrop-blur-sm" style={{ top: Math.max(0, rect.top - 6), height: rect.height + 12, width: Math.max(0, rect.left - 6) }} />
-          <div className="absolute right-0 bg-background/70 backdrop-blur-sm" style={{ top: Math.max(0, rect.top - 6), height: rect.height + 12, left: rect.right + 6 }} />
+          <div className="absolute inset-x-0 top-0 bg-background/70 backdrop-blur-sm transition-all duration-200" style={{ height: Math.max(0, rect.top - 6) }} />
+          <div className="absolute inset-x-0 bottom-0 bg-background/70 backdrop-blur-sm transition-all duration-200" style={{ top: rect.bottom + 6 }} />
+          <div className="absolute left-0 bg-background/70 backdrop-blur-sm transition-all duration-200" style={{ top: Math.max(0, rect.top - 6), height: rect.height + 12, width: Math.max(0, rect.left - 6) }} />
+          <div className="absolute right-0 bg-background/70 backdrop-blur-sm transition-all duration-200" style={{ top: Math.max(0, rect.top - 6), height: rect.height + 12, left: rect.right + 6 }} />
           <div
             className="pointer-events-none absolute rounded-lg ring-4 ring-primary ring-offset-2 ring-offset-transparent transition-all duration-300"
             style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12 }}
@@ -214,6 +275,15 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
             {step.nudge.label} →
           </Link>
         )}
+        {/* Progress dots */}
+        <div className="mt-3 flex items-center justify-center gap-1">
+          {activeTour.steps.map((_, i) => (
+            <span
+              key={i}
+              className={`h-1.5 rounded-full transition-all ${i === stepIdx ? "w-4 bg-primary" : "w-1.5 bg-muted-foreground/30"}`}
+            />
+          ))}
+        </div>
         <div className="mt-3 flex items-center justify-between">
           <span className="text-[11px] text-muted-foreground">{stepIdx + 1} / {total}</span>
           <div className="flex items-center gap-1">

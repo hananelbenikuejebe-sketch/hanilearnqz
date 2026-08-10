@@ -10,6 +10,8 @@ import { toast } from "sonner";
 import { Copy, Upload, ShieldCheck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getPaymentInstructions, submitPaymentProof } from "@/lib/proofs.functions";
+import { getSupportContact } from "@/lib/profiles.functions";
+import { Link } from "@tanstack/react-router";
 
 type Props = {
   purpose: "creator_access" | "ai_credit" | "quiz_purchase" | "wallet_topup" | "ad_placement";
@@ -29,6 +31,8 @@ export function PayDialog({ purpose, amountKobo, quizId, adId, label, months, va
   const infoFn = useServerFn(getPaymentInstructions);
   const submitFn = useServerFn(submitPaymentProof);
   const { data: info } = useQuery({ queryKey: ["pay-instructions"], queryFn: () => infoFn() });
+  const supportFn = useServerFn(getSupportContact);
+  const { data: support } = useQuery({ queryKey: ["support-contact"], queryFn: () => supportFn() });
 
   const [open, setOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -42,7 +46,7 @@ export function PayDialog({ purpose, amountKobo, quizId, adId, label, months, va
   });
 
   const expected = purpose === "creator_access" ? (amountKobo ?? info?.creator_access_price_kobo) : amountKobo;
-  const support = (info?.support_whatsapp ?? "+2349071829295").replace(/\D/g, "");
+  const supportWa = (info?.support_whatsapp ?? "+2349071829295").replace(/\D/g, "");
 
   async function submit() {
     if (!file) { toast.error("Attach your payment receipt first."); return; }
@@ -93,7 +97,11 @@ export function PayDialog({ purpose, amountKobo, quizId, adId, label, months, va
         {done ? (
           <div className="space-y-3 text-sm">
             <div className="flex items-center gap-2 font-medium"><ShieldCheck className="h-4 w-4 text-emerald-500" />{done}</div>
-            <a className="underline text-primary" href={`https://wa.me/${support}`} target="_blank" rel="noopener noreferrer">Need help? Chat with support</a>
+            {support?.user_id ? (
+              <Link className="underline text-primary" to="/messages/$userId" params={{ userId: support.user_id }}>Need help? Message support</Link>
+            ) : (
+              <a className="underline text-primary" href={`https://wa.me/${supportWa}`} target="_blank" rel="noopener noreferrer">Need help? Chat with support</a>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -138,7 +146,13 @@ export function PayDialog({ purpose, amountKobo, quizId, adId, label, months, va
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Having trouble? <a className="underline" href={`https://wa.me/${support}`} target="_blank" rel="noopener noreferrer">Message support on WhatsApp</a>.
+              Having trouble?{" "}
+              {support?.user_id ? (
+                <Link className="underline" to="/messages/$userId" params={{ userId: support.user_id }}>Message support in-app</Link>
+              ) : (
+                <a className="underline" href={`https://wa.me/${supportWa}`} target="_blank" rel="noopener noreferrer">Message support on WhatsApp</a>
+              )}
+              {" "}(WhatsApp backup: <a className="underline" href={`https://wa.me/${supportWa}`} target="_blank" rel="noopener noreferrer">{supportWa}</a>)
             </p>
           </div>
         )}

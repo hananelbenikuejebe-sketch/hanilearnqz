@@ -41,11 +41,46 @@ export const uploadAdImage = createServerFn({ method: "POST" })
   });
 
 
+/**
+ * Best-effort tailoring: boosts ads whose title/body match the viewer's
+ * interest profile (from src/lib/behavior.server.ts, owned by another
+ * agent). Imported lazily and guarded so a missing/broken helper never
+ * breaks ad serving — falls back to the existing weighted-random ordering.
+ */
+async function tailorAdsForUser(ads: any[], userId: string): Promise<any[]> {
+  if (!ads.length) return ads;
+  try {
+    const mod: any = await import("@/lib/behavior.server").catch(() => null);
+    const getUserInterestProfile = mod?.getUserInterestProfile;
+    if (typeof getUserInterestProfile !== "function") return ads;
+    const profile = await getUserInterestProfile(userId);
+    const raw = profile?.categories ?? profile?.interests ?? profile;
+    const interests: string[] = Array.isArray(raw)
+      ? raw.map(String)
+      : raw && typeof raw === "object"
+        ? Object.keys(raw)
+        : [];
+    if (!interests.length) return ads;
+    const lowerInterests = interests.map((s) => s.toLowerCase());
+    return ads
+      .map((a) => {
+        const text = `${a.title ?? ""} ${a.body ?? ""}`.toLowerCase();
+        const matched = lowerInterests.some((i) => i && text.includes(i));
+        // Boost matched ads so tailored content wins the weighted pick more
+        // often, without ever excluding non-matching ads entirely.
+        return { ...a, weight: matched ? Math.round(Number(a.weight ?? 10) * 1.8) : Number(a.weight ?? 10) };
+      })
+      .sort((x, y) => Number(y.weight ?? 0) - Number(x.weight ?? 0));
+  } catch {
+    return ads;
+  }
+}
+
 /** Active, approved ads matching a placement whose schedule window includes now. */
 export const listActiveAds = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ placement: placementEnum }).parse(d))
-  .handler(async ({ data }) => {
+  .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
     const now = new Date().toISOString();
@@ -59,11 +94,12 @@ export const listActiveAds = createServerFn({ method: "GET" })
       .or(`end_at.is.null,end_at.gte.${now}`)
       .order("weight", { ascending: false });
     if (error) throw error;
-    return (ads ?? []).filter((a: any) => {
+    const eligible = (ads ?? []).filter((a: any) => {
       if (a.start_at && new Date(a.start_at).getTime() > Date.now()) return false;
       if (a.end_at && new Date(a.end_at).getTime() < Date.now()) return false;
       return true;
     });
+    return tailorAdsForUser(eligible, context.userId);
   });
 
 /** Best-effort ad event recording; never throws to the caller. */

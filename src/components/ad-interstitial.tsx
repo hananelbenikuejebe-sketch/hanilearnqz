@@ -5,8 +5,8 @@ import { NativeAdCard, useActiveAds, useAdEvents, pickWeighted } from "@/compone
 
 const SESSION_KEY = "ad-popup:last-shown-at";
 const SESSION_COUNT_KEY = "ad-popup:shown-count";
-const FIRST_DELAY_MS = 45_000;
-const MAX_PER_SESSION = 4;
+const FIRST_DELAY_MS = 20_000;
+const MAX_PER_SESSION = 6;
 
 function isSuppressedRoute(pathname: string) {
   return pathname.startsWith("/quiz/") && pathname.includes("/take");

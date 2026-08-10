@@ -43,6 +43,7 @@ function Support() {
   const guides = (data?.guides ?? []).filter((g: any) =>
     !q.trim() || `${g.title} ${g.body}`.toLowerCase().includes(q.trim().toLowerCase()));
   const wa = (data?.support_whatsapp ?? "+2349071829295").replace(/\D/g, "");
+  const supportId = data?.support_contact?.user_id;
 
   return (
     <AppShell isSuperAdmin={status?.is_super_admin}>
@@ -96,13 +97,20 @@ function Support() {
 
         <Card>
           <CardHeader><CardTitle className="text-base">Still stuck?</CardTitle>
-            <CardDescription>Message the admin directly — payments, access and account issues.</CardDescription></CardHeader>
-          <CardContent>
-            <Button asChild>
-              <a href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer">
-                <MessageCircle className="mr-1 h-4 w-4" />Chat on WhatsApp ({data?.support_whatsapp ?? "+234 907 182 9295"})
-              </a>
-            </Button>
+            <CardDescription>Message the admin directly in-app — payments, access and account issues.</CardDescription></CardHeader>
+          <CardContent className="space-y-2">
+            {supportId ? (
+              <Button asChild>
+                <Link to="/messages/$userId" params={{ userId: supportId }}>
+                  <MessageCircle className="mr-1 h-4 w-4" />Message {data?.support_contact?.name ?? "admin"}
+                </Link>
+              </Button>
+            ) : (
+              <p className="text-sm text-muted-foreground">Support contact is being set up.</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Backup: <a className="underline" href={`https://wa.me/${wa}`} target="_blank" rel="noopener noreferrer">WhatsApp ({data?.support_whatsapp ?? "+234 907 182 9295"})</a>
+            </p>
           </CardContent>
         </Card>
       </div>

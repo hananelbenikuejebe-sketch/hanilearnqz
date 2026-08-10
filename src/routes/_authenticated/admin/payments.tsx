@@ -18,6 +18,13 @@ export const Route = createFileRoute("/_authenticated/admin/payments")({
 });
 
 const naira = (k: number) => `₦${(k/100).toLocaleString("en-NG")}`;
+function ageLabel(iso: string) {
+  const ms = Date.now() - new Date(iso).getTime();
+  const h = Math.floor(ms / 3_600_000);
+  if (h < 1) return "<1h ago";
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
 
 function AdminPayments() {
   const qc = useQueryClient();
@@ -51,6 +58,8 @@ function AdminPayments() {
   return (
     <div className="space-y-6 max-w-4xl">
       <h1 className="text-2xl font-bold">Payments</h1>
+
+      <WithdrawalRequests wds={wds} resolve={resolve} qc={qc} />
 
       <Card>
         <CardHeader><CardTitle className="text-base">Creator access</CardTitle></CardHeader>
@@ -107,32 +116,44 @@ function AdminPayments() {
       </Card>
 
       <Button onClick={() => save.mutate(form)} disabled={save.isPending}>{save.isPending ? "Saving…" : "Save all"}</Button>
-
-      <Card>
-        <CardHeader><CardTitle className="text-base">Withdrawal requests</CardTitle></CardHeader>
-        <CardContent className="p-0">
-          <div className="divide-y">
-            {(wds ?? []).length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No requests.</div>}
-            {(wds ?? []).map((w: any) => (
-              <div key={w.id} className="p-3 flex flex-wrap items-center gap-3 text-sm">
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium">{naira(w.amount_kobo)} · {w.profiles?.full_name ?? w.user_id}</div>
-                  <div className="text-xs text-muted-foreground">{w.bank_name} · {w.account_number} · {w.account_name}</div>
-                  <div className="text-xs text-muted-foreground">{new Date(w.created_at).toLocaleString()}</div>
-                </div>
-                <Badge variant={w.status === "requested" ? "default" : w.status === "paid" ? "secondary" : "destructive"}>{w.status}</Badge>
-                {w.status === "requested" && (
-                  <>
-                    <Button size="sm" variant="outline" onClick={async () => { await resolve({ data: { id: w.id, action: "paid" } }); qc.invalidateQueries({ queryKey: ["withdrawals"] }); }}>Mark paid</Button>
-                    <Button size="sm" variant="ghost" onClick={async () => { await resolve({ data: { id: w.id, action: "reject", note: "Rejected" } }); qc.invalidateQueries({ queryKey: ["withdrawals"] }); }}>Reject</Button>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
+  );
+}
+
+/** Prominent withdrawal-approval queue, rendered above settings in AdminPayments. */
+function WithdrawalRequests({ wds, resolve, qc }: any) {
+  const pendingCount = (wds ?? []).filter((w: any) => w.status === "requested").length;
+  return (
+    <Card className="border-primary/40 shadow-sm">
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
+        <div>
+          <CardTitle className="text-base">Withdrawal requests</CardTitle>
+          <CardDescription>Approve or reject in-app payout requests from users.</CardDescription>
+        </div>
+        {pendingCount > 0 && <Badge>{pendingCount} pending</Badge>}
+      </CardHeader>
+      <CardContent className="p-0">
+        <div className="divide-y">
+          {(wds ?? []).length === 0 && <div className="p-6 text-center text-sm text-muted-foreground">No requests.</div>}
+          {(wds ?? []).map((w: any) => (
+            <div key={w.id} className="p-3 flex flex-wrap items-center gap-3 text-sm">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium">{naira(w.amount_kobo)} · {w.profiles?.full_name ?? w.user_id}</div>
+                <div className="text-xs text-muted-foreground">{w.bank_name} · {w.account_number} · {w.account_name}</div>
+                <div className="text-xs text-muted-foreground">{ageLabel(w.created_at)} · {new Date(w.created_at).toLocaleString()}</div>
+              </div>
+              <Badge variant={w.status === "requested" ? "default" : w.status === "paid" ? "secondary" : "destructive"}>{w.status}</Badge>
+              {w.status === "requested" && (
+                <>
+                  <Button size="sm" onClick={async () => { await resolve({ data: { id: w.id, action: "paid" } }); qc.invalidateQueries({ queryKey: ["withdrawals"] }); }}>Approve &amp; mark paid</Button>
+                  <Button size="sm" variant="ghost" onClick={async () => { await resolve({ data: { id: w.id, action: "reject", note: "Rejected" } }); qc.invalidateQueries({ queryKey: ["withdrawals"] }); }}>Reject</Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
