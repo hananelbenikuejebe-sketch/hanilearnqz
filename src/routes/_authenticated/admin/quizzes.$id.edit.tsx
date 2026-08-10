@@ -99,10 +99,10 @@ function EditQuiz() {
 
       <Tabs defaultValue="settings">
         <TabsList>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-          <TabsTrigger value="questions">Questions ({questions.length})</TabsTrigger>
-          <TabsTrigger value="sections">Sections ({sectionData?.sections?.length ?? 0})</TabsTrigger>
-          <TabsTrigger value="ai">Import & generate</TabsTrigger>
+          <TabsTrigger value="settings" data-tour="tab-settings">Settings</TabsTrigger>
+          <TabsTrigger value="questions" data-tour="tab-questions">Questions ({questions.length})</TabsTrigger>
+          <TabsTrigger value="sections" data-tour="tab-sections">Sections ({sectionData?.sections?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="ai" data-tour="tab-ai">Import & generate</TabsTrigger>
         </TabsList>
 
         <TabsContent value="settings">

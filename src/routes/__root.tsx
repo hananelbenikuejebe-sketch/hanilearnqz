@@ -11,6 +11,7 @@ import { TourOverlay, replayTour } from "@/components/tour-overlay";
 import { findTourForPath } from "@/lib/tour-content";
 import { HelpCircle } from "lucide-react";
 import { PushPrompt } from "@/components/push-prompt";
+import { PwaInstallBanner } from "@/components/pwa-install";
 
 
 function NotFoundComponent() {
@@ -113,6 +114,7 @@ function RootComponent() {
         <Toaster richColors position="top-right" />
         <CoachMarks />
         <PushPrompt />
+        <PwaInstallBanner />
         {currentTour && <TourOverlay key={currentTour.key} tour={currentTour.key} />}
         {currentTour && (
           <button
