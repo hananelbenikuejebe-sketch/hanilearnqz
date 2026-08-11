@@ -357,10 +357,11 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
     const text = result.text;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await logAiUsage(supabaseAdmin as any, context.userId, {
-      model: result.model, provider: result.provider,
+      feature: "ai_essay", model: result.model,
       input_tokens: (result as any).usage?.inputTokens ?? 0,
       output_tokens: (result as any).usage?.outputTokens ?? 0,
       credits_cost: reservation.cost,
+      meta: { provider: result.provider },
     });
     const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
     const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
@@ -611,7 +612,7 @@ Rules:
       text = res.text ?? "";
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       await logAiUsage(supabaseAdmin as any, context.userId, {
-        model: res.model, provider: res.provider,
+        feature: "ai_generate", model: res.model,
         input_tokens: (res as any).usage?.inputTokens ?? 0,
         output_tokens: (res as any).usage?.outputTokens ?? 0,
         credits_cost: reservation.cost,

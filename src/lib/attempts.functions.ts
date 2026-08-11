@@ -305,6 +305,7 @@ export const finalizeGrading = createServerFn({ method: "POST" })
           feedback: r.feedback, provider: r.meta.provider, model: r.meta.model,
         };
         await logAiUsage(db, context.userId, {
+          feature: "ai_essay",
           input_tokens: r.meta.input_tokens, output_tokens: r.meta.output_tokens,
           quiz_id: attempt.quiz_id, model: r.meta.model, credits_cost: reservation.cost,
           meta: { question_id: id, attempt_id: attempt.id, provider: r.meta.provider, fell_back: r.meta.fellBack },
