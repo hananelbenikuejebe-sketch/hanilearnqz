@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { aiChat, isAiConfigured } from "./ai-provider.server";
-import { assertAiAllowed, logAiUsage, checkAiAccess, billAiUsage } from "./authz.server";
+import { logAiUsage, checkAiAccess, billAiUsage, reserveAiCredit } from "./authz.server";
 
 /**
  * All heavy parser/generator/marker work goes through the merged AI router
@@ -345,6 +345,8 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await checkAiAccess(context.supabase, context.userId, "ai_essay");
     if (!isAiConfigured()) throw new Error("AI is not configured. Grade manually.");
+    const reservation = await reserveAiCredit(context.userId, "ai_essay");
+    if (!reservation.ok) throw new Error("You have no AI credit left. Top up before using AI marking.");
     const result = await heavyText({
       system: "You are a strict but fair exam marker. Grade the student answer against the model answer (if provided) and the question. Return ONLY JSON: {\"score\":0-<max>,\"percent\":0-100,\"feedback\":\"...\",\"strengths\":[\"...\"],\"weaknesses\":[\"...\"]}. Be concise.",
       prompt: `Question: ${data.question}\nModel answer: ${data.sample_answer ?? "(not provided — grade on question intent)"}\nStudent answer: ${data.student_answer}\nMax points: ${data.max_points}`,
@@ -353,10 +355,12 @@ export const gradeOpenAnswer = createServerFn({ method: "POST" })
       maxOutputTokens: 800,
     });
     const text = result.text;
-    await billAiUsage(context.userId, "ai_essay", {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await logAiUsage(supabaseAdmin as any, context.userId, {
       model: result.model, provider: result.provider,
       input_tokens: (result as any).usage?.inputTokens ?? 0,
       output_tokens: (result as any).usage?.outputTokens ?? 0,
+      credits_cost: reservation.cost,
     });
     const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
     const start = cleaned.indexOf("{"); const end = cleaned.lastIndexOf("}");
@@ -570,6 +574,8 @@ export const generateQuestionsAi = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await checkAiAccess(context.supabase, context.userId, "ai_generate");
     if (!isAiConfigured()) throw new Error("AI is not configured yet.");
+    const reservation = await reserveAiCredit(context.userId, "ai_generate");
+    if (!reservation.ok) throw new Error("You have no AI credit left. Top up before generating questions.");
     const started = Date.now();
 
     const system = `You write exam questions for a Nigerian study app. Output PLAIN TEXT in exactly this import format, nothing else — no markdown, no preamble, no numbering gaps:
@@ -603,11 +609,13 @@ Rules:
     try {
       const res = await heavyText({ system, prompt, temperature: 0.4, maxOutputTokens: 8000 });
       text = res.text ?? "";
-      await billAiUsage(context.userId, "ai_generate", {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await logAiUsage(supabaseAdmin as any, context.userId, {
         model: res.model, provider: res.provider,
         input_tokens: (res as any).usage?.inputTokens ?? 0,
         output_tokens: (res as any).usage?.outputTokens ?? 0,
-        meta: { count: data.count, topic: data.topic.slice(0, 80) },
+        credits_cost: reservation.cost,
+        meta: { count: data.count, topic: data.topic.slice(0, 80), provider: res.provider },
       });
     } catch (e: any) {
       const msg = String(e?.message ?? e);

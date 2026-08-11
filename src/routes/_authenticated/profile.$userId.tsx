@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { toast } from "sonner";
-import { UserPlus, UserCheck, ListChecks, MessageCircle, Award } from "lucide-react";
+import { UserPlus, UserCheck, ListChecks, MessageCircle, Award, School, GraduationCap, Phone, ExternalLink } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/profile/$userId")({
   head: () => ({ meta: [
@@ -40,6 +40,8 @@ function PublicProfile() {
 
   if (isLoading || !data) return <AppShell isSuperAdmin={status?.is_super_admin}><div className="p-8">Loading…</div></AppShell>;
   const p = data.profile;
+  const socialLinks = Object.entries((p.social_links ?? {}) as Record<string, string>).filter(([, value]) => Boolean(value));
+  const safeSocialUrl = (value: string) => /^https?:\/\//i.test(value) ? value : `https://${value}`;
   const initials = (p.full_name || p.handle || "?").split(" ").map((s: string) => s[0]).join("").slice(0, 2).toUpperCase();
 
   return (
@@ -55,6 +57,14 @@ function PublicProfile() {
               </div>
               {p.handle && <p className="text-sm text-muted-foreground">@{p.handle}</p>}
               {p.bio && <p className="text-sm mt-2">{p.bio}</p>}
+              {(p.school || p.level) && <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                {p.school && <span className="flex items-center gap-1"><School className="h-3.5 w-3.5" />{p.school}</span>}
+                {p.level && <span className="flex items-center gap-1"><GraduationCap className="h-3.5 w-3.5" />{p.level}</span>}
+              </div>}
+              {(p.whatsapp_number || socialLinks.length > 0) && <div className="mt-3 flex flex-wrap gap-2">
+                {p.whatsapp_number && <Button asChild size="sm" variant="outline"><a href={`https://wa.me/${String(p.whatsapp_number).replace(/\D/g, "")}`} target="_blank" rel="noreferrer"><Phone className="mr-1 h-3.5 w-3.5" />WhatsApp</a></Button>}
+                {socialLinks.map(([name, value]) => <Button key={name} asChild size="sm" variant="ghost"><a href={safeSocialUrl(value)} target="_blank" rel="noreferrer"><ExternalLink className="mr-1 h-3.5 w-3.5" />{name}</a></Button>)}
+              </div>}
               <div className="flex gap-4 text-xs mt-2 text-muted-foreground">
                 <span><b className="text-foreground">{data.quizzes.length}</b> quizzes</span>
                 <span><b className="text-foreground">{data.unique_quizzes_taken}</b> taken</span>

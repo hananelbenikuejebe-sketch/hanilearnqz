@@ -84,6 +84,13 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
       account_name: bank.account_name,
     }).select().single();
     if (error) throw error;
+    const { data: admins } = await db.from("user_roles").select("user_id").in("role", ["admin", "super_admin"]);
+    const { notifyUsers } = await import("./notifications.functions");
+    await notifyUsers((admins ?? []).map((r: any) => r.user_id), {
+      kind: "withdrawal_request", title: "New withdrawal request",
+      body: `₦${(data.amount_kobo / 100).toLocaleString()} requested by ${bank.account_name}.`,
+      link: "/admin/payments",
+    });
 
     const naira = (data.amount_kobo / 100).toFixed(2);
     const nairaNet = (netKobo / 100).toFixed(2);

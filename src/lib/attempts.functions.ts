@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getAiBalance, billAiUsage, priceForFeature } from "./authz.server";
+import { getAiBalance, logAiUsage, priceForFeature, reserveAiCredit } from "./authz.server";
 import { aiChat, parseJsonLoose, isAiConfigured } from "./ai-provider.server";
 import {
   pointsFor, isOpen, isObjective, gradeObjective, gradeShortDeterministically,
@@ -262,7 +262,7 @@ export const finalizeGrading = createServerFn({ method: "POST" })
 
     const { data: settings } = await db.from("payment_settings").select("*").eq("id", "default").maybeSingle();
     const unit = priceForFeature("ai_essay", settings);
-    let budget = await getAiBalance(db, context.userId);
+    const budget = await getAiBalance(db, context.userId);
     const aiReady = isAiConfigured();
     let note: string | null = null;
     const answers = (attempt.answers ?? {}) as Record<string, any>;
@@ -293,17 +293,22 @@ export const finalizeGrading = createServerFn({ method: "POST" })
       const maxPts = pointsFor(q);
       const studentAns = String(answers[id] ?? "").trim();
       try {
+        const reservation = await reserveAiCredit(context.userId, "ai_essay");
+        if (!reservation.ok) {
+          per[id] = { ...per[id], status: "graded", score: 0, marked_by: "auto", feedback: "Not marked — your AI credit reached ₦0 before this answer was processed, so it scored 0." };
+          note = "You ran out of AI credit, so some open-ended answers scored 0.";
+          return;
+        }
         const r = await markOpenWithAi(q, studentAns, maxPts);
         per[id] = {
           ...per[id], status: "graded", score: r.score, max: maxPts, marked_by: "ai",
           feedback: r.feedback, provider: r.meta.provider, model: r.meta.model,
         };
-        const billed = await billAiUsage(context.userId, "ai_essay", {
+        await logAiUsage(db, context.userId, {
           input_tokens: r.meta.input_tokens, output_tokens: r.meta.output_tokens,
-          quiz_id: attempt.quiz_id, model: r.meta.model, provider: r.meta.provider,
-          meta: { question_id: id, attempt_id: attempt.id, fell_back: r.meta.fellBack },
+          quiz_id: attempt.quiz_id, model: r.meta.model, credits_cost: reservation.cost,
+          meta: { question_id: id, attempt_id: attempt.id, provider: r.meta.provider, fell_back: r.meta.fellBack },
         });
-        budget = Math.max(0, budget - (billed.debited_kobo ?? 0));
       } catch (e: any) {
         per[id] = {
           ...per[id], status: "graded", score: 0, marked_by: "auto",
