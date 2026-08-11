@@ -3,17 +3,17 @@ import { createFileRoute } from "@tanstack/react-router";
 /**
  * Cron-only endpoint: batches every active user through the AI notification
  * engine and sends at most one AI notification per user per day. Scheduled by
- * pg_cron + pg_net (see supabase/migrations/20260808000000_ai_notify_engine.sql)
- * to run automatically with no manual trigger. Secured by a shared secret header
- * so it cannot be called by the public.
+ * pg_cron + pg_net (see the notification-engine migration) to run
+ * automatically with no manual trigger. The scheduler authenticates with the
+ * backend publishable key in the standard `apikey` header.
  */
 export const Route = createFileRoute("/api/public/cron/daily-notify")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const secret = request.headers.get("x-cron-secret");
-        const expected = process.env["CRON_SECRET"];
-        if (!expected || secret !== expected) {
+        const key = request.headers.get("apikey");
+        const expected = process.env["SUPABASE_PUBLISHABLE_KEY"] ?? process.env["SUPABASE_ANON_KEY"];
+        if (!expected || key !== expected) {
           return new Response("unauthorized", { status: 401 });
         }
         try {
@@ -30,15 +30,6 @@ export const Route = createFileRoute("/api/public/cron/daily-notify")({
             headers: { "Content-Type": "application/json" },
           });
         }
-      },
-      GET: async ({ request }) => {
-        // Allow simple GET pings (some cron dashboards only support GET) with the same auth.
-        const secret = request.headers.get("x-cron-secret") ?? new URL(request.url).searchParams.get("secret");
-        const expected = process.env["CRON_SECRET"];
-        if (!expected || secret !== expected) return new Response("unauthorized", { status: 401 });
-        const { runDailyAiNotifyBatch } = await import("@/lib/ai-notify.server");
-        const result = await runDailyAiNotifyBatch();
-        return new Response(JSON.stringify({ ok: true, ...result }), { status: 200, headers: { "Content-Type": "application/json" } });
       },
     },
   },
