@@ -59,23 +59,29 @@ export const getForYouFeed = createServerFn({ method: "GET" })
     const profile = await getUserInterestProfile(context.userId);
     const visitSeed = data.seed || `${context.userId}:${Date.now()}:${Math.random()}`;
 
-    const { data: quizzes } = await db
+    const { data: quizzes, error: quizError } = await db
       .from("quizzes")
-      .select("id, title, description, category, subject, difficulty, duration_min, created_by, created_at, banner_url, banner_color, prize_pool_kobo, visibility, is_published, profiles:created_by(full_name, handle)")
+      .select("id, title, description, category, subject, difficulty, duration_min, created_by, created_at, banner_path, banner_url, banner_color, prize_pool_kobo, visibility, is_published")
       .eq("is_published", true)
       .eq("visibility", "public")
       .order("created_at", { ascending: false })
       .limit(500);
+    if (quizError) throw quizError;
 
     const pool = (quizzes ?? []).filter((q: any) => !profile.attemptedQuizIds.includes(q.id));
     if (!pool.length) return { quizzes: [], seed: visitSeed };
 
     const ids = pool.map((q: any) => q.id);
-    const [{ data: likes }, { data: attemptRows }, { data: shares }] = await Promise.all([
+    const creatorIds = Array.from(new Set(pool.map((q: any) => q.created_by).filter(Boolean))) as string[];
+    const [{ data: likes }, { data: attemptRows }, { data: shares }, { data: creators }] = await Promise.all([
       db.from("quiz_likes").select("quiz_id").in("quiz_id", ids),
       db.from("attempts").select("quiz_id").in("quiz_id", ids),
       db.from("quiz_shares").select("quiz_id").in("quiz_id", ids),
+      creatorIds.length
+        ? db.from("profiles").select("id, full_name, handle, avatar_url").in("id", creatorIds)
+        : Promise.resolve({ data: [] }),
     ]);
+    const creatorMap = new Map((creators ?? []).map((p: any) => [p.id, p]));
     const likeCount = new Map<string, number>();
     (likes ?? []).forEach((l: any) => likeCount.set(l.quiz_id, (likeCount.get(l.quiz_id) ?? 0) + 1));
     const attemptCount = new Map<string, number>();
@@ -115,7 +121,7 @@ export const getForYouFeed = createServerFn({ method: "GET" })
     }
 
     return {
-      quizzes: picked.map((q: any) => ({ ...q, creator: q.profiles ?? null })),
+      quizzes: picked.map((q: any) => ({ ...q, creator: creatorMap.get(q.created_by) ?? null })),
       seed: visitSeed,
     };
   });

@@ -54,10 +54,10 @@ function Create() {
               <ActionCard
                 icon={GraduationCap}
                 title="New exam bundle"
-                desc="Combine multiple quizzes into a single, structured exam."
-                to="/create"
-                cta="Coming soon"
-                disabled
+                desc="Build a structured assessment with section headers and ordered quizzes."
+                to="/admin/exams"
+                cta="Open exams"
+                disabled={false}
               />
             </div>
 
@@ -83,12 +83,7 @@ function Create() {
               <CardHeader><CardTitle className="text-base">Manage</CardTitle></CardHeader>
               <CardContent className="flex flex-wrap gap-2">
                 <Button asChild variant="outline"><Link to="/admin/quizzes">My quizzes</Link></Button>
-                {status.is_super_admin && (
-                  <>
-                    <Button asChild variant="outline"><Link to="/admin/students">Students</Link></Button>
-                    <Button asChild variant="outline"><Link to="/admin/creators">Creators</Link></Button>
-                  </>
-                )}
+                {status.is_super_admin && <Button asChild variant="outline"><Link to="/admin/users">Users &amp; access</Link></Button>}
               </CardContent>
             </Card>
           </>

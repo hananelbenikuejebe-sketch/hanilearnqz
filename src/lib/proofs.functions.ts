@@ -202,6 +202,13 @@ export const submitPaymentProof = createServerFn({ method: "POST" })
       },
     }).select().single();
     if (proofError) throw proofError;
+    const { data: admins } = await db.from("user_roles").select("user_id").in("role", ["admin", "super_admin"]);
+    const { notifyUsers } = await import("./notifications.functions");
+    await notifyUsers((admins ?? []).map((r: any) => r.user_id), {
+      kind: "payment_review", title: "Payment receipt needs review",
+      body: `${profile?.full_name ?? "A user"} submitted a ${data.purpose.replace(/_/g, " ")} receipt.`,
+      link: "/admin/proofs",
+    });
 
     if (approve) {
       await settleIntent(db, intent, expected);

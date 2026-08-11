@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { assertAdmin, assertAnalyticsAllowed, assertAiAllowed, logAiUsage, checkAiAccess, billAiUsage } from "./authz.server";
+import { assertAdmin, assertAnalyticsAllowed, checkAiAccess, logAiUsage, reserveAiCredit } from "./authz.server";
 
 /** Fetch every row of a query in pages of 1000 to bypass PostgREST's implicit row cap. */
 async function fetchAllRows<T = any>(build: (from: number, to: number) => any, pageSize = 1000): Promise<T[]> {
@@ -165,6 +165,8 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     // AI features may be disabled by admin.
     await checkAiAccess(context.supabase, context.userId, "ai_result");
+    const reservation = await reserveAiCredit(context.userId, "ai_result");
+    if (!reservation.ok) throw new Error("You have no AI credit left. Top up before generating an AI summary.");
     let studentId = context.userId;
     if (data.student_id && data.student_id !== context.userId) {
       const { data: isAdmin } = await context.supabase
@@ -197,7 +199,7 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
       method: "POST",
       headers: { "Content-Type": "application/json", "Lovable-API-Key": key },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "google/gemini-3.6-flash",
         messages: [
           { role: "system", content: "You are a concise study coach. Given a student's quiz history, write a 4-6 bullet summary covering: overall progress, strongest area, weakest area, time efficiency, and ONE concrete next step. Use plain Markdown bullets. No preamble." },
           { role: "user", content: `Attempts (newest first):\n${JSON.stringify(compact, null, 2)}` },
@@ -211,10 +213,14 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
     }
     const json = await res.json();
     const summary = json.choices?.[0]?.message?.content ?? "Could not generate a summary.";
-    await billAiUsage(context.userId, "ai_result", {
-      model: "google/gemini-3-flash-preview",
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await logAiUsage(supabaseAdmin as any, context.userId, {
+      feature: "ai_result",
+      model: "google/gemini-3.6-flash",
       input_tokens: json.usage?.prompt_tokens ?? 0,
       output_tokens: json.usage?.completion_tokens ?? 0,
+      credits_cost: reservation.cost,
+      meta: { provider: "lovable" },
     });
     return { summary };
   });

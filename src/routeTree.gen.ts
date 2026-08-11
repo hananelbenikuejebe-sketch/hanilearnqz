@@ -31,7 +31,6 @@ import { Route as AuthenticatedProfileUserIdRouteImport } from './routes/_authen
 import { Route as AuthenticatedMessagesUserIdRouteImport } from './routes/_authenticated/messages.$userId'
 import { Route as AuthenticatedExamExamIdRouteImport } from './routes/_authenticated/exam.$examId'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
-import { Route as AuthenticatedAdminStudentsRouteImport } from './routes/_authenticated/admin/students'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminQuizzesRouteImport } from './routes/_authenticated/admin/quizzes'
 import { Route as AuthenticatedAdminProofsRouteImport } from './routes/_authenticated/admin/proofs'
@@ -39,7 +38,6 @@ import { Route as AuthenticatedAdminPaymentsRouteImport } from './routes/_authen
 import { Route as AuthenticatedAdminNotificationsRouteImport } from './routes/_authenticated/admin/notifications'
 import { Route as AuthenticatedAdminGuidesRouteImport } from './routes/_authenticated/admin/guides'
 import { Route as AuthenticatedAdminExamsRouteImport } from './routes/_authenticated/admin/exams'
-import { Route as AuthenticatedAdminCreatorsRouteImport } from './routes/_authenticated/admin/creators'
 import { Route as AuthenticatedAdminAdsRouteImport } from './routes/_authenticated/admin/ads'
 import { Route as AuthenticatedQuizQuizIdIndexRouteImport } from './routes/_authenticated/quiz.$quizId.index'
 import { Route as AuthenticatedAdminQuizzesIndexRouteImport } from './routes/_authenticated/admin/quizzes.index'
@@ -168,12 +166,6 @@ const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthenticatedAdminRouteRoute,
 } as any)
-const AuthenticatedAdminStudentsRoute =
-  AuthenticatedAdminStudentsRouteImport.update({
-    id: '/students',
-    path: '/students',
-    getParentRoute: () => AuthenticatedAdminRouteRoute,
-  } as any)
 const AuthenticatedAdminSettingsRoute =
   AuthenticatedAdminSettingsRouteImport.update({
     id: '/settings',
@@ -215,12 +207,6 @@ const AuthenticatedAdminExamsRoute = AuthenticatedAdminExamsRouteImport.update({
   path: '/exams',
   getParentRoute: () => AuthenticatedAdminRouteRoute,
 } as any)
-const AuthenticatedAdminCreatorsRoute =
-  AuthenticatedAdminCreatorsRouteImport.update({
-    id: '/creators',
-    path: '/creators',
-    getParentRoute: () => AuthenticatedAdminRouteRoute,
-  } as any)
 const AuthenticatedAdminAdsRoute = AuthenticatedAdminAdsRouteImport.update({
   id: '/ads',
   path: '/ads',
@@ -312,7 +298,6 @@ export interface FileRoutesByFullPath {
   '/support': typeof AuthenticatedSupportRoute
   '/wallet': typeof AuthenticatedWalletRoute
   '/admin/ads': typeof AuthenticatedAdminAdsRoute
-  '/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/admin/exams': typeof AuthenticatedAdminExamsRouteWithChildren
   '/admin/guides': typeof AuthenticatedAdminGuidesRoute
   '/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
@@ -320,7 +305,6 @@ export interface FileRoutesByFullPath {
   '/admin/proofs': typeof AuthenticatedAdminProofsRoute
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
-  '/admin/students': typeof AuthenticatedAdminStudentsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/exam/$examId': typeof AuthenticatedExamExamIdRoute
   '/messages/$userId': typeof AuthenticatedMessagesUserIdRoute
@@ -356,13 +340,11 @@ export interface FileRoutesByTo {
   '/wallet': typeof AuthenticatedWalletRoute
   '/': typeof AuthenticatedIndexRoute
   '/admin/ads': typeof AuthenticatedAdminAdsRoute
-  '/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/admin/guides': typeof AuthenticatedAdminGuidesRoute
   '/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
   '/admin/payments': typeof AuthenticatedAdminPaymentsRoute
   '/admin/proofs': typeof AuthenticatedAdminProofsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
-  '/admin/students': typeof AuthenticatedAdminStudentsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
   '/exam/$examId': typeof AuthenticatedExamExamIdRoute
   '/messages/$userId': typeof AuthenticatedMessagesUserIdRoute
@@ -400,7 +382,6 @@ export interface FileRoutesById {
   '/_authenticated/wallet': typeof AuthenticatedWalletRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/admin/ads': typeof AuthenticatedAdminAdsRoute
-  '/_authenticated/admin/creators': typeof AuthenticatedAdminCreatorsRoute
   '/_authenticated/admin/exams': typeof AuthenticatedAdminExamsRouteWithChildren
   '/_authenticated/admin/guides': typeof AuthenticatedAdminGuidesRoute
   '/_authenticated/admin/notifications': typeof AuthenticatedAdminNotificationsRoute
@@ -408,7 +389,6 @@ export interface FileRoutesById {
   '/_authenticated/admin/proofs': typeof AuthenticatedAdminProofsRoute
   '/_authenticated/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
-  '/_authenticated/admin/students': typeof AuthenticatedAdminStudentsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
   '/_authenticated/exam/$examId': typeof AuthenticatedExamExamIdRoute
   '/_authenticated/messages/$userId': typeof AuthenticatedMessagesUserIdRoute
@@ -447,7 +427,6 @@ export interface FileRouteTypes {
     | '/support'
     | '/wallet'
     | '/admin/ads'
-    | '/admin/creators'
     | '/admin/exams'
     | '/admin/guides'
     | '/admin/notifications'
@@ -455,7 +434,6 @@ export interface FileRouteTypes {
     | '/admin/proofs'
     | '/admin/quizzes'
     | '/admin/settings'
-    | '/admin/students'
     | '/admin/users'
     | '/exam/$examId'
     | '/messages/$userId'
@@ -491,13 +469,11 @@ export interface FileRouteTypes {
     | '/wallet'
     | '/'
     | '/admin/ads'
-    | '/admin/creators'
     | '/admin/guides'
     | '/admin/notifications'
     | '/admin/payments'
     | '/admin/proofs'
     | '/admin/settings'
-    | '/admin/students'
     | '/admin/users'
     | '/exam/$examId'
     | '/messages/$userId'
@@ -534,7 +510,6 @@ export interface FileRouteTypes {
     | '/_authenticated/wallet'
     | '/_authenticated/'
     | '/_authenticated/admin/ads'
-    | '/_authenticated/admin/creators'
     | '/_authenticated/admin/exams'
     | '/_authenticated/admin/guides'
     | '/_authenticated/admin/notifications'
@@ -542,7 +517,6 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/proofs'
     | '/_authenticated/admin/quizzes'
     | '/_authenticated/admin/settings'
-    | '/_authenticated/admin/students'
     | '/_authenticated/admin/users'
     | '/_authenticated/exam/$examId'
     | '/_authenticated/messages/$userId'
@@ -731,13 +705,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminUsersRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
-    '/_authenticated/admin/students': {
-      id: '/_authenticated/admin/students'
-      path: '/students'
-      fullPath: '/admin/students'
-      preLoaderRoute: typeof AuthenticatedAdminStudentsRouteImport
-      parentRoute: typeof AuthenticatedAdminRouteRoute
-    }
     '/_authenticated/admin/settings': {
       id: '/_authenticated/admin/settings'
       path: '/settings'
@@ -785,13 +752,6 @@ declare module '@tanstack/react-router' {
       path: '/exams'
       fullPath: '/admin/exams'
       preLoaderRoute: typeof AuthenticatedAdminExamsRouteImport
-      parentRoute: typeof AuthenticatedAdminRouteRoute
-    }
-    '/_authenticated/admin/creators': {
-      id: '/_authenticated/admin/creators'
-      path: '/creators'
-      fullPath: '/admin/creators'
-      preLoaderRoute: typeof AuthenticatedAdminCreatorsRouteImport
       parentRoute: typeof AuthenticatedAdminRouteRoute
     }
     '/_authenticated/admin/ads': {
@@ -927,7 +887,6 @@ const AuthenticatedAdminQuizzesRouteWithChildren =
 
 interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminAdsRoute: typeof AuthenticatedAdminAdsRoute
-  AuthenticatedAdminCreatorsRoute: typeof AuthenticatedAdminCreatorsRoute
   AuthenticatedAdminExamsRoute: typeof AuthenticatedAdminExamsRouteWithChildren
   AuthenticatedAdminGuidesRoute: typeof AuthenticatedAdminGuidesRoute
   AuthenticatedAdminNotificationsRoute: typeof AuthenticatedAdminNotificationsRoute
@@ -935,7 +894,6 @@ interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminProofsRoute: typeof AuthenticatedAdminProofsRoute
   AuthenticatedAdminQuizzesRoute: typeof AuthenticatedAdminQuizzesRouteWithChildren
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
-  AuthenticatedAdminStudentsRoute: typeof AuthenticatedAdminStudentsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
 }
@@ -943,7 +901,6 @@ interface AuthenticatedAdminRouteRouteChildren {
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
   {
     AuthenticatedAdminAdsRoute: AuthenticatedAdminAdsRoute,
-    AuthenticatedAdminCreatorsRoute: AuthenticatedAdminCreatorsRoute,
     AuthenticatedAdminExamsRoute: AuthenticatedAdminExamsRouteWithChildren,
     AuthenticatedAdminGuidesRoute: AuthenticatedAdminGuidesRoute,
     AuthenticatedAdminNotificationsRoute: AuthenticatedAdminNotificationsRoute,
@@ -951,7 +908,6 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
     AuthenticatedAdminProofsRoute: AuthenticatedAdminProofsRoute,
     AuthenticatedAdminQuizzesRoute: AuthenticatedAdminQuizzesRouteWithChildren,
     AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
-    AuthenticatedAdminStudentsRoute: AuthenticatedAdminStudentsRoute,
     AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
     AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
   }

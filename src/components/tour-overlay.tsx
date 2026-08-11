@@ -173,12 +173,10 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
         });
         ro.observe(el);
       } else if (step.target) {
-        // Target never resolved — don't blur the whole screen; skip forward.
+        // Never advance without the user. Some screens render their target
+        // after queries/tabs settle; keep the step open and retry instead of
+        // racing through every unresolved target.
         setRect(null);
-        if (mySkipToken === skipGuard.current) {
-          const idx = activeTour.steps.indexOf(step);
-          if (idx === stepIdx) goToStep(idx + 1);
-        }
       } else {
         setRect(null);
       }
@@ -196,7 +194,13 @@ export function TourOverlay({ tour: forcedKey }: { tour?: string } = {}) {
       }
       if (step.waitMs) await new Promise((r) => setTimeout(r, step.waitMs));
       if (cancelled) return;
-      measure();
+       measure();
+       if (step.target && !resolveTarget(step.target)) {
+         for (let attempt = 0; attempt < 20 && !cancelled; attempt++) {
+           await new Promise((r) => setTimeout(r, 250));
+           if (resolveTarget(step.target)) { measure(); break; }
+         }
+       }
     };
     void run();
 
