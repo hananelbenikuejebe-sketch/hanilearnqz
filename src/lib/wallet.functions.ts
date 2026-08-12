@@ -79,6 +79,7 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     const { data: req, error } = await db.from("withdrawal_requests").insert({
       user_id: context.userId,
       status: "requested",
+      status: "requested",
       amount_kobo: data.amount_kobo,
       bank_name: bank.bank_name,
       account_number: bank.account_number,
@@ -108,7 +109,7 @@ export const listWithdrawals = createServerFn({ method: "GET" })
     if (!(await isSuperAdmin(context.supabase, context.userId))) throw new Error("Forbidden");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await (supabaseAdmin as any).from("withdrawal_requests")
-      .select("*, profiles!user_id(full_name, email)").order("created_at", { ascending: false }).limit(200);
+      .select("*, profiles(full_name, email)").order("created_at", { ascending: false }).limit(200);
     if (error) { console.error("[listWithdrawals] error:", error); return []; }
     return data ?? [];
   });
