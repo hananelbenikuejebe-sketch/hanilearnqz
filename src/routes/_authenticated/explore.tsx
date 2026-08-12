@@ -54,7 +54,8 @@ function Explore() {
     queryKey: ["for-you-feed", visitSeed],
     queryFn: () => forYouFn({ data: { seed: visitSeed } }),
     enabled: feed === "foryou",
-    staleTime: Infinity,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
   const { data: people } = useQuery({ queryKey: ["profile-search", q], queryFn: () => searchPeople({ data: { q } }), enabled: q.trim().length > 1 });
   const feedAds = useActiveAds("explore").filter((a: any) => a.auto_show);

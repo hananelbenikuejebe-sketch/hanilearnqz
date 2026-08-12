@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { MessageCircle, Users, Plus, Check, Search } from "lucide-react";
+import { MessageCircle, Users, Plus, Check, Search, Bot } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/messages/")({
@@ -149,7 +149,7 @@ function Messages() {
   const listFn = useServerFn(listConversations);
   const groupsFn = useServerFn(listMyGroups);
   const statusFn = useServerFn(getMyCreatorStatus);
-  const [tab, setTab] = useState<"direct" | "groups">("direct");
+  const [tab, setTab] = useState<"direct" | "groups" | "ai">("direct");
   const { data, isLoading } = useQuery({ queryKey: ["conversations"], queryFn: () => listFn() });
   const { data: groups, isLoading: groupsLoading } = useQuery({ queryKey: ["my-groups"], queryFn: () => groupsFn() });
   const { data: status } = useQuery({ queryKey: ["creator-status"], queryFn: () => statusFn() });
@@ -157,13 +157,14 @@ function Messages() {
   return <AppShell isSuperAdmin={status?.is_super_admin}><div className="mx-auto w-full max-w-3xl space-y-5 overflow-x-hidden p-4 pb-24 md:p-8">
     <div className="flex items-start justify-between gap-3">
       <div><h1 className="text-3xl font-bold">Messages</h1><p className="text-sm text-muted-foreground">Direct chats and group conversations.</p></div>
-      {tab === "groups" ? <NewGroupDialog /> : <NewMessageDialog />}
+      {tab === "groups" ? <NewGroupDialog /> : tab === "direct" ? <NewMessageDialog /> : <Button asChild size="sm"><Link to="/ai"><Bot className="mr-1 h-4 w-4"/>Open Hani AI</Link></Button>}
     </div>
 
     <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
       <TabsList>
         <TabsTrigger value="direct">Direct</TabsTrigger>
         <TabsTrigger value="groups">Groups</TabsTrigger>
+        <TabsTrigger value="ai">AI assistant</TabsTrigger>
       </TabsList>
     </Tabs>
 
@@ -199,5 +200,6 @@ function Messages() {
         </div>
       </Link>)}</div>
     </>}
+    {tab === "ai" && <Card><CardContent className="py-10 text-center"><Bot className="mx-auto mb-3 h-9 w-9 text-primary"/><p className="font-medium">Hani AI remembers your conversations</p><p className="mb-4 text-sm text-muted-foreground">Get app guidance, study help, or open the creator copilot.</p><Button asChild><Link to="/ai">View AI conversations</Link></Button></CardContent></Card>}
   </div></AppShell>;
 }

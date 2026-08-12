@@ -79,7 +79,6 @@ export const requestWithdrawal = createServerFn({ method: "POST" })
     const { data: req, error } = await db.from("withdrawal_requests").insert({
       user_id: context.userId,
       status: "requested",
-      status: "requested",
       amount_kobo: data.amount_kobo,
       bank_name: bank.bank_name,
       account_number: bank.account_number,
@@ -108,10 +107,13 @@ export const listWithdrawals = createServerFn({ method: "GET" })
   .handler(async ({ context }) => {
     if (!(await isSuperAdmin(context.supabase, context.userId))) throw new Error("Forbidden");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data, error } = await (supabaseAdmin as any).from("withdrawal_requests")
-      .select("*, profiles(full_name, email)").order("created_at", { ascending: false }).limit(200);
-    if (error) { console.error("[listWithdrawals] error:", error); return []; }
-    return data ?? [];
+    const db = supabaseAdmin as any;
+    const { data, error } = await db.from("withdrawal_requests").select("*").order("created_at", { ascending: false }).limit(200);
+    if (error) throw error;
+    const userIds = Array.from(new Set((data ?? []).map((row: any) => row.user_id))) as string[];
+    const { data: profiles } = userIds.length ? await db.from("profiles").select("id, full_name, email").in("id", userIds) : { data: [] };
+    const profileMap = new Map((profiles ?? []).map((profile: any) => [profile.id, profile]));
+    return (data ?? []).map((row: any) => ({ ...row, profiles: profileMap.get(row.user_id) ?? null }));
   });
 
 export const resolveWithdrawal = createServerFn({ method: "POST" })
@@ -145,6 +147,13 @@ export const resolveWithdrawal = createServerFn({ method: "POST" })
       await db.from("wallet_transactions").insert({ user_id: req.user_id, kind: "adjustment", amount_kobo: 0, bucket: "earnings", meta: { reason: "withdrawal_rejected", withdrawal_id: req.id } });
       await db.from("withdrawal_requests").update({ status: "rejected", resolved_at: new Date().toISOString(), admin_note: data.note ?? null }).eq("id", data.id);
     }
+    const { notifyUsers } = await import("./notifications.functions");
+    await notifyUsers([req.user_id], {
+      kind: "withdrawal_resolved",
+      title: data.action === "paid" ? "Withdrawal approved" : "Withdrawal declined",
+      body: data.action === "paid" ? "Your withdrawal has been marked paid." : (data.note || "Your withdrawal request was declined."),
+      link: "/wallet",
+    });
     return { ok: true };
   });
 

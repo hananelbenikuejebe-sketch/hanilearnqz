@@ -13,7 +13,9 @@ export const NAV_ITEM_IDS = [
   "exams",
   "notifications",
   "support",
-  "admin", "ads",
+  "admin",
+  "ads",
+  "ai",
 ] as const;
 
 export type NavItemId = (typeof NAV_ITEM_IDS)[number];
