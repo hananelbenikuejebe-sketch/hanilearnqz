@@ -38,6 +38,7 @@ const CATALOG: Record<NavItemId, { to: string; icon: any; label: string }> = {
   notifications: { to: "/notifications", icon: Bell, label: "Notifications" },
   support: { to: "/support", icon: LifeBuoy, label: "Help" },
   admin: { to: "/admin", icon: Shield, label: "Super admin" },
+  ads: { to: "/ads", icon: Megaphone, label: "Promote" },
 };
 
 function isActive(path: string, to: string) {
@@ -117,7 +118,7 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   );
 
   const fullMore = useMemo(() => {
-    const all: NavItemId[] = ["exams", "wallet", "notifications", "support", ...(isSuperAdmin ? (["admin"] as NavItemId[]) : [])];
+    const all: NavItemId[] = ["exams", "wallet", "notifications", "support", "ads", ...(isSuperAdmin ? (["admin"] as NavItemId[]) : [])];
     return all.filter((id) => !primaryIds.includes(id)).map((id) => ({ id, ...CATALOG[id] }));
   }, [primaryIds, isSuperAdmin]);
 

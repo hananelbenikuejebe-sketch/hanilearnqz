@@ -108,7 +108,7 @@ export const listWithdrawals = createServerFn({ method: "GET" })
     if (!(await isSuperAdmin(context.supabase, context.userId))) throw new Error("Forbidden");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data, error } = await (supabaseAdmin as any).from("withdrawal_requests")
-      .select("*, profiles(full_name, email)").order("created_at", { ascending: false }).limit(200);
+      .select("*, profiles!user_id(full_name, email)").order("created_at", { ascending: false }).limit(200);
     if (error) { console.error("[listWithdrawals] error:", error); return []; }
     return data ?? [];
   });
