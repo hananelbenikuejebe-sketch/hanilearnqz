@@ -29,7 +29,9 @@ function ChatWindow({ threadId, initialMessages, title, mode }: { threadId: stri
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const transport = useMemo(() => new DefaultChatTransport({ api: `/api/ai/${threadId}`, headers: async () => {
     const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+    const headers: Record<string, string> = {};
+    if (data.session?.access_token) headers.Authorization = `Bearer ${data.session.access_token}`;
+    return headers;
   } }), [threadId]);
   const { messages, sendMessage, status, stop } = useChat({ id: threadId, messages: initialMessages, transport, onError: (error) => toast.error(error.message) });
   useEffect(() => { if (status === "ready") textareaRef.current?.focus(); }, [status]);
