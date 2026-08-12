@@ -328,12 +328,15 @@ export const pushDiagnostics = createServerFn({ method: "GET" }).middleware([req
   const configured = !!(process.env["VAPID_PUBLIC_KEY"] && process.env["VAPID_PRIVATE_KEY"]);
   const { count: mySubs } = await db.from("push_subscriptions").select("id", { count: "exact", head: true }).eq("user_id", context.userId);
   const { count: totalSubs } = await db.from("push_subscriptions").select("id", { count: "exact", head: true });
+  const { data: recentDeliveries } = await db.from("push_delivery_log").select("id, user_id, endpoint_host, status, ok, expired, error, payload, created_at").order("created_at", { ascending: false }).limit(20);
   return {
     vapid_configured: configured,
     vapid_subject: process.env["VAPID_SUBJECT"] ?? null,
     my_subscription_count: mySubs ?? 0,
     total_subscription_count: totalSubs ?? 0,
     cron_secret_configured: !!process.env["CRON_SECRET"],
+    public_key_preview: process.env["VAPID_PUBLIC_KEY"] ? `${process.env["VAPID_PUBLIC_KEY"]!.slice(0, 12)}…${process.env["VAPID_PUBLIC_KEY"]!.slice(-8)}` : null,
+    recent_deliveries: recentDeliveries ?? [],
   };
 });
 

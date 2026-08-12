@@ -183,7 +183,7 @@ export async function pushToUsers(
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as any;
     const uniq = Array.from(new Set(userIds));
-    const { data: subs } = await db.from("push_subscriptions").select("id, endpoint, p256dh, auth").in("user_id", uniq);
+    const { data: subs } = await db.from("push_subscriptions").select("id, user_id, endpoint, p256dh, auth").in("user_id", uniq);
     const rows: any[] = subs ?? [];
     let sent = 0;
     const statuses: number[] = [];
@@ -199,6 +199,15 @@ export async function pushToUsers(
       if (typeof result.status === "number") statuses.push(result.status);
       if (result.ok) sent++;
       if (result.expired) toPrune.push(s.id);
+      await db.from("push_delivery_log").insert({
+        user_id: s.user_id,
+        endpoint_host: new URL(s.endpoint).host,
+        status: result.status ?? null,
+        ok: result.ok,
+        expired: result.expired ?? false,
+        error: result.error ?? null,
+        payload: { title: notif.title, body: notif.body, link: notif.link, image_url: notif.image_url, kind: notif.kind },
+      });
     }));
     if (toPrune.length) await db.from("push_subscriptions").delete().in("id", toPrune);
     console.info(`[pushToUsers] attempted=${rows.length} sent=${sent} pruned=${toPrune.length} statuses=${JSON.stringify(statuses)}`);

@@ -11,8 +11,8 @@ export const Route = createFileRoute("/api/public/cron/daily-notify")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const key = request.headers.get("apikey");
-        const expected = process.env["SUPABASE_PUBLISHABLE_KEY"] ?? process.env["SUPABASE_ANON_KEY"];
+        const key = request.headers.get("x-cron-secret");
+        const expected = process.env["CRON_SECRET"];
         if (!expected || key !== expected) {
           return new Response("unauthorized", { status: 401 });
         }
