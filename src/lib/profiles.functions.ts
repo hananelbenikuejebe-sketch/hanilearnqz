@@ -91,6 +91,7 @@ const socialLinksSchema = z.object({
   instagram: z.string().trim().max(300).optional().or(z.literal("")),
   facebook: z.string().trim().max(300).optional().or(z.literal("")),
   tiktok: z.string().trim().max(300).optional().or(z.literal("")),
+  youtube: z.string().trim().max(300).optional().or(z.literal("")),
   website: z.string().trim().max(300).optional().or(z.literal("")),
 }).partial();
 

@@ -37,6 +37,7 @@ function AdminLayout() {
     { to: "/admin", icon: LayoutDashboard, label: "Dashboard", adminOnly: false },
     { to: "/admin/quizzes", icon: ListChecks, label: "Quizzes", adminOnly: false },
     { to: "/admin/exams", icon: ListChecks, label: "Exams", adminOnly: false },
+    { to: "/ads", icon: Megaphone, label: "Promote (Ads)", adminOnly: false },
     { to: "/admin/users", icon: Users, label: "Users & money", adminOnly: true },
     { to: "/admin/ads", icon: Megaphone, label: "Ads", adminOnly: true },
     { to: "/admin/notifications", icon: BellIcon, label: "Notifications", adminOnly: true },

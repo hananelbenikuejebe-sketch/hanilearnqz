@@ -178,6 +178,47 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_messages: {
+        Row: {
+          ai_message_id: string | null
+          created_at: string
+          id: string
+          message: Json
+          position: number
+          role: string
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          ai_message_id?: string | null
+          created_at?: string
+          id?: string
+          message: Json
+          position?: number
+          role: string
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          ai_message_id?: string | null
+          created_at?: string
+          id?: string
+          message?: Json
+          position?: number
+          role?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "ai_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ai_notification_log: {
         Row: {
           created_at: string
@@ -201,6 +242,33 @@ export type Database = {
           kind?: string
           sent_on?: string
           title?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_threads: {
+        Row: {
+          created_at: string
+          id: string
+          mode: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mode?: string
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mode?: string
+          title?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -1097,6 +1165,45 @@ export type Database = {
           school?: string | null
           social_links?: Json
           whatsapp_number?: string | null
+        }
+        Relationships: []
+      }
+      push_delivery_log: {
+        Row: {
+          created_at: string
+          endpoint_host: string | null
+          error: string | null
+          expired: boolean
+          id: string
+          ok: boolean
+          payload: Json
+          public_key_fingerprint: string | null
+          status: number | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          endpoint_host?: string | null
+          error?: string | null
+          expired?: boolean
+          id?: string
+          ok?: boolean
+          payload?: Json
+          public_key_fingerprint?: string | null
+          status?: number | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          endpoint_host?: string | null
+          error?: string | null
+          expired?: boolean
+          id?: string
+          ok?: boolean
+          payload?: Json
+          public_key_fingerprint?: string | null
+          status?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }

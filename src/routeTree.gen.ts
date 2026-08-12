@@ -24,12 +24,15 @@ import { Route as AuthenticatedAdsRouteImport } from './routes/_authenticated/ad
 import { Route as AuthenticatedAdminRouteRouteImport } from './routes/_authenticated/admin/route'
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile.index'
 import { Route as AuthenticatedMessagesIndexRouteImport } from './routes/_authenticated/messages.index'
+import { Route as AuthenticatedAiIndexRouteImport } from './routes/_authenticated/ai.index'
 import { Route as AuthenticatedAdminIndexRouteImport } from './routes/_authenticated/admin/index'
 import { Route as ShareQuizQuizIdRouteImport } from './routes/share.quiz.$quizId'
+import { Route as ApiAiThreadIdRouteImport } from './routes/api/ai.$threadId'
 import { Route as AuthenticatedQuizQuizIdRouteImport } from './routes/_authenticated/quiz.$quizId'
 import { Route as AuthenticatedProfileUserIdRouteImport } from './routes/_authenticated/profile.$userId'
 import { Route as AuthenticatedMessagesUserIdRouteImport } from './routes/_authenticated/messages.$userId'
 import { Route as AuthenticatedExamExamIdRouteImport } from './routes/_authenticated/exam.$examId'
+import { Route as AuthenticatedAiThreadIdRouteImport } from './routes/_authenticated/ai.$threadId'
 import { Route as AuthenticatedAdminUsersRouteImport } from './routes/_authenticated/admin/users'
 import { Route as AuthenticatedAdminSettingsRouteImport } from './routes/_authenticated/admin/settings'
 import { Route as AuthenticatedAdminQuizzesRouteImport } from './routes/_authenticated/admin/quizzes'
@@ -129,6 +132,11 @@ const AuthenticatedMessagesIndexRoute =
     path: '/messages/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedAiIndexRoute = AuthenticatedAiIndexRouteImport.update({
+  id: '/ai/',
+  path: '/ai/',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -137,6 +145,11 @@ const AuthenticatedAdminIndexRoute = AuthenticatedAdminIndexRouteImport.update({
 const ShareQuizQuizIdRoute = ShareQuizQuizIdRouteImport.update({
   id: '/share/quiz/$quizId',
   path: '/share/quiz/$quizId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiAiThreadIdRoute = ApiAiThreadIdRouteImport.update({
+  id: '/api/ai/$threadId',
+  path: '/api/ai/$threadId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedQuizQuizIdRoute = AuthenticatedQuizQuizIdRouteImport.update({
@@ -159,6 +172,11 @@ const AuthenticatedMessagesUserIdRoute =
 const AuthenticatedExamExamIdRoute = AuthenticatedExamExamIdRouteImport.update({
   id: '/exam/$examId',
   path: '/exam/$examId',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAiThreadIdRoute = AuthenticatedAiThreadIdRouteImport.update({
+  id: '/ai/$threadId',
+  path: '/ai/$threadId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedAdminUsersRoute = AuthenticatedAdminUsersRouteImport.update({
@@ -306,12 +324,15 @@ export interface FileRoutesByFullPath {
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/ai/$threadId': typeof AuthenticatedAiThreadIdRoute
   '/exam/$examId': typeof AuthenticatedExamExamIdRoute
   '/messages/$userId': typeof AuthenticatedMessagesUserIdRoute
   '/profile/$userId': typeof AuthenticatedProfileUserIdRoute
   '/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
+  '/api/ai/$threadId': typeof ApiAiThreadIdRoute
   '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
+  '/ai/': typeof AuthenticatedAiIndexRoute
   '/messages/': typeof AuthenticatedMessagesIndexRoute
   '/profile/': typeof AuthenticatedProfileIndexRoute
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
@@ -346,11 +367,14 @@ export interface FileRoutesByTo {
   '/admin/proofs': typeof AuthenticatedAdminProofsRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/ai/$threadId': typeof AuthenticatedAiThreadIdRoute
   '/exam/$examId': typeof AuthenticatedExamExamIdRoute
   '/messages/$userId': typeof AuthenticatedMessagesUserIdRoute
   '/profile/$userId': typeof AuthenticatedProfileUserIdRoute
+  '/api/ai/$threadId': typeof ApiAiThreadIdRoute
   '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
+  '/ai': typeof AuthenticatedAiIndexRoute
   '/messages': typeof AuthenticatedMessagesIndexRoute
   '/profile': typeof AuthenticatedProfileIndexRoute
   '/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
@@ -390,12 +414,15 @@ export interface FileRoutesById {
   '/_authenticated/admin/quizzes': typeof AuthenticatedAdminQuizzesRouteWithChildren
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/users': typeof AuthenticatedAdminUsersRoute
+  '/_authenticated/ai/$threadId': typeof AuthenticatedAiThreadIdRoute
   '/_authenticated/exam/$examId': typeof AuthenticatedExamExamIdRoute
   '/_authenticated/messages/$userId': typeof AuthenticatedMessagesUserIdRoute
   '/_authenticated/profile/$userId': typeof AuthenticatedProfileUserIdRoute
   '/_authenticated/quiz/$quizId': typeof AuthenticatedQuizQuizIdRouteWithChildren
+  '/api/ai/$threadId': typeof ApiAiThreadIdRoute
   '/share/quiz/$quizId': typeof ShareQuizQuizIdRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
+  '/_authenticated/ai/': typeof AuthenticatedAiIndexRoute
   '/_authenticated/messages/': typeof AuthenticatedMessagesIndexRoute
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
   '/_authenticated/admin/quizzes/new': typeof AuthenticatedAdminQuizzesNewRoute
@@ -435,12 +462,15 @@ export interface FileRouteTypes {
     | '/admin/quizzes'
     | '/admin/settings'
     | '/admin/users'
+    | '/ai/$threadId'
     | '/exam/$examId'
     | '/messages/$userId'
     | '/profile/$userId'
     | '/quiz/$quizId'
+    | '/api/ai/$threadId'
     | '/share/quiz/$quizId'
     | '/admin/'
+    | '/ai/'
     | '/messages/'
     | '/profile/'
     | '/admin/quizzes/new'
@@ -475,11 +505,14 @@ export interface FileRouteTypes {
     | '/admin/proofs'
     | '/admin/settings'
     | '/admin/users'
+    | '/ai/$threadId'
     | '/exam/$examId'
     | '/messages/$userId'
     | '/profile/$userId'
+    | '/api/ai/$threadId'
     | '/share/quiz/$quizId'
     | '/admin'
+    | '/ai'
     | '/messages'
     | '/profile'
     | '/admin/quizzes/new'
@@ -518,12 +551,15 @@ export interface FileRouteTypes {
     | '/_authenticated/admin/quizzes'
     | '/_authenticated/admin/settings'
     | '/_authenticated/admin/users'
+    | '/_authenticated/ai/$threadId'
     | '/_authenticated/exam/$examId'
     | '/_authenticated/messages/$userId'
     | '/_authenticated/profile/$userId'
     | '/_authenticated/quiz/$quizId'
+    | '/api/ai/$threadId'
     | '/share/quiz/$quizId'
     | '/_authenticated/admin/'
+    | '/_authenticated/ai/'
     | '/_authenticated/messages/'
     | '/_authenticated/profile/'
     | '/_authenticated/admin/quizzes/new'
@@ -544,6 +580,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  ApiAiThreadIdRoute: typeof ApiAiThreadIdRoute
   ShareQuizQuizIdRoute: typeof ShareQuizQuizIdRoute
   ApiPublicCronDailyNotifyRoute: typeof ApiPublicCronDailyNotifyRoute
   ApiPublicHooksMonnifyRoute: typeof ApiPublicHooksMonnifyRoute
@@ -656,6 +693,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedMessagesIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/ai/': {
+      id: '/_authenticated/ai/'
+      path: '/ai'
+      fullPath: '/ai/'
+      preLoaderRoute: typeof AuthenticatedAiIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/admin/': {
       id: '/_authenticated/admin/'
       path: '/'
@@ -668,6 +712,13 @@ declare module '@tanstack/react-router' {
       path: '/share/quiz/$quizId'
       fullPath: '/share/quiz/$quizId'
       preLoaderRoute: typeof ShareQuizQuizIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ai/$threadId': {
+      id: '/api/ai/$threadId'
+      path: '/api/ai/$threadId'
+      fullPath: '/api/ai/$threadId'
+      preLoaderRoute: typeof ApiAiThreadIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/quiz/$quizId': {
@@ -696,6 +747,13 @@ declare module '@tanstack/react-router' {
       path: '/exam/$examId'
       fullPath: '/exam/$examId'
       preLoaderRoute: typeof AuthenticatedExamExamIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ai/$threadId': {
+      id: '/_authenticated/ai/$threadId'
+      path: '/ai/$threadId'
+      fullPath: '/ai/$threadId'
+      preLoaderRoute: typeof AuthenticatedAiThreadIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/admin/users': {
@@ -947,10 +1005,12 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSupportRoute: typeof AuthenticatedSupportRoute
   AuthenticatedWalletRoute: typeof AuthenticatedWalletRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedAiThreadIdRoute: typeof AuthenticatedAiThreadIdRoute
   AuthenticatedExamExamIdRoute: typeof AuthenticatedExamExamIdRoute
   AuthenticatedMessagesUserIdRoute: typeof AuthenticatedMessagesUserIdRoute
   AuthenticatedProfileUserIdRoute: typeof AuthenticatedProfileUserIdRoute
   AuthenticatedQuizQuizIdRoute: typeof AuthenticatedQuizQuizIdRouteWithChildren
+  AuthenticatedAiIndexRoute: typeof AuthenticatedAiIndexRoute
   AuthenticatedMessagesIndexRoute: typeof AuthenticatedMessagesIndexRoute
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
   AuthenticatedMessagesGroupGroupIdRoute: typeof AuthenticatedMessagesGroupGroupIdRoute
@@ -967,10 +1027,12 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSupportRoute: AuthenticatedSupportRoute,
   AuthenticatedWalletRoute: AuthenticatedWalletRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedAiThreadIdRoute: AuthenticatedAiThreadIdRoute,
   AuthenticatedExamExamIdRoute: AuthenticatedExamExamIdRoute,
   AuthenticatedMessagesUserIdRoute: AuthenticatedMessagesUserIdRoute,
   AuthenticatedProfileUserIdRoute: AuthenticatedProfileUserIdRoute,
   AuthenticatedQuizQuizIdRoute: AuthenticatedQuizQuizIdRouteWithChildren,
+  AuthenticatedAiIndexRoute: AuthenticatedAiIndexRoute,
   AuthenticatedMessagesIndexRoute: AuthenticatedMessagesIndexRoute,
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
   AuthenticatedMessagesGroupGroupIdRoute:
@@ -984,6 +1046,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  ApiAiThreadIdRoute: ApiAiThreadIdRoute,
   ShareQuizQuizIdRoute: ShareQuizQuizIdRoute,
   ApiPublicCronDailyNotifyRoute: ApiPublicCronDailyNotifyRoute,
   ApiPublicHooksMonnifyRoute: ApiPublicHooksMonnifyRoute,
@@ -991,13 +1054,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

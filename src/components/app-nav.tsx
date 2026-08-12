@@ -14,6 +14,8 @@ import {
   Bell,
   Menu,
   Settings2,
+  Megaphone,
+  Bot,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -38,6 +40,8 @@ const CATALOG: Record<NavItemId, { to: string; icon: any; label: string }> = {
   notifications: { to: "/notifications", icon: Bell, label: "Notifications" },
   support: { to: "/support", icon: LifeBuoy, label: "Help" },
   admin: { to: "/admin", icon: Shield, label: "Super admin" },
+  ads: { to: "/ads", icon: Megaphone, label: "Promote" },
+  ai: { to: "/ai", icon: Bot, label: "Hani AI" },
 };
 
 function isActive(path: string, to: string) {
@@ -117,7 +121,7 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   );
 
   const fullMore = useMemo(() => {
-    const all: NavItemId[] = ["exams", "wallet", "notifications", "support", ...(isSuperAdmin ? (["admin"] as NavItemId[]) : [])];
+    const all: NavItemId[] = ["ai", "ads", "exams", "wallet", "notifications", "support", ...(isSuperAdmin ? (["admin"] as NavItemId[]) : [])];
     return all.filter((id) => !primaryIds.includes(id)).map((id) => ({ id, ...CATALOG[id] }));
   }, [primaryIds, isSuperAdmin]);
 
