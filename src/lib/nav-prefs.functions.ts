@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
-export const DEFAULT_NAV_ITEMS = ["explore", "create", "wallet", "messages", "profile"] as const;
+export const DEFAULT_NAV_ITEMS = ["explore", "create", "ai", "messages", "wallet"] as const;
 
 export const NAV_ITEM_IDS = [
   "explore",
