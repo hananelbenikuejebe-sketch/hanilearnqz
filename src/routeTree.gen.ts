@@ -45,6 +45,7 @@ import { Route as AuthenticatedAdminAdsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedQuizQuizIdIndexRouteImport } from './routes/_authenticated/quiz.$quizId.index'
 import { Route as AuthenticatedAdminQuizzesIndexRouteImport } from './routes/_authenticated/admin/quizzes.index'
 import { Route as AuthenticatedAdminExamsIndexRouteImport } from './routes/_authenticated/admin/exams.index'
+import { Route as AuthenticatedAdminAnalyticsIndexRouteImport } from './routes/_authenticated/admin/analytics.index'
 import { Route as ApiPublicHooksMonnifyRouteImport } from './routes/api/public/hooks/monnify'
 import { Route as ApiPublicCronDailyNotifyRouteImport } from './routes/api/public/cron/daily-notify'
 import { Route as AuthenticatedQuizQuizIdTakeRouteImport } from './routes/_authenticated/quiz.$quizId.take'
@@ -248,6 +249,12 @@ const AuthenticatedAdminExamsIndexRoute =
     path: '/',
     getParentRoute: () => AuthenticatedAdminExamsRoute,
   } as any)
+const AuthenticatedAdminAnalyticsIndexRoute =
+  AuthenticatedAdminAnalyticsIndexRouteImport.update({
+    id: '/analytics/',
+    path: '/analytics/',
+    getParentRoute: () => AuthenticatedAdminRouteRoute,
+  } as any)
 const ApiPublicHooksMonnifyRoute = ApiPublicHooksMonnifyRouteImport.update({
   id: '/api/public/hooks/monnify',
   path: '/api/public/hooks/monnify',
@@ -340,6 +347,7 @@ export interface FileRoutesByFullPath {
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
   '/api/public/cron/daily-notify': typeof ApiPublicCronDailyNotifyRoute
   '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
+  '/admin/analytics/': typeof AuthenticatedAdminAnalyticsIndexRoute
   '/admin/exams/': typeof AuthenticatedAdminExamsIndexRoute
   '/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
   '/quiz/$quizId/': typeof AuthenticatedQuizQuizIdIndexRoute
@@ -382,6 +390,7 @@ export interface FileRoutesByTo {
   '/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
   '/api/public/cron/daily-notify': typeof ApiPublicCronDailyNotifyRoute
   '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
+  '/admin/analytics': typeof AuthenticatedAdminAnalyticsIndexRoute
   '/admin/exams': typeof AuthenticatedAdminExamsIndexRoute
   '/admin/quizzes': typeof AuthenticatedAdminQuizzesIndexRoute
   '/quiz/$quizId': typeof AuthenticatedQuizQuizIdIndexRoute
@@ -430,6 +439,7 @@ export interface FileRoutesById {
   '/_authenticated/quiz/$quizId/take': typeof AuthenticatedQuizQuizIdTakeRoute
   '/api/public/cron/daily-notify': typeof ApiPublicCronDailyNotifyRoute
   '/api/public/hooks/monnify': typeof ApiPublicHooksMonnifyRoute
+  '/_authenticated/admin/analytics/': typeof AuthenticatedAdminAnalyticsIndexRoute
   '/_authenticated/admin/exams/': typeof AuthenticatedAdminExamsIndexRoute
   '/_authenticated/admin/quizzes/': typeof AuthenticatedAdminQuizzesIndexRoute
   '/_authenticated/quiz/$quizId/': typeof AuthenticatedQuizQuizIdIndexRoute
@@ -478,6 +488,7 @@ export interface FileRouteTypes {
     | '/quiz/$quizId/take'
     | '/api/public/cron/daily-notify'
     | '/api/public/hooks/monnify'
+    | '/admin/analytics/'
     | '/admin/exams/'
     | '/admin/quizzes/'
     | '/quiz/$quizId/'
@@ -520,6 +531,7 @@ export interface FileRouteTypes {
     | '/quiz/$quizId/take'
     | '/api/public/cron/daily-notify'
     | '/api/public/hooks/monnify'
+    | '/admin/analytics'
     | '/admin/exams'
     | '/admin/quizzes'
     | '/quiz/$quizId'
@@ -567,6 +579,7 @@ export interface FileRouteTypes {
     | '/_authenticated/quiz/$quizId/take'
     | '/api/public/cron/daily-notify'
     | '/api/public/hooks/monnify'
+    | '/_authenticated/admin/analytics/'
     | '/_authenticated/admin/exams/'
     | '/_authenticated/admin/quizzes/'
     | '/_authenticated/quiz/$quizId/'
@@ -840,6 +853,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminExamsIndexRouteImport
       parentRoute: typeof AuthenticatedAdminExamsRoute
     }
+    '/_authenticated/admin/analytics/': {
+      id: '/_authenticated/admin/analytics/'
+      path: '/analytics'
+      fullPath: '/admin/analytics/'
+      preLoaderRoute: typeof AuthenticatedAdminAnalyticsIndexRouteImport
+      parentRoute: typeof AuthenticatedAdminRouteRoute
+    }
     '/api/public/hooks/monnify': {
       id: '/api/public/hooks/monnify'
       path: '/api/public/hooks/monnify'
@@ -954,6 +974,7 @@ interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminUsersRoute: typeof AuthenticatedAdminUsersRoute
   AuthenticatedAdminIndexRoute: typeof AuthenticatedAdminIndexRoute
+  AuthenticatedAdminAnalyticsIndexRoute: typeof AuthenticatedAdminAnalyticsIndexRoute
 }
 
 const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren =
@@ -968,6 +989,8 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
     AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
     AuthenticatedAdminUsersRoute: AuthenticatedAdminUsersRoute,
     AuthenticatedAdminIndexRoute: AuthenticatedAdminIndexRoute,
+    AuthenticatedAdminAnalyticsIndexRoute:
+      AuthenticatedAdminAnalyticsIndexRoute,
   }
 
 const AuthenticatedAdminRouteRouteWithChildren =
