@@ -262,13 +262,8 @@ export async function checkAiAccess(_supabase: any, userId: string, feature: AiF
 
   // Centralised: an active paid creator_access subscription unlocks AI
   // regardless of creator_permissions.ai_enabled.
-  const effective = await getEffectiveEntitlements(userId);
-  if (!effective.canUseAI) {
-    const err: any = new Error("AI tools are locked on your current tier. Upgrade to Pro Creator or ask an admin to enable them.");
-    err.code = "AI_DISABLED";
-    throw err;
-  }
-
+  // Credit-only gating: every AI feature is open to every account. The single
+  // regulator is whether the user actually holds spendable AI credit.
   await ensureFreeMonthlyCredit(db, userId);
   // Hard gate: balance must be > 0 and not expired BEFORE any paid AI call is
   // attempted — this is the choke point that closes the ₦0-balance leak.

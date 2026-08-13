@@ -157,8 +157,8 @@ export async function sendWebPush(
 }
 
 function getVapid() {
-  const publicKey = process.env["VAPID_PUBLIC_KEY"];
-  const privateKey = process.env["VAPID_PRIVATE_KEY"];
+  const publicKey = process.env["VAPID_PUBLIC_KEY"] || process.env["Vapid_manual_public_key"];
+  const privateKey = process.env["VAPID_PRIVATE_KEY"] || process.env["Vapid_manual_private_key"];
   const subject = process.env["VAPID_SUBJECT"] || "mailto:support@hanilearnqz.com";
   if (!publicKey || !privateKey) return null;
   return { publicKey, privateKey, subject };

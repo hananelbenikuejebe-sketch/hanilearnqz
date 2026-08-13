@@ -169,3 +169,65 @@ export const getBehaviorInsights = createServerFn({ method: "GET" })
       },
     };
   });
+
+/**
+ * Full analytics for a single account, used by the per-user analytics page so
+ * super admins never have to scroll the platform-wide dashboard to answer
+ * "what is this person actually doing?".
+ */
+export const getUserAnalytics = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ user_id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    if (!(await isSuperAdmin(context.supabase, context.userId))) throw new Error("Forbidden");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as any;
+    const uid = data.user_id;
+
+    const [profile, wallet, quizzes, attempts, events, ai, tx, purchases] = await Promise.all([
+      db.from("profiles").select("id, full_name, handle, email, is_guest, school, level, avatar_url, created_at").eq("id", uid).maybeSingle(),
+      db.from("wallets").select("balance_kobo, ai_credit_balance_kobo, ai_credit_expires_at").eq("user_id", uid).maybeSingle(),
+      fetchAllRows((f, t) => db.from("quizzes").select("id, title, category, is_published, created_at, price_kobo").eq("created_by", uid).range(f, t)),
+      fetchAllRows((f, t) => db.from("attempts").select("id, quiz_id, score_pct, points_awarded, points_max, submitted_at").eq("student_id", uid).range(f, t)),
+      fetchAllRows((f, t) => db.from("user_events").select("kind, category, created_at").eq("user_id", uid).range(f, t)),
+      fetchAllRows((f, t) => db.from("ai_usage_log").select("feature, model, provider, credits_cost, created_at").eq("user_id", uid).range(f, t)),
+      fetchAllRows((f, t) => db.from("wallet_transactions").select("kind, bucket, amount_kobo, status, created_at").eq("user_id", uid).range(f, t)),
+      fetchAllRows((f, t) => db.from("quiz_purchases").select("quiz_id, price_kobo, created_at").eq("user_id", uid).range(f, t)),
+    ]);
+
+    const interests = await getUserInterestProfile(uid).catch(() => null);
+
+    const perFeature = new Map<string, { calls: number; cost_kobo: number }>();
+    for (const row of ai as any[]) {
+      const e = perFeature.get(row.feature) ?? { calls: 0, cost_kobo: 0 };
+      e.calls++;
+      e.cost_kobo += Math.round(Number(row.credits_cost ?? 0));
+      perFeature.set(row.feature, e);
+    }
+    const scores = (attempts as any[]).map((a) => Number(a.score_pct ?? 0));
+    const lastActive = [...(events as any[]).map((e) => e.created_at), ...(attempts as any[]).map((a) => a.submitted_at)]
+      .filter(Boolean).sort().at(-1) ?? null;
+
+    return {
+      profile: profile.data ?? null,
+      wallet: wallet.data ?? null,
+      totals: {
+        quizzes: quizzes.length,
+        published: (quizzes as any[]).filter((q) => q.is_published).length,
+        attempts: attempts.length,
+        avg_score: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0,
+        events: events.length,
+        ai_calls: ai.length,
+        ai_spend_kobo: (ai as any[]).reduce((n, r) => n + Math.round(Number(r.credits_cost ?? 0)), 0),
+        purchases: purchases.length,
+        purchase_spend_kobo: (purchases as any[]).reduce((n, r) => n + Number(r.price_kobo ?? 0), 0),
+        last_active: lastActive,
+      },
+      interests,
+      ai_by_feature: [...perFeature.entries()].map(([feature, v]) => ({ feature, ...v })).sort((a, b) => b.cost_kobo - a.cost_kobo),
+      recent_ai: (ai as any[]).slice(-20).reverse(),
+      recent_transactions: (tx as any[]).slice(-20).reverse(),
+      quizzes: (quizzes as any[]).slice(0, 30),
+      recent_attempts: (attempts as any[]).slice(-20).reverse(),
+    };
+  });

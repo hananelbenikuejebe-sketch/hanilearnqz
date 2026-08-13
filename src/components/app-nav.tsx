@@ -121,7 +121,7 @@ export function AppNav({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
   );
 
   const fullMore = useMemo(() => {
-    const all: NavItemId[] = ["ai", "ads", "exams", "wallet", "notifications", "support", ...(isSuperAdmin ? (["admin"] as NavItemId[]) : [])];
+    const all: NavItemId[] = ["ai", "profile", "ads", "exams", "wallet", "notifications", "support", ...(isSuperAdmin ? (["admin"] as NavItemId[]) : [])];
     return all.filter((id) => !primaryIds.includes(id)).map((id) => ({ id, ...CATALOG[id] }));
   }, [primaryIds, isSuperAdmin]);
 
