@@ -10,7 +10,6 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Infinity as InfinityIcon, Coins } from "lucide-react";
 import { toast } from "sonner";
-import { BehaviorInsightsPanel } from "@/components/behavior-insights";
 
 export const Route = createFileRoute("/_authenticated/admin/users")({
   component: Users,
@@ -113,6 +112,9 @@ function Users() {
                     }}>
                     <Coins className="mr-1 h-3.5 w-3.5" />Credit
                   </Button>
+                  <Button asChild size="sm" variant="ghost">
+                    <Link to="/admin/analytics/$userId" params={{ userId: u.user_id }}>Analytics</Link>
+                  </Button>
                 </div>
               </div>
             ))}
@@ -121,7 +123,13 @@ function Users() {
         </CardContent>
       </Card>
 
-      <BehaviorInsightsPanel />
+      <Card>
+        <CardHeader><CardTitle className="text-base">Analytics</CardTitle></CardHeader>
+        <CardContent>
+          <p className="mb-3 text-sm text-muted-foreground">The full behaviour dashboard and per-user drill-down now live on their own panel.</p>
+          <Button asChild size="sm"><Link to="/admin/analytics">Open analytics dashboard</Link></Button>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader><CardTitle className="text-base">Recent money movement</CardTitle></CardHeader>

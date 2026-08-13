@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Outlet, createRootRouteWithContext, useRouter, useRouterState, HeadContent, Scripts } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -97,6 +97,9 @@ function RootComponent() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const currentTour = findTourForPath(pathname);
+  // Client-only overlays: rendering them during SSR desynced the hydrated tree.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "SIGNED_IN" || event === "SIGNED_OUT" || event === "USER_UPDATED") {
@@ -115,8 +118,8 @@ function RootComponent() {
         <CoachMarks />
         <PushPrompt />
         <PwaInstallBanner />
-        {currentTour && <TourOverlay key={currentTour.key} tour={currentTour.key} />}
-        {currentTour && (
+        {mounted && currentTour && <TourOverlay key={currentTour.key} tour={currentTour.key} />}
+        {mounted && currentTour && (
           <button
             type="button"
             aria-label="Replay page tour"
