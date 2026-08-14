@@ -226,7 +226,7 @@ export async function aiChat(
     opts.model && p === primary ? opts.model : p === "openrouter" ? routing.openrouterModel : DEFAULT_LOVABLE_MODEL;
 
   let primaryError: any = null;
-  if (PROVIDERS[primary].key() && !(primary === "openrouter" && !routing.openrouterEnabled)) {
+  if (PROVIDERS[primary].key()) {
     try {
       const r = await callProvider(primary, modelFor(primary), messages, opts);
       return { ...r, fellBack: false };
@@ -237,7 +237,7 @@ export async function aiChat(
     primaryError = new Error(`${primary} is not configured`);
   }
 
-  const secondaryConfigured = PROVIDERS[secondary].key() && !(secondary === "openrouter" && !routing.openrouterEnabled);
+  const secondaryConfigured = PROVIDERS[secondary].key();
   if (!secondaryConfigured) {
     throw humaniseError(primaryError, primary);
   }
