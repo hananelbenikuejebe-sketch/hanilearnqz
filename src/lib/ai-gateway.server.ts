@@ -1,12 +1,19 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 
-export function createLovableAiGatewayProvider(lovableApiKey: string) {
+/**
+ * All AI traffic in this app goes through OpenRouter. (The Lovable AI gateway
+ * has been removed so the project runs unchanged outside Lovable, e.g. Vercel.)
+ */
+export const DEFAULT_CHAT_MODEL = "openai/gpt-4o-mini";
+
+export function createAiProvider(apiKey: string) {
   return createOpenAICompatible({
-    name: "lovable",
-    baseURL: "https://ai.gateway.lovable.dev/v1",
+    name: "openrouter",
+    baseURL: "https://openrouter.ai/api/v1",
     headers: {
-      "Lovable-API-Key": lovableApiKey,
-      "X-Lovable-AIG-SDK": "vercel-ai-sdk",
+      Authorization: `Bearer ${apiKey}`,
+      "HTTP-Referer": "https://hanilearnqz.lovable.app",
+      "X-Title": "HaniLearn-QZ",
     },
   });
 }
