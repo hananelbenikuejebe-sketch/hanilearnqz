@@ -46,8 +46,8 @@ const DEFAULT_OPENROUTER_MODEL = "openrouter/free";
 // Verified against the live Lovable AI gateway (curl, 2024): google/gemini-3-flash-preview
 // returns 200. google/gemini-2.5-flash and google/gemini-2.5-flash-lite also work and are
 // used as automatic fallbacks below.
-const DEFAULT_LOVABLE_MODEL = "google/gemini-3-flash-preview";
-const LOVABLE_FALLBACK_MODEL = "google/gemini-2.5-flash";
+const DEFAULT_LOVABLE_MODEL = "openai/gpt-4o-mini";
+const LOVABLE_FALLBACK_MODEL = "meta-llama/llama-3.3-70b-instruct";
 
 const REQUEST_TIMEOUT_MS = 45_000;
 const RETRY_BACKOFF_MS = 800;
@@ -71,10 +71,17 @@ const PROVIDERS: Record<AiProviderName, ProviderConfig> = {
     }),
     defaultModel: DEFAULT_OPENROUTER_MODEL,
   },
+  // Every lane routes to OpenRouter. The Lovable AI gateway was removed so the
+  // app runs unchanged outside Lovable (e.g. on Vercel).
   lovable: {
-    url: "https://ai.gateway.lovable.dev/v1/chat/completions",
-    key: () => process.env['LOVABLE_API_KEY'],
-    headers: (key) => ({ "Content-Type": "application/json", "Lovable-API-Key": key }),
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    key: () => process.env['OPENROUTER_API_KEY'],
+    headers: (key) => ({
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+      "HTTP-Referer": "https://hanilearnqz.lovable.app",
+      "X-Title": "HaniLearn-QZ",
+    }),
     defaultModel: DEFAULT_LOVABLE_MODEL,
   },
 };
@@ -211,14 +218,15 @@ export async function aiChat(
 ): Promise<AiCallResult> {
   const routing = await loadRouting();
   let primary: AiProviderName = weight === "heavy" ? routing.heavy : routing.light;
-  if (primary === "openrouter" && !routing.openrouterEnabled) primary = "lovable";
+  // openrouter_enabled only chooses which model id is used now that both lanes
+  // point at OpenRouter; it can no longer disable the only provider.
   const secondary: AiProviderName = primary === "openrouter" ? "lovable" : "openrouter";
 
   const modelFor = (p: AiProviderName) =>
     opts.model && p === primary ? opts.model : p === "openrouter" ? routing.openrouterModel : DEFAULT_LOVABLE_MODEL;
 
   let primaryError: any = null;
-  if (PROVIDERS[primary].key() && !(primary === "openrouter" && !routing.openrouterEnabled)) {
+  if (PROVIDERS[primary].key()) {
     try {
       const r = await callProvider(primary, modelFor(primary), messages, opts);
       return { ...r, fellBack: false };
@@ -229,7 +237,7 @@ export async function aiChat(
     primaryError = new Error(`${primary} is not configured`);
   }
 
-  const secondaryConfigured = PROVIDERS[secondary].key() && !(secondary === "openrouter" && !routing.openrouterEnabled);
+  const secondaryConfigured = PROVIDERS[secondary].key();
   if (!secondaryConfigured) {
     throw humaniseError(primaryError, primary);
   }
@@ -271,5 +279,5 @@ export function parseJsonLoose<T = any>(text: string, fallback: T): T {
 }
 
 export function isAiConfigured() {
-  return Boolean(process.env['OPENROUTER_API_KEY'] || process.env['LOVABLE_API_KEY']);
+  return Boolean(process.env['OPENROUTER_API_KEY']);
 }

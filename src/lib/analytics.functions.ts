@@ -187,40 +187,26 @@ export const generateStudentAiSummary = createServerFn({ method: "POST" })
     const arr = (attempts ?? []) as any[];
     if (!arr.length) return { summary: "No attempts yet. Take a quiz to see personalised insights." };
 
-    const key = process.env.LOVABLE_API_KEY;
-    if (!key) throw new Error("LOVABLE_API_KEY missing");
     const compact = arr.map((a) => ({
       quiz: a.quizzes?.title, category: a.quizzes?.category, subject: a.quizzes?.subject,
       difficulty: a.quizzes?.difficulty, score: Number(a.score_pct),
       correct: a.correct_count, total: a.total, seconds: a.time_taken_sec,
       date: a.submitted_at?.slice(0, 10),
     }));
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Lovable-API-Key": key },
-      body: JSON.stringify({
-        model: "google/gemini-3.6-flash",
-        messages: [
-          { role: "system", content: "You are a concise study coach. Given a student's quiz history, write a 4-6 bullet summary covering: overall progress, strongest area, weakest area, time efficiency, and ONE concrete next step. Use plain Markdown bullets. No preamble." },
-          { role: "user", content: `Attempts (newest first):\n${JSON.stringify(compact, null, 2)}` },
-        ],
-      }),
-    });
-    if (!res.ok) {
-      if (res.status === 429) throw new Error("AI rate limit. Try again in a moment.");
-      if (res.status === 402) throw new Error("AI credits exhausted. Add credits to continue.");
-      throw new Error(`AI summary failed (${res.status})`);
-    }
-    const json = await res.json();
-    const summary = json.choices?.[0]?.message?.content ?? "Could not generate a summary.";
+    const { aiChat } = await import("@/lib/ai-provider.server");
+    const res = await aiChat("light", [
+      { role: "system", content: "You are a concise study coach. Given a student's quiz history, write a 4-6 bullet summary covering: overall progress, strongest area, weakest area, time efficiency, and ONE concrete next step. Use plain Markdown bullets. No preamble." },
+      { role: "user", content: `Attempts (newest first):\n${JSON.stringify(compact, null, 2)}` },
+    ], { max_tokens: 600 });
+    const summary = res.text || "Could not generate a summary.";
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await logAiUsage(supabaseAdmin as any, context.userId, {
       feature: "ai_result",
-      model: "google/gemini-3.6-flash",
-      input_tokens: json.usage?.prompt_tokens ?? 0,
-      output_tokens: json.usage?.completion_tokens ?? 0,
+      model: res.model,
+      input_tokens: res.input_tokens,
+      output_tokens: res.output_tokens,
       credits_cost: reservation.cost,
-      meta: { provider: "lovable" },
+      meta: { provider: res.provider, fellBack: res.fellBack },
     });
     return { summary };
   });
