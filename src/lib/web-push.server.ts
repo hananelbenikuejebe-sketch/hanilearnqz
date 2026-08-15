@@ -147,22 +147,64 @@ export async function sendWebPush(
       // (401/403 = bad VAPID, 400 = malformed payload, 413 = payload too large).
       const bodyText = await res.text().catch(() => "");
       console.error(`[sendWebPush] push service rejected message: status=${res.status} host=${new URL(sub.endpoint).host} body=${bodyText.slice(0, 300)}`);
-    } else {
-      console.info(`[sendWebPush] delivered: status=${res.status} host=${new URL(sub.endpoint).host}`);
+      // A subscription created against a *different* VAPID public key can never be
+      // delivered to with the current key — prune it so the browser re-subscribes.
+      if ((res.status === 403 || res.status === 401) && /mismatch|VapidPkHashMismatch|different.*key/i.test(bodyText)) {
+        return { ok: false, status: res.status, expired: true, error: bodyText.slice(0, 200) };
+      }
+      return { ok: false, status: res.status, error: bodyText.slice(0, 200) };
     }
-    return { ok: res.ok, status: res.status };
+    console.info(`[sendWebPush] delivered: status=${res.status} host=${new URL(sub.endpoint).host}`);
+    return { ok: true, status: res.status };
   } catch (e: any) {
     return { ok: false, error: String(e?.message || e) };
   }
 }
 
-function getVapid() {
-  const publicKey = process.env["VAPID_PUBLIC_KEY"] || process.env["Vapid_manual_public_key"];
-  const privateKey = process.env["VAPID_PRIVATE_KEY"] || process.env["Vapid_manual_private_key"];
-  const subject = process.env["VAPID_SUBJECT"] || "mailto:support@hanilearnqz.com";
-  if (!publicKey || !privateKey) return null;
-  return { publicKey, privateKey, subject };
+/** True only when the pair is a real P-256 VAPID keypair (65-byte point + matching 32-byte scalar). */
+async function isValidVapidPair(publicKey: string, privateKey: string) {
+  try {
+    if (b64urlToBytes(publicKey).length !== 65) return false;
+    if (b64urlToBytes(privateKey).length !== 32) return false;
+    await importVapidPrivateKey(privateKey, publicKey); // throws when d does not match the point
+    return true;
+  } catch {
+    return false;
+  }
 }
+
+type VapidInfo = { publicKey: string; privateKey: string; subject: string; source: "env" | "manual" };
+let vapidCache: VapidInfo | null | undefined;
+
+/**
+ * Resolves the VAPID keypair actually usable for signing. Candidate pairs are
+ * validated, so a malformed manual key (e.g. a PEM/PKCS8 blob pasted instead of
+ * the raw base64url `d` scalar) is skipped instead of breaking every send.
+ */
+export async function resolveVapid(): Promise<VapidInfo | null> {
+  if (vapidCache !== undefined) return vapidCache;
+  const subject = process.env["VAPID_SUBJECT"] || "mailto:support@hanilearnqz.com";
+  const candidates: Array<{ pub?: string; priv?: string; source: "env" | "manual" }> = [
+    { pub: process.env["VAPID_PUBLIC_KEY"], priv: process.env["VAPID_PRIVATE_KEY"], source: "env" },
+    { pub: process.env["Vapid_manual_public_key"], priv: process.env["Vapid_manual_private_key"], source: "manual" },
+  ];
+  for (const c of candidates) {
+    if (!c.pub || !c.priv) continue;
+    if (await isValidVapidPair(c.pub, c.priv)) {
+      vapidCache = { publicKey: c.pub, privateKey: c.priv, subject, source: c.source };
+      return vapidCache;
+    }
+    console.error(`[resolveVapid] ${c.source} VAPID pair is invalid and was skipped (public must be a 65-byte P-256 point, private the raw 32-byte base64url scalar).`);
+  }
+  vapidCache = null;
+  return null;
+}
+
+/** The public key browsers must subscribe with — always the one we can sign with. */
+export async function getActiveVapidPublicKey(): Promise<string | null> {
+  return (await resolveVapid())?.publicKey ?? null;
+}
+
 
 /**
  * Sends a push notification to every stored subscription for the given users
